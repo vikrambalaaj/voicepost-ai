@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
-import { Mic, Link2, Sparkles, ChevronRight, MicIcon, Image as ImageIcon, CheckCircle2 } from "lucide-react";
+import { Mic, Link2, Sparkles, ChevronRight, MicIcon, Image as ImageIcon, CheckCircle2, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -159,6 +159,17 @@ export default function DashboardPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">New post</p>
               <p className="text-[10px] text-zinc-400 font-medium">Record voice or type</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-zinc-400" />
+          </Link>
+
+          <Link href="/posts/carousel/new" className="ios-row">
+            <div className="ios-icon bg-gradient-to-br from-purple-500 to-pink-500">
+              <LayoutGrid className="w-4 h-4" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">New carousel</p>
+              <p className="text-[10px] text-zinc-400 font-medium">5 templates · AI slide builder</p>
             </div>
             <ChevronRight className="w-5 h-5 text-zinc-400" />
           </Link>
