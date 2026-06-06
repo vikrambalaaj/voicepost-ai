@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { randomUUID } from "crypto";
 
 // Creates a signed session cookie value (base64 JSON — in production use JWT + secret)
 function createSessionCookie(payload: Record<string, any>): string {
@@ -130,14 +131,20 @@ export async function GET(req: NextRequest) {
       }).eq("id", userId);
     } else {
       // Create new user
-      const { data: newUser } = await db.from("users").insert({
+      const newUserId = randomUUID();
+      const { data: newUser, error: userError } = await db.from("users").insert({
+        id: newUserId,
         email: accountInfo.profile_email,
         full_name: accountInfo.profile_name,
         industry: "Professional",
         job_title: "",
         plan: "free",
       }).select().single();
-      userId = newUser?.id;
+      
+      if (userError) {
+        console.error("Failed to insert user into DB:", userError);
+      }
+      userId = newUser?.id || newUserId;
     }
   }
 
