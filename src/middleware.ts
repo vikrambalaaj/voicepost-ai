@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
-  "/",
   "/login",
   "/pricing",
   "/api/auth/linkedin",
@@ -15,6 +14,20 @@ function isPublicPath(pathname: string): boolean {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const session = req.cookies.get("vp_session")?.value;
+
+  // Root path behavior: redirect to dashboard if logged in, otherwise login
+  if (pathname === "/") {
+    if (session) {
+      try {
+        const decoded = JSON.parse(Buffer.from(session, "base64").toString("utf-8"));
+        if (decoded.exp && decoded.exp > Date.now()) {
+          return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
+        }
+      } catch {}
+    }
+    return NextResponse.redirect(new URL("/login", req.nextUrl.origin));
+  }
 
   // Allow public paths and static assets
   if (
@@ -29,8 +42,6 @@ export function middleware(req: NextRequest) {
   }
 
   // Check for session cookie
-  const session = req.cookies.get("vp_session")?.value;
-
   if (!session) {
     // Redirect to login page
     const loginUrl = new URL("/login", req.nextUrl.origin);
