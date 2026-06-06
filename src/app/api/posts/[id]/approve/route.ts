@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function PUT(
   req: NextRequest,
@@ -12,8 +13,7 @@ export async function PUT(
     const body = await req.json();
     const { scheduled_at } = body; // Optional date/time string
 
-    const { data: users } = await db.from("users").select("id").limit(1);
-    const userId = users?.[0]?.id;
+    const userId = await getAuthenticatedUserId(req);
 
     if (!userId) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

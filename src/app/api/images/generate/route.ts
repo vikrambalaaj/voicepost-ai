@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
@@ -14,8 +15,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Fetch user to check quotas and plans
-    const { data: users } = await db.from("users").select("id, plan, ai_images_used_this_week, ai_images_limit_weekly").limit(1);
-    const user = users?.[0];
+    const userId = await getAuthenticatedUserId(req);
+    let user: any = null;
+    if (userId) {
+      const { data } = await db.from("users").select("id, plan, ai_images_used_this_week, ai_images_limit_weekly").eq("id", userId).single();
+      user = data;
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 // Banned words list
 export const BANNED_WORDS = [
@@ -36,15 +37,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Get active user
-    const { data: users } = await db.from("users").select("id, email, full_name, industry, job_title, plan").limit(1);
-    const user = users?.[0] || {
-      id: "00000000-0000-0000-0000-000000000000",
-      email: "demo@voicepost.com",
-      full_name: "Demo User",
-      industry: "SaaS & Tech",
-      job_title: "Tech Founder",
-      plan: "pro",
-    };
+    const userId = await getAuthenticatedUserId(req);
+    let user: any = null;
+    if (userId) {
+      const { data } = await db
+        .from("users")
+        .select("id, email, full_name, industry, job_title, plan")
+        .eq("id", userId)
+        .single();
+      user = data;
+    }
+
+    if (!user) {
+      user = {
+        id: "00000000-0000-0000-0000-000000000000",
+        email: "demo@voicepost.com",
+        full_name: "Demo User",
+        industry: "SaaS & Tech",
+        job_title: "Tech Founder",
+        plan: "pro",
+      };
+    }
 
     // 1. Fetch style JSON
     let selectedStyleJson: any = {};

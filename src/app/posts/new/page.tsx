@@ -420,6 +420,22 @@ export default function CreatePostPage() {
           <div className="w-12" />
         </div>
 
+        {/* Post Type Selector */}
+        <div className="ios-segment mb-6 select-none">
+          <button
+            onClick={() => {}}
+            className="ios-segment-btn active"
+          >
+            Text & Image Post
+          </button>
+          <button
+            onClick={() => router.push("/posts/carousel/new")}
+            className="ios-segment-btn"
+          >
+            LinkedIn Carousel (Slides)
+          </button>
+        </div>
+
         {/* STEP 1: Input Card */}
         <div className="ios-section-label">Step 1 — Input Idea</div>
         <div className="ios-card p-4">

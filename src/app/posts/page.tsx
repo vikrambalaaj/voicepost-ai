@@ -106,8 +106,17 @@ export default function PostsPage() {
               >
                 {getPostIcon(post.status)}
                 <div className="flex-1 min-w-0 pr-2">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate">
-                    {post.post_content || "(Empty Draft)"}
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate font-sans">
+                    {post.post_content?.trim()?.startsWith("{") && post.post_content?.trim()?.endsWith("}")
+                      ? (() => {
+                          try {
+                            const parsed = JSON.parse(post.post_content);
+                            return `[Carousel] ${parsed.title || "Untitled Carousel"}`;
+                          } catch {
+                            return post.post_content;
+                          }
+                        })()
+                      : post.post_content || "(Empty Draft)"}
                   </p>
                   <p className="text-xs text-zinc-400 mt-0.5">
                     {activeSegment === "published" && post.published_at

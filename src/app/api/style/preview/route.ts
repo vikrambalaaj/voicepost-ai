@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "@/app/api/content/generate/route";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
@@ -10,8 +11,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { style_json, topic } = body;
 
-    const { data: users } = await db.from("users").select("id, plan").limit(1);
-    const user = users?.[0] || { id: "00000000-0000-0000-0000-000000000000", plan: "free" };
+    const userId = await getAuthenticatedUserId(req);
+    let user: any = null;
+    if (userId) {
+      const { data } = await db.from("users").select("id, plan").eq("id", userId).single();
+      user = data;
+    }
+    if (!user) {
+      user = { id: "00000000-0000-0000-0000-000000000000", plan: "free" };
+    }
 
     const style = style_json || {
       avg_post_length_words: 100,

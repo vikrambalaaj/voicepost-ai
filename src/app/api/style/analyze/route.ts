@@ -2,13 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "@/app/api/content/generate/route";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    const { data: users } = await db.from("users").select("id, plan, industry, keywords").limit(1);
-    const user = users?.[0];
+    let userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      try {
+        const clonedReq = req.clone();
+        const body = await clonedReq.json();
+        userId = body.userId;
+      } catch {}
+    }
+
+    let user: any = null;
+    if (userId) {
+      const { data } = await db.from("users").select("id, plan, industry, keywords").eq("id", userId).single();
+      user = data;
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

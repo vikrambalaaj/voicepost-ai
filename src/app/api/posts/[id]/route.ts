@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
@@ -13,8 +14,7 @@ export async function GET(
   }
 
   // Find active user
-  const { data: users } = await db.from("users").select("id").limit(1);
-  const userId = users?.[0]?.id;
+  const userId = await getAuthenticatedUserId(req);
 
   if (!userId) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -71,13 +71,41 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { image_url, source_type, prompt_used } = body;
+    const { post_content, hashtags, status, image_url, source_type, prompt_used } = body;
 
-    if (!image_url) {
-      return NextResponse.json({ error: "image_url is required" }, { status: 400 });
+    // Find active user
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Insert image into post_images
+    // If updating post columns
+    if (post_content !== undefined || hashtags !== undefined || status !== undefined) {
+      const updateData: any = {};
+      if (post_content !== undefined) updateData.post_content = post_content;
+      if (hashtags !== undefined) updateData.hashtags = hashtags;
+      if (status !== undefined) updateData.status = status;
+
+      const { data: updatedPost, error: updateErr } = await db
+        .from("posts")
+        .update(updateData)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (updateErr) {
+        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true, post: updatedPost });
+    }
+
+    // Otherwise, attach image to post (backward compatibility)
+    if (!image_url) {
+      return NextResponse.json({ error: "image_url, post_content, hashtags, or status is required" }, { status: 400 });
+    }
+
     const { data: newImage, error: imgErr } = await db
       .from("post_images")
       .insert({
@@ -99,3 +127,4 @@ export async function PUT(
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+

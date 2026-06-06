@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const db = getServiceSupabase();
 
   // Find active user
-  const { data: users } = await db.from("users").select("id").limit(1);
-  const userId = users?.[0]?.id;
+  const userId = await getAuthenticatedUserId(req);
 
   if (!userId) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });

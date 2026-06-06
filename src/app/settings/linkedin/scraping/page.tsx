@@ -14,6 +14,11 @@ export default function ScrapingProgressPage() {
   const [percent, setPercent] = useState(20);
 
   useEffect(() => {
+    // Proactively trigger the scraping/re-analysis on mount
+    fetch("/api/linkedin/scrape-posts", { method: "POST" }).catch(err => {
+      console.error("Scraping trigger failed:", err);
+    });
+
     let completeTimer: NodeJS.Timeout | null = null;
     
     const pollInterval = setInterval(async () => {
@@ -32,7 +37,9 @@ export default function ScrapingProgressPage() {
             
             // Redirect after 2s delay
             completeTimer = setTimeout(() => {
-              router.push("/dashboard");
+              const params = new URLSearchParams(window.location.search);
+              const redir = params.get("redirect") || "/dashboard";
+              router.push(redir);
             }, 2000);
           } else {
             // Incremental mockup percentage up to 90%

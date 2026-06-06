@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 // Realistic mock posts to use when LinkedIn credentials aren't configured
 const MOCK_SCRAPED_POSTS = [
@@ -29,12 +30,45 @@ export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    const body = await req.json();
-    const { userId, accountId } = body;
+    let userId = null;
+    let accountId = null;
 
-    if (!userId || !accountId) {
-      return NextResponse.json({ error: "userId and accountId are required" }, { status: 400 });
+    try {
+      const body = await req.json();
+      userId = body.userId;
+      accountId = body.accountId;
+    } catch {}
+
+    if (!userId) {
+      userId = await getAuthenticatedUserId(req);
     }
+
+    if (!userId) {
+      return NextResponse.json({ error: "userId is required or unauthorized" }, { status: 400 });
+    }
+
+    if (!accountId) {
+      // Find the primary LinkedIn account for this user
+      const { data: accounts } = await db
+        .from("linkedin_accounts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("is_primary", true);
+      
+      if (accounts && accounts.length > 0) {
+        accountId = accounts[0].id;
+      }
+    }
+
+    if (!accountId) {
+      return NextResponse.json({ error: "accountId is required and LinkedIn account not found" }, { status: 400 });
+    }
+
+    // Set status to running
+    await db
+      .from("linkedin_accounts")
+      .update({ scraping_status: "running" })
+      .eq("id", accountId);
 
     // Fetch the LinkedIn account
     const { data: account, error: accErr } = await db
@@ -49,16 +83,16 @@ export async function POST(req: NextRequest) {
 
     const isMock = account.access_token.startsWith("mock_") || !process.env.LINKEDIN_CLIENT_ID;
 
-    let postsToSave: { user_id: string; linkedin_account_id: string; post_text: string; posted_at: string; source: string }[] = [];
+    let postsToSave: { user_id: string; linkedin_account_id: string; linkedin_post_id: string; content: string; published_at: string }[] = [];
 
     if (isMock) {
       // Use mock posts — realistic content for style learning
-      postsToSave = MOCK_SCRAPED_POSTS.map((p) => ({
+      postsToSave = MOCK_SCRAPED_POSTS.map((p, index) => ({
         user_id: userId,
         linkedin_account_id: accountId,
-        post_text: p.text,
-        posted_at: p.created_at,
-        source: "mock",
+        linkedin_post_id: `mock_post_${index}`,
+        content: p.text,
+        published_at: p.created_at,
       }));
       console.log(`[scrape-posts] Using mock posts for account ${accountId}`);
     } else {
@@ -82,12 +116,12 @@ export async function POST(req: NextRequest) {
           const errText = await ugcRes.text();
           console.warn(`[scrape-posts] LinkedIn API error ${ugcRes.status}: ${errText}. Falling back to mock posts.`);
           // Fall back to mock posts if API not permitted (e.g., scope not approved)
-          postsToSave = MOCK_SCRAPED_POSTS.map((p) => ({
+          postsToSave = MOCK_SCRAPED_POSTS.map((p, index) => ({
             user_id: userId,
             linkedin_account_id: accountId,
-            post_text: p.text,
-            posted_at: p.created_at,
-            source: "mock_fallback",
+            linkedin_post_id: `mock_fallback_${index}`,
+            content: p.text,
+            published_at: p.created_at,
           }));
         } else {
           const ugcData = await ugcRes.json();
@@ -99,9 +133,9 @@ export async function POST(req: NextRequest) {
             .map((el: any) => ({
               user_id: userId,
               linkedin_account_id: accountId,
-              post_text: el.specificContent["com.linkedin.ugc.ShareContent"].shareCommentary.text,
-              posted_at: new Date(el.created?.time || Date.now()).toISOString(),
-              source: "linkedin_api",
+              linkedin_post_id: el.id || `real_post_${Math.random()}`,
+              content: el.specificContent["com.linkedin.ugc.ShareContent"].shareCommentary.text,
+              published_at: new Date(el.created?.time || Date.now()).toISOString(),
             }));
 
           console.log(`[scrape-posts] Fetched ${postsToSave.length} real posts for account ${accountId}`);
@@ -109,49 +143,63 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error("[scrape-posts] Fetch error:", err);
         // Graceful fallback
-        postsToSave = MOCK_SCRAPED_POSTS.map((p) => ({
+        postsToSave = MOCK_SCRAPED_POSTS.map((p, index) => ({
           user_id: userId,
           linkedin_account_id: accountId,
-          post_text: p.text,
-          posted_at: p.created_at,
-          source: "mock_fallback",
+          linkedin_post_id: `mock_fallback_${index}`,
+          content: p.text,
+          published_at: p.created_at,
         }));
       }
     }
 
-    // Save scraped posts to scraped_posts table
-    // Use upsert to avoid duplicates on re-scrape
+    // Save scraped posts to user_posts_raw table
     if (postsToSave.length > 0) {
+      // Clear old raw posts to avoid duplicates
+      await db
+        .from("user_posts_raw")
+        .delete()
+        .eq("user_id", userId)
+        .eq("linkedin_account_id", accountId);
+
       const { error: insertErr } = await db
-        .from("scraped_posts")
-        .upsert(postsToSave, { onConflict: "user_id,post_text" })
+        .from("user_posts_raw")
+        .insert(postsToSave)
         .select();
 
       if (insertErr) {
         console.warn("[scrape-posts] Failed to save scraped posts:", insertErr.message);
-        // Don't fail — just update counts below
       }
     }
 
-    // Update linkedin_accounts: status → ready, posts_scraped_count = count
-    await db
+    // Trigger style analysis if we have posts (await it synchronously to prevent termination)
+    if (postsToSave.length > 0) {
+      try {
+        const analyzeRes = await fetch(`${req.nextUrl.origin}/api/style/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, accountId }),
+        });
+        if (!analyzeRes.ok) {
+          console.error("[scrape-posts] Style analysis failed with status:", analyzeRes.status);
+        }
+      } catch (err) {
+        console.error("[scrape-posts] Style analysis fetch error:", err);
+      }
+    }
+
+    // Update linkedin_accounts: status → complete, posts_scraped_count = count
+    const { error: updateErr } = await db
       .from("linkedin_accounts")
       .update({
-        scraping_status: "ready",
+        scraping_status: "complete",
         posts_scraped_count: postsToSave.length,
         last_scraped_at: new Date().toISOString(),
       })
       .eq("id", accountId);
 
-    // Trigger style analysis if we have posts
-    if (postsToSave.length > 0) {
-      try {
-        fetch(`${req.nextUrl.origin}/api/linkedin/analyze-style`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, accountId }),
-        }).catch(() => {});
-      } catch (_) {}
+    if (updateErr) {
+      console.error("[scrape-posts] Failed to update scraping status:", updateErr);
     }
 
     return NextResponse.json({

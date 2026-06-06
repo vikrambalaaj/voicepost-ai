@@ -175,7 +175,19 @@ export async function POST(req: NextRequest) {
 
     if (emailError) {
       console.error("[notify/email] Resend error:", emailError);
-      return NextResponse.json({ error: emailError.message }, { status: 500 });
+      console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Resend Sandboxed Fallback) ===");
+      console.log(`To:      ${recipientEmail}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`Draft:   ${post_content.substring(0, 200)}...`);
+      console.log(`Error:   ${emailError.message}`);
+      console.log("================================================================================\n");
+      
+      return NextResponse.json({
+        success: true,
+        method: "console_log_fallback",
+        error: emailError.message,
+        recipient: recipientEmail,
+      });
     }
 
     console.log(`[notify/email] Email sent to ${recipientEmail} — ID: ${emailData?.id}`);

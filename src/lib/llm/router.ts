@@ -145,17 +145,50 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
   // Determine timeout based on use case
   let timeoutMs = 45000; // default 45s (e.g. content generation, style preview, keyword extraction)
   if (request.useCase === "transcript_correction") {
-    timeoutMs = 20000; // 20s
+    timeoutMs = 45000; // 45s
   } else if (request.useCase === "style_analysis") {
     timeoutMs = 60000; // 60s
   }
+
+  // Helper to check if a provider has its API key or configuration set
+  const isProviderConfigured = (p: any) => {
+    let apiKey = process.env[p.apiKeyEnvVar];
+    if (p.id === "google") {
+      apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    }
+    if (p.id === "cloudflare") {
+      return !!process.env.CLOUDFLARE_ACCOUNT_ID && !!process.env.CLOUDFLARE_AI_API_KEY;
+    }
+    return !!apiKey;
+  };
+
+  // 3c. Filter eligible providers by active configuration/API keys
+  const allList = Object.values(PROVIDERS).sort((a, b) => a.priority - b.priority);
+  const allConfigured = allList.filter(isProviderConfigured);
+
+  let configuredProviders = eligibleProviders.filter(isProviderConfigured);
+
+  // If no configured providers match the plan, use all configured ones
+  if (configuredProviders.length === 0) {
+    configuredProviders = allConfigured;
+  }
+
+  // To prevent total failure, append any other configured providers as a final fallback chain
+  const finalFallbackList = allConfigured.filter(
+    (p) => !configuredProviders.some((cp) => cp.id === p.id)
+  );
+
+  eligibleProviders = [...configuredProviders, ...finalFallbackList];
 
   const fallbackChain: string[] = [];
   const errorsChain: { provider: string; error: string }[] = [];
 
   // 4. Iterate over eligible providers
   for (const provider of eligibleProviders) {
-    const apiKey = process.env[provider.apiKeyEnvVar];
+    let apiKey = process.env[provider.apiKeyEnvVar];
+    if (provider.id === "google") {
+      apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    }
     if (!apiKey && provider.id !== "cloudflare") {
       // Skip if API key is not configured locally
       continue;

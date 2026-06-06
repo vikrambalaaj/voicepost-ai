@@ -172,17 +172,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
   }
 
-  // Trigger background post scraping
+  // Trigger background post scraping (await it to ensure completion before redirect)
   try {
-    fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
+    await fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, accountId: linkedinAccount.id }),
-    }).catch(() => {});
-  } catch (_) {}
+    });
+  } catch (err) {
+    console.error("Failed to scrape posts in callback:", err);
+  }
 
   // --- Build redirect response ---
-  const redirectDest = loginPurpose ? "/dashboard" : "/settings/linkedin?status=connected";
+  const redirectDest = loginPurpose ? "/dashboard" : "/settings/linkedin/scraping?redirect=/settings/linkedin";
   const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
 
   // Set session cookie (30-day expiry)

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { getAuthenticatedUserId } from "@/lib/auth";
+import { getServiceSupabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,6 +11,15 @@ export async function POST(req: NextRequest) {
     if (!topic) {
       return NextResponse.json({ error: "Topic is required" }, { status: 400 });
     }
+
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const db = getServiceSupabase();
+    const { data: user } = await db.from("users").select("plan").eq("id", userId).single();
+    const userPlan = user?.plan || "free";
 
     const systemPrompt = `You are an expert LinkedIn carousel content creator. You create scroll-stopping, high-value carousel posts that teach something actionable.
 
@@ -57,10 +68,16 @@ Return this exact JSON structure:
 }`;
 
     const result = await routeLLMRequest({
-      systemPrompt,
-      userPrompt,
+      useCase: "content_generation",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      userId,
+      userPlan: userPlan as any,
+      sessionId: "carousel-generation-" + Date.now(),
+      responseFormat: "json",
       maxTokens: 2000,
-      temperature: 0.8,
     });
 
     // Parse LLM response

@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   // Find user
-  const { data: users } = await db.from("users").select("id, industry, keywords, plan").limit(1);
-  const user = users?.[0] || {
-    id: "00000000-0000-0000-0000-000000000000",
-    industry: "SaaS & Creators",
-    keywords: ["building in public", "solopreneur"],
-    plan: "pro",
-  };
+  const userId = await getAuthenticatedUserId(req);
+  let user: any = null;
+  if (userId) {
+    const { data } = await db.from("users").select("id, industry, keywords, plan").eq("id", userId).single();
+    user = data;
+  }
+  if (!user) {
+    user = {
+      id: "00000000-0000-0000-0000-000000000000",
+      industry: "SaaS & Creators",
+      keywords: ["building in public", "solopreneur"],
+      plan: "pro",
+    };
+  }
 
   try {
     const formData = await req.formData();

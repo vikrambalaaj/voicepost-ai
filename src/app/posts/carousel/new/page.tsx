@@ -75,7 +75,310 @@ const COLOR_PALETTES = [
   { name: "Slate", accent: "#64748B", dark: "#475569" },
 ];
 
-// ─── Slide Canvas Renderer ───────────────────────────────────────────────────
+// ─── Canvas Helper Drawing Functions ────────────────────────────────────────
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+) {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+    if (testWidth > maxWidth && n > 0) {
+      ctx.fillText(line, x, currentY);
+      line = words[n] + " ";
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, currentY);
+  return currentY + lineHeight;
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function drawSlideToCanvas(
+  ctx: CanvasRenderingContext2D,
+  slide: Slide,
+  slideIndex: number,
+  totalSlides: number,
+  templateId: string,
+  accentColor: string
+) {
+  const isCover = slide.type === "cover";
+  const isCta = slide.type === "cta";
+
+  if (templateId === "bold_impact") {
+    // Background
+    ctx.fillStyle = "#0F0F0F";
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Top Accent Bar
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 1080, 20);
+
+    // Slide counter
+    ctx.fillStyle = accentColor;
+    ctx.font = "bold 24px system-ui, sans-serif";
+    ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 100);
+
+    // Emoji
+    ctx.font = "80px system-ui, sans-serif";
+    ctx.fillText(slide.emoji, 900, 120);
+
+    // Title
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "black 56px system-ui, sans-serif";
+    const titleY = 450;
+    const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+
+    // Body
+    ctx.fillStyle = "#A1A1AA";
+    ctx.font = "normal 32px system-ui, sans-serif";
+    wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+
+    // Brand bar (cover only)
+    if (isCover) {
+      ctx.strokeStyle = "#27272A";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(80, 950);
+      ctx.lineTo(1000, 950);
+      ctx.stroke();
+
+      // Icon
+      ctx.fillStyle = accentColor;
+      ctx.beginPath();
+      ctx.arc(100, 990, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 18px system-ui, sans-serif";
+      ctx.fillText("V", 96, 996);
+
+      ctx.fillStyle = "#71717A";
+      ctx.font = "normal 24px system-ui, sans-serif";
+      ctx.fillText("VoicePost · swipe to read →", 140, 998);
+    }
+  } else if (templateId === "minimal_clean") {
+    // Background
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Left Accent line
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 20, 1080);
+
+    // Slide counter
+    ctx.fillStyle = "#A1A1AA";
+    ctx.font = "bold 28px Georgia, serif";
+    ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
+
+    // Emoji
+    ctx.font = "80px Georgia, serif";
+    ctx.fillText(slide.emoji, 900, 130);
+
+    // Title
+    ctx.fillStyle = accentColor;
+    ctx.font = "bold 56px Georgia, serif";
+    const titleY = 480;
+    const titleNextY = wrapText(ctx, slide.title, 100, titleY, 880, 75);
+
+    // Accent divider line
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(100, titleNextY + 15, 120, 6);
+
+    // Body
+    ctx.fillStyle = "#3F3F46";
+    ctx.font = "normal 32px Georgia, serif";
+    wrapText(ctx, slide.body, 100, titleNextY + 70, 880, 50);
+
+    if (isCover) {
+      ctx.fillStyle = "#A1A1AA";
+      ctx.font = "normal 24px Georgia, serif";
+      ctx.fillText("A thread by VoicePost", 100, 980);
+    }
+  } else if (templateId === "gradient_flow") {
+    // Gradient background
+    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+    grad.addColorStop(0, accentColor);
+    grad.addColorStop(1, "#0F0F0F");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Glow circle top right
+    const glowGrad = ctx.createRadialGradient(980, 100, 0, 980, 100, 300);
+    glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+    glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(980, 100, 300, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Slide counter (rounded pill)
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    drawRoundedRect(ctx, 80, 80, 160, 50, 25);
+    ctx.fill();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
+
+    // Emoji
+    ctx.font = "80px system-ui, sans-serif";
+    ctx.fillText(slide.emoji, 900, 140);
+
+    // Title
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "black 56px system-ui, sans-serif";
+    const titleY = 480;
+    const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+
+    // Body
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = "normal 32px system-ui, sans-serif";
+    wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+
+    if (isCover) {
+      // Draw page dots
+      for (let d = 0; d < totalSlides; d++) {
+        ctx.fillStyle = d === 0 ? "#FFFFFF" : "rgba(255,255,255,0.4)";
+        ctx.beginPath();
+        ctx.arc(80 + d * 30, 980, d === 0 ? 10 : 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (templateId === "split_pro") {
+    // Left panel (accent background)
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 432, 1080);
+
+    // Right panel (white background)
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(432, 0, 648, 1080);
+
+    // Left panel content
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "black 64px system-ui, sans-serif";
+    ctx.fillText(isCover ? "💡" : `0${slideIndex + 1}`, 80, 150);
+
+    ctx.font = "120px system-ui, sans-serif";
+    ctx.fillText(slide.emoji, 80, 650);
+
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = "normal 28px system-ui, sans-serif";
+    ctx.fillText(`${totalSlides} slides`, 80, 980);
+
+    // Right panel content
+    ctx.fillStyle = accentColor;
+    drawRoundedRect(ctx, 500, 80, 150, 48, 24);
+    ctx.fill();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px system-ui, sans-serif";
+    ctx.fillText(isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`, 530, 111);
+
+    ctx.fillStyle = "#18181B";
+    ctx.font = "black 50px system-ui, sans-serif";
+    const titleY = 480;
+    const titleNextY = wrapText(ctx, slide.title, 500, titleY, 500, 70);
+
+    ctx.fillStyle = "#71717A";
+    ctx.font = "normal 30px system-ui, sans-serif";
+    wrapText(ctx, slide.body, 500, titleNextY + 30, 500, 46);
+
+    // Page indicators bottom right
+    const dotCount = Math.min(totalSlides, 5);
+    for (let d = 0; d < dotCount; d++) {
+      ctx.fillStyle = d === slideIndex ? accentColor : "#E4E4E7";
+      ctx.fillRect(500 + d * 90, 960, 80, 8);
+    }
+  } else {
+    // frosted_card (default)
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+    grad.addColorStop(0, "#1E1B4B");
+    grad.addColorStop(0.5, "#312E81");
+    grad.addColorStop(1, "#1E1B4B");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1080, 1080);
+
+    // Stars
+    ctx.fillStyle = "#FFFFFF";
+    for (let s = 0; s < 25; s++) {
+      const starX = (100 + (s * 137) % 880);
+      const starY = (100 + (s * 253) % 880);
+      const opacity = 0.2 + (s % 4) * 0.2;
+      ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+      ctx.beginPath();
+      ctx.arc(starX, starY, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Card boundary
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.strokeStyle = `${accentColor}4D`;
+    ctx.lineWidth = 3;
+    drawRoundedRect(ctx, 80, 80, 920, 920, 32);
+    ctx.fill();
+    ctx.stroke();
+
+    // Counter pill
+    ctx.fillStyle = accentColor;
+    drawRoundedRect(ctx, 120, 120, 160, 50, 25);
+    ctx.fill();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
+
+    // Emoji
+    ctx.font = "80px system-ui, sans-serif";
+    ctx.fillText(slide.emoji, 860, 170);
+
+    // Title
+    ctx.fillStyle = accentColor;
+    ctx.font = "black 56px system-ui, sans-serif";
+    const titleY = 480;
+    const titleNextY = wrapText(ctx, slide.title, 130, titleY, 820, 75);
+
+    // Body
+    ctx.fillStyle = "#E2E8F0";
+    ctx.font = "normal 32px system-ui, sans-serif";
+    wrapText(ctx, slide.body, 130, titleNextY + 30, 820, 48);
+  }
+}
+
+// ─── Slide Canvas React Component ───────────────────────────────────────────
 
 function SlideCanvas({
   slide,
@@ -96,9 +399,7 @@ function SlideCanvas({
   const isCta = slide.type === "cta";
   const padding = compact ? "p-4" : "p-7";
 
-  // Gradient for gradient_flow template
   const getGradientStyle = () => {
-    const h = parseInt(accentColor.slice(1), 16);
     return `linear-gradient(135deg, ${accentColor} 0%, #0F0F0F 100%)`;
   };
 
@@ -108,16 +409,13 @@ function SlideCanvas({
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
         style={{ background: "#0F0F0F", fontFamily: "system-ui, sans-serif" }}
       >
-        {/* Accent bar top */}
         <div className="absolute top-0 left-0 right-0 h-1" style={{ background: accentColor }} />
-        {/* Slide counter */}
         <div className="flex justify-between items-center mb-auto">
           <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold uppercase tracking-widest`} style={{ color: accentColor }}>
             {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
           </div>
           {!compact && <div className="text-2xl">{slide.emoji}</div>}
         </div>
-        {/* Content */}
         <div className="mt-auto">
           {compact && <div className="text-xl mb-1">{slide.emoji}</div>}
           <h2
@@ -130,7 +428,6 @@ function SlideCanvas({
             {slide.body}
           </p>
         </div>
-        {/* Bottom brand bar */}
         {isCover && (
           <div className={`mt-3 flex items-center gap-2 ${compact ? "pt-2" : "pt-4"} border-t border-zinc-800`}>
             <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: accentColor }}>
@@ -149,7 +446,6 @@ function SlideCanvas({
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden bg-white`}
         style={{ fontFamily: "Georgia, serif" }}
       >
-        {/* Left accent line */}
         <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accentColor }} />
         <div className={`${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
           <div className="flex justify-between items-start">
@@ -186,7 +482,6 @@ function SlideCanvas({
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
         style={{ background: getGradientStyle(), fontFamily: "system-ui, sans-serif" }}
       >
-        {/* Glow circle */}
         <div
           className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30 blur-2xl"
           style={{ background: accentColor }}
@@ -224,7 +519,6 @@ function SlideCanvas({
   if (templateId === "split_pro") {
     return (
       <div className="relative w-full aspect-square flex overflow-hidden bg-white" style={{ fontFamily: "system-ui, sans-serif" }}>
-        {/* Left panel */}
         <div
           className={`flex flex-col justify-between ${compact ? "w-1/3 p-3" : "w-2/5 p-6"}`}
           style={{ background: accentColor }}
@@ -242,7 +536,6 @@ function SlideCanvas({
             {totalSlides} slides
           </div>
         </div>
-        {/* Right panel */}
         <div className={`flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}>
           <div
             className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold w-fit`}
@@ -251,9 +544,7 @@ function SlideCanvas({
             {isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`}
           </div>
           <div>
-            <h2
-              className={`font-black leading-tight text-zinc-900 ${compact ? "text-[11px] mb-1" : "text-xl mb-3"}`}
-            >
+            <h2 className={`font-black leading-tight text-zinc-900 ${compact ? "text-[11px] mb-1" : "text-xl mb-3"}`}>
               {slide.title}
             </h2>
             <p className={`text-zinc-500 leading-relaxed ${compact ? "text-[9px]" : "text-xs"}`}>
@@ -283,7 +574,6 @@ function SlideCanvas({
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      {/* Stars decoration */}
       <div className="absolute inset-0 opacity-20">
         {[...Array(compact ? 6 : 15)].map((_, i) => (
           <div
@@ -297,7 +587,6 @@ function SlideCanvas({
           />
         ))}
       </div>
-      {/* Glass card */}
       <div
         className={`relative z-10 flex-1 flex flex-col rounded-2xl ${compact ? "p-3" : "p-5"}`}
         style={{
@@ -352,6 +641,44 @@ export default function CarouselBuilderPage() {
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [postId, setPostId] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  // ── Save to Supabase Helper ──
+  const savePostToSupabase = async (contentStr: string, tags: string[], status = "draft") => {
+    try {
+      if (postId) {
+        // Update
+        await fetch(`/api/posts/${postId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_content: contentStr,
+            hashtags: tags,
+            status,
+          }),
+        });
+      } else {
+        // Create
+        const res = await fetch("/api/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_content: contentStr,
+            hashtags: tags,
+            style_type: "expert",
+            style_id: "lara_acosta",
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.post) {
+          setPostId(data.post.id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync carousel to DB:", err);
+    }
+  };
 
   // ── Generate slides ──
   const generateSlides = async () => {
@@ -371,8 +698,21 @@ export default function CarouselBuilderPage() {
       if (!res.ok || !data.carousel) throw new Error(data.error || "Generation failed");
 
       setCarouselData(data.carousel);
-      setHashtags(data.carousel.suggestedHashtags || []);
+      const tags = data.carousel.suggestedHashtags || [];
+      setHashtags(tags);
       setPreviewSlide(0);
+
+      // Save as draft in Supabase
+      setGeneratingStatus("Saving carousel draft...");
+      const serialized = JSON.stringify({
+        type: "carousel",
+        title: data.carousel.title,
+        slides: data.carousel.slides,
+        templateId: selectedTemplate,
+        accentColor: accentColor,
+      });
+      await savePostToSupabase(serialized, tags, "draft");
+
       setStep(4);
     } catch (err: any) {
       alert("Generation failed: " + err.message);
@@ -391,20 +731,121 @@ export default function CarouselBuilderPage() {
     setEditingSlide(idx);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (editingSlide === null || !carouselData) return;
     const updated = { ...carouselData };
     updated.slides[editingSlide].title = editTitle;
     updated.slides[editingSlide].body = editBody;
     setCarouselData(updated);
     setEditingSlide(null);
+
+    // Save update to Supabase
+    const serialized = JSON.stringify({
+      type: "carousel",
+      title: updated.title,
+      slides: updated.slides,
+      templateId: selectedTemplate,
+      accentColor: accentColor,
+    });
+    await savePostToSupabase(serialized, hashtags, "draft");
+  };
+
+  const handleTemplateSelect = async (tId: string) => {
+    setSelectedTemplate(tId);
+    if (carouselData) {
+      const serialized = JSON.stringify({
+        type: "carousel",
+        title: carouselData.title,
+        slides: carouselData.slides,
+        templateId: tId,
+        accentColor: accentColor,
+      });
+      await savePostToSupabase(serialized, hashtags, "draft");
+    }
+  };
+
+  const handleAccentColorSelect = async (color: string) => {
+    setAccentColor(color);
+    if (carouselData) {
+      const serialized = JSON.stringify({
+        type: "carousel",
+        title: carouselData.title,
+        slides: carouselData.slides,
+        templateId: selectedTemplate,
+        accentColor: color,
+      });
+      await savePostToSupabase(serialized, hashtags, "draft");
+    }
+  };
+
+  const downloadPdf = async () => {
+    if (!carouselData) return;
+    setDownloadingPdf(true);
+
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "px",
+        format: [1080, 1080],
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1080;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) throw new Error("Could not get canvas context");
+
+      const slides = carouselData.slides;
+
+      for (let i = 0; i < slides.length; i++) {
+        const slide = slides[i];
+        
+        ctx.clearRect(0, 0, 1080, 1080);
+        drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+        if (i > 0) {
+          doc.addPage([1080, 1080], "portrait");
+        }
+        doc.addImage(imgData, "JPEG", 0, 0, 1080, 1080);
+      }
+
+      doc.save(`${(carouselData.title || "carousel").toLowerCase().replace(/[^a-z0-9]+/g, "_")}_carousel.pdf`);
+    } catch (err: any) {
+      alert("Failed to download PDF: " + err.message);
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   const handlePublish = async () => {
     setPublishing(true);
-    await new Promise((r) => setTimeout(r, 2000)); // simulate publish
+    
+    // Copy hashtags to clipboard
+    navigator.clipboard.writeText(hashtags.map((h: string) => `#${h}`).join(" "));
+    alert("Note: LinkedIn API requires document carousels to be uploaded manually. We have copied the hashtags to your clipboard, and your PDF carousel will now download!");
+
+    await downloadPdf();
+
+    // Update status to published in Supabase
+    if (carouselData) {
+      const serialized = JSON.stringify({
+        type: "carousel",
+        title: carouselData.title,
+        slides: carouselData.slides,
+        templateId: selectedTemplate,
+        accentColor: accentColor,
+      });
+      await savePostToSupabase(serialized, hashtags, "published");
+    }
+
     setPublished(true);
     setPublishing(false);
+    
+    // Redirect
     setTimeout(() => router.push("/posts"), 2000);
   };
 
@@ -437,14 +878,14 @@ export default function CarouselBuilderPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSlideCount(Math.max(4, slideCount - 1))}
-              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform"
+              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
             >
               <Minus className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
             </button>
             <span className="text-xl font-black text-zinc-900 dark:text-white w-6 text-center">{slideCount}</span>
             <button
               onClick={() => setSlideCount(Math.min(8, slideCount + 1))}
-              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform"
+              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
             >
               <Plus className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
             </button>
@@ -455,7 +896,7 @@ export default function CarouselBuilderPage() {
       <button
         onClick={() => setStep(2)}
         disabled={topic.trim().length < 10}
-        className="w-full py-4 rounded-2xl font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40"
+        className="w-full py-4 rounded-2xl font-bold text-white transition-all active:scale-[0.98] disabled:opacity-40 border-none cursor-pointer"
         style={{ background: topic.trim().length >= 10 ? accentColor : "#9CA3AF" }}
       >
         Choose Template →
@@ -473,21 +914,20 @@ export default function CarouselBuilderPage() {
 
       {/* Templates */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-2">
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-2 select-none">
           <Layout className="w-3 h-3" /> Templates
         </p>
         <div className="grid grid-cols-1 gap-3">
           {TEMPLATES.map((t) => (
             <button
               key={t.id}
-              onClick={() => setSelectedTemplate(t.id)}
-              className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+              onClick={() => handleTemplateSelect(t.id)}
+              className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left cursor-pointer ${
                 selectedTemplate === t.id
                   ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
                   : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
               }`}
             >
-              {/* Mini template preview */}
               <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 shadow-md">
                 <SlideCanvas
                   slide={{
@@ -529,7 +969,7 @@ export default function CarouselBuilderPage() {
 
       {/* Color Palettes */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-2">
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-2 select-none">
           <Palette className="w-3 h-3" /> Accent Color
         </p>
         <div className="ios-card p-4">
@@ -537,8 +977,8 @@ export default function CarouselBuilderPage() {
             {COLOR_PALETTES.map((c) => (
               <button
                 key={c.accent}
-                onClick={() => setAccentColor(c.accent)}
-                className="flex flex-col items-center gap-1.5 group"
+                onClick={() => handleAccentColorSelect(c.accent)}
+                className="flex flex-col items-center gap-1.5 group border-none bg-transparent cursor-pointer"
               >
                 <div
                   className={`w-12 h-12 rounded-2xl transition-all shadow-md group-active:scale-95 ${
@@ -550,13 +990,12 @@ export default function CarouselBuilderPage() {
               </button>
             ))}
           </div>
-          {/* Custom color */}
           <div className="flex items-center gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
             <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Custom</label>
             <input
               type="color"
               value={accentColor}
-              onChange={(e) => setAccentColor(e.target.value)}
+              onChange={(e) => handleAccentColorSelect(e.target.value)}
               className="w-10 h-10 rounded-xl cursor-pointer border-0 bg-transparent"
             />
             <code className="text-xs font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg">
@@ -566,9 +1005,9 @@ export default function CarouselBuilderPage() {
         </div>
       </div>
 
-      {/* Live preview of first slide */}
+      {/* Live preview */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Preview</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 select-none">Preview</p>
         <div className="w-48 mx-auto rounded-2xl overflow-hidden shadow-2xl">
           <SlideCanvas
             slide={{
@@ -589,13 +1028,13 @@ export default function CarouselBuilderPage() {
       <div className="flex gap-3">
         <button
           onClick={() => setStep(1)}
-          className="flex-1 py-4 rounded-2xl font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98]"
+          className="flex-1 py-4 rounded-2xl font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98] border-none cursor-pointer"
         >
           ← Back
         </button>
         <button
           onClick={generateSlides}
-          className="flex-1 py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          className="flex-1 py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] border-none cursor-pointer"
           style={{ background: accentColor }}
         >
           <Sparkles className="w-4 h-4" />
@@ -618,11 +1057,10 @@ export default function CarouselBuilderPage() {
           <Sparkles className="w-7 h-7" style={{ color: accentColor }} />
         </div>
       </div>
-      <div className="text-center">
+      <div className="text-center animate-pulse">
         <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">Creating your carousel</h3>
         <p className="text-sm text-zinc-500">{generatingStatus || "Generating slide content with AI..."}</p>
       </div>
-      {/* Animated slide placeholders */}
       <div className="flex gap-2">
         {[...Array(slideCount)].map((_, i) => (
           <div
@@ -647,7 +1085,6 @@ export default function CarouselBuilderPage() {
 
     return (
       <div className="flex flex-col gap-5 pt-2">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold text-zinc-900 dark:text-white">Edit & Preview</h2>
@@ -655,13 +1092,12 @@ export default function CarouselBuilderPage() {
           </div>
           <button
             onClick={() => { setStep(2); generateSlides(); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-semibold text-zinc-600 dark:text-zinc-400"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-semibold text-zinc-600 dark:text-zinc-400 border-none cursor-pointer"
           >
             <RefreshCw className="w-3 h-3" /> Regenerate
           </button>
         </div>
 
-        {/* Main slide preview */}
         <div className="relative">
           <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl">
             <SlideCanvas
@@ -672,19 +1108,17 @@ export default function CarouselBuilderPage() {
               totalSlides={slides.length}
             />
           </div>
-          {/* Edit overlay button */}
           <button
             onClick={() => startEdit(previewSlide)}
-            className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95"
+            className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 border-none cursor-pointer"
             style={{ background: accentColor }}
           >
             <Edit3 className="w-4 h-4" />
           </button>
-          {/* Nav arrows */}
           {previewSlide > 0 && (
             <button
               onClick={() => setPreviewSlide(previewSlide - 1)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
             </button>
@@ -692,20 +1126,19 @@ export default function CarouselBuilderPage() {
           {previewSlide < slides.length - 1 && (
             <button
               onClick={() => setPreviewSlide(previewSlide + 1)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
             >
               <ChevronRight className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
             </button>
           )}
         </div>
 
-        {/* Slide counter dots */}
         <div className="flex justify-center gap-1.5">
           {slides.map((_, i) => (
             <button
               key={i}
               onClick={() => setPreviewSlide(i)}
-              className="rounded-full transition-all"
+              className="rounded-full transition-all border-none cursor-pointer"
               style={{
                 width: i === previewSlide ? 20 : 6,
                 height: 6,
@@ -715,13 +1148,12 @@ export default function CarouselBuilderPage() {
           ))}
         </div>
 
-        {/* Thumbnail strip */}
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
           {slides.map((slide, i) => (
             <button
               key={i}
               onClick={() => setPreviewSlide(i)}
-              className={`flex-shrink-0 w-16 rounded-xl overflow-hidden border-2 transition-all ${
+              className={`flex-shrink-0 w-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
                 i === previewSlide ? "scale-105 shadow-lg" : "opacity-60"
               }`}
               style={{ borderColor: i === previewSlide ? accentColor : "transparent" }}
@@ -738,7 +1170,6 @@ export default function CarouselBuilderPage() {
           ))}
         </div>
 
-        {/* Current slide text editor inline */}
         {editingSlide !== null && editingSlide === previewSlide ? (
           <div className="ios-card p-4 border-2" style={{ borderColor: accentColor }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: accentColor }}>
@@ -749,8 +1180,8 @@ export default function CarouselBuilderPage() {
               <input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2"
-                style={{ "--tw-ring-color": accentColor } as any}
+                className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 dark:text-white outline-none focus:ring-1"
+                style={{ borderColor: accentColor } as any}
               />
             </div>
             <div className="mb-4">
@@ -765,13 +1196,13 @@ export default function CarouselBuilderPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setEditingSlide(null)}
-                className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-zinc-500 bg-zinc-100 dark:bg-zinc-800"
+                className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-zinc-500 bg-zinc-100 dark:bg-zinc-800 border-none cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={saveEdit}
-                className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 border-none cursor-pointer"
                 style={{ background: accentColor }}
               >
                 <Check className="w-4 h-4" /> Save
@@ -779,13 +1210,12 @@ export default function CarouselBuilderPage() {
             </div>
           </div>
         ) : (
-          /* Slide list summary */
           <div className="ios-card overflow-hidden">
             {slides.map((slide, i) => (
               <button
                 key={i}
                 onClick={() => { setPreviewSlide(i); startEdit(i); }}
-                className={`w-full flex items-center gap-3 p-3.5 text-left border-b border-zinc-100 dark:border-zinc-800 last:border-0 active:bg-zinc-50 dark:active:bg-zinc-800/50 transition-colors ${
+                className={`w-full flex items-center gap-3 p-3.5 text-left border-b border-zinc-100 dark:border-zinc-800 last:border-0 active:bg-zinc-50 dark:active:bg-zinc-800/50 transition-colors cursor-pointer ${
                   i === previewSlide ? "bg-zinc-50 dark:bg-zinc-800/50" : ""
                 }`}
               >
@@ -795,9 +1225,9 @@ export default function CarouselBuilderPage() {
                 >
                   {i + 1}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{slide.title}</p>
-                  <p className="text-[11px] text-zinc-400 truncate">{slide.body}</p>
+                <div className="flex-1 min-w-0 font-semibold">
+                  <p className="text-xs text-zinc-800 dark:text-zinc-200 truncate">{slide.title}</p>
+                  <p className="text-[11px] text-zinc-400 truncate mt-0.5">{slide.body}</p>
                 </div>
                 <Edit3 className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
               </button>
@@ -805,10 +1235,23 @@ export default function CarouselBuilderPage() {
           </div>
         )}
 
+        {/* Download PDF button */}
+        <button
+          onClick={downloadPdf}
+          disabled={downloadingPdf}
+          className="w-full bg-gradient-to-r from-blue-500 to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none cursor-pointer transition-colors"
+        >
+          {downloadingPdf ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
+          ) : (
+            <><Download className="w-4 h-4" /> Download PDF</>
+          )}
+        </button>
+
         {/* Hashtags */}
         {hashtags.length > 0 && (
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2">Hashtags</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2 select-none">Hashtags</p>
             <div className="flex flex-wrap gap-2">
               {hashtags.map((tag, i) => (
                 <span
@@ -823,10 +1266,9 @@ export default function CarouselBuilderPage() {
           </div>
         )}
 
-        {/* CTA */}
         <button
           onClick={() => setStep(5)}
-          className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] border-none cursor-pointer"
           style={{ background: accentColor }}
         >
           <Send className="w-4 h-4" />
@@ -848,7 +1290,6 @@ export default function CarouselBuilderPage() {
           <p className="text-sm text-zinc-500">{slides.length} slides · {hashtags.length} hashtags</p>
         </div>
 
-        {/* All slides compact grid */}
         <div className="grid grid-cols-3 gap-2">
           {slides.map((slide, i) => (
             <div key={i} className="rounded-xl overflow-hidden shadow-md">
@@ -864,26 +1305,25 @@ export default function CarouselBuilderPage() {
           ))}
         </div>
 
-        {/* Summary */}
         <div className="ios-card p-4 space-y-3">
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between text-sm font-semibold">
             <span className="text-zinc-500 font-medium">Template</span>
-            <span className="font-bold text-zinc-800 dark:text-zinc-200">
+            <span className="text-zinc-800 dark:text-zinc-200">
               {TEMPLATES.find((t) => t.id === selectedTemplate)?.name}
             </span>
           </div>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between text-sm font-semibold">
             <span className="text-zinc-500 font-medium">Slides</span>
-            <span className="font-bold text-zinc-800 dark:text-zinc-200">{slides.length}</span>
+            <span className="text-zinc-800 dark:text-zinc-200">{slides.length}</span>
           </div>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between text-sm font-semibold">
             <span className="text-zinc-500 font-medium">Accent color</span>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full" style={{ background: accentColor }} />
               <span className="font-mono text-xs text-zinc-500">{accentColor.toUpperCase()}</span>
             </div>
           </div>
-          <div className="flex items-start justify-between text-sm">
+          <div className="flex items-start justify-between text-sm font-semibold">
             <span className="text-zinc-500 font-medium">Hashtags</span>
             <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
               {hashtags.slice(0, 4).map((t, i) => (
@@ -908,7 +1348,7 @@ export default function CarouselBuilderPage() {
             <button
               onClick={handlePublish}
               disabled={publishing}
-              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60 border-none cursor-pointer"
               style={{ background: accentColor }}
             >
               {publishing ? (
@@ -919,7 +1359,7 @@ export default function CarouselBuilderPage() {
             </button>
             <button
               onClick={() => setStep(4)}
-              className="w-full py-3.5 rounded-2xl font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98] text-sm"
+              className="w-full py-3.5 rounded-2xl font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98] text-sm border-none cursor-pointer"
             >
               ← Edit slides
             </button>
@@ -929,18 +1369,17 @@ export default function CarouselBuilderPage() {
     );
   };
 
-  // ── Step labels ─────────────────────────────────────────────────────────────
   const STEPS = ["Topic", "Design", "AI Magic", "Edit", "Publish"];
   const visibleStep = Math.min(step, 5);
 
   return (
     <IosShell>
-      <div className="pt-4 pb-10">
+      <div className="pt-4 pb-10 px-4">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-5 select-none">
           <button
             onClick={() => (step <= 1 ? router.back() : setStep(Math.max(1, step - 1)))}
-            className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform"
+            className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
           >
             <ChevronLeft className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
           </button>
@@ -948,13 +1387,12 @@ export default function CarouselBuilderPage() {
             <h1 className="text-base font-black text-zinc-900 dark:text-white">Carousel Builder</h1>
             <p className="text-xs text-zinc-400">AI-powered LinkedIn carousels</p>
           </div>
-          {/* Accent dot */}
           <div className="w-3 h-3 rounded-full" style={{ background: accentColor }} />
         </div>
 
         {/* Progress bar */}
         {step !== 3 && (
-          <div className="mb-6">
+          <div className="mb-6 select-none">
             <div className="flex justify-between mb-2">
               {STEPS.map((label, i) => (
                 <div key={i} className="flex flex-col items-center gap-1">
