@@ -17,7 +17,7 @@ export default function LandingPage() {
   };
 
   const handleCtaClick = () => {
-    router.push("/dashboard");
+    router.push("/login");
   };
 
   return (

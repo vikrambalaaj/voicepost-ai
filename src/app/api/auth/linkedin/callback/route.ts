@@ -1,43 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 
+// Creates a signed session cookie value (base64 JSON — in production use JWT + secret)
+function createSessionCookie(payload: Record<string, any>): string {
+  const data = {
+    ...payload,
+    iat: Date.now(),
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
+  return Buffer.from(JSON.stringify(data)).toString("base64");
+}
+
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
-  const state = req.nextUrl.searchParams.get("state");
-  const storedState = req.cookies.get("linkedin_oauth_state")?.value;
+  const stateParam = req.nextUrl.searchParams.get("state") || "";
+  const storedStateRaw = req.cookies.get("linkedin_oauth_state")?.value || "";
 
-  // Verify CSRF state for real code
-  if (code !== "mock_code" && storedState && state !== storedState) {
+  // Parse purpose from state (format: "csrfToken:purpose")
+  const [stateToken, purpose] = stateParam.split(":");
+  const [storedToken] = storedStateRaw.split(":");
+  const loginPurpose = purpose === "login" || req.nextUrl.searchParams.get("purpose") === "login";
+
+  // CSRF check for real OAuth codes
+  if (code !== "mock_code" && storedToken && stateToken !== storedToken) {
     return NextResponse.json({ error: "State mismatch. CSRF validation failed." }, { status: 400 });
   }
 
   const db = getServiceSupabase();
-  
-  // We need a user session to associate the LinkedIn account. 
-  // In a real app we get this from Supabase auth. 
-  // For demo/standalone purposes, we'll grab the first user or mock one if none exists.
-  let { data: users } = await db.from("users").select("id").limit(1);
-  let userId = users?.[0]?.id;
-
-  if (!userId) {
-    // Let's create a mock user in the public.users table if there are no users yet.
-    // In production, the user would already be authenticated.
-    const tempUserId = "00000000-0000-0000-0000-000000000000";
-    const { data: newUser } = await db.from("users").upsert({
-      id: tempUserId,
-      email: "demo@voicepost.com",
-      full_name: "John Doe",
-      industry: "SaaS & AI",
-      job_title: "Tech Founder",
-      plan: "pro", // default to pro for testing all features
-    }).select().single();
-    userId = tempUserId;
-  }
 
   const clientId = process.env.LINKEDIN_CLIENT_ID;
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
   const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
 
+  const isMock = code === "mock_code" || !clientId || !clientSecret || !redirectUri;
+
+  // Default mock account info
   let accountInfo: any = {
     linkedin_profile_id: "urn:li:person:mock_john_doe",
     access_token: "mock_token_" + Math.random().toString(36).substring(2),
@@ -47,16 +44,10 @@ export async function GET(req: NextRequest) {
     profile_email: "demo@voicepost.com",
   };
 
-  const isMock = code === "mock_code" || !clientId || !clientSecret || !redirectUri;
-
-  if (isMock) {
-    return NextResponse.json({ error: "LinkedIn OAuth connection failed. Please ensure LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI are configured in your environment variables." }, { status: 400 });
-  }
-
-  if (code) {
+  if (!isMock && code) {
     try {
-      // Exchange authorization code for access token
-      const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      // Exchange code for access token
+      const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -68,33 +59,26 @@ export async function GET(req: NextRequest) {
         }),
       });
 
-      if (!tokenResponse.ok) {
-        throw new Error(`Token exchange failed: ${tokenResponse.statusText}`);
-      }
-
-      const tokenData = await tokenResponse.json();
+      if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.statusText}`);
+      const tokenData = await tokenRes.json();
       const accessToken = tokenData.access_token;
 
-      // Fetch Profile
-      const profileResponse = await fetch("https://api.linkedin.com/v2/me", {
+      // Fetch profile
+      const profileRes = await fetch("https://api.linkedin.com/v2/me", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
+      if (!profileRes.ok) throw new Error(`Profile fetch failed: ${profileRes.statusText}`);
+      const profileData = await profileRes.json();
 
-      if (!profileResponse.ok) {
-        throw new Error(`Profile fetch failed: ${profileResponse.statusText}`);
-      }
-
-      const profileData = await profileResponse.json();
-      
-      // Fetch email address
+      // Fetch email
       let profileEmail = "";
       try {
-        const emailResponse = await fetch(
+        const emailRes = await fetch(
           "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        if (emailResponse.ok) {
-          const emailData = await emailResponse.json();
+        if (emailRes.ok) {
+          const emailData = await emailRes.json();
           profileEmail = emailData.elements?.[0]?.["handle~"]?.emailAddress || "";
         }
       } catch (_) {}
@@ -104,53 +88,115 @@ export async function GET(req: NextRequest) {
         access_token: accessToken,
         profile_name: `${profileData.localizedFirstName} ${profileData.localizedLastName}`,
         profile_headline: "LinkedIn Professional",
-        profile_picture_url: profileData.profilePicture?.["displayImage~"]?.elements?.[0]?.identifiers?.[0]?.identifier || "",
+        profile_picture_url:
+          profileData.profilePicture?.["displayImage~"]?.elements?.[0]?.identifiers?.[0]?.identifier || "",
         profile_email: profileEmail,
       };
-    } catch (error: any) {
-      console.error("Error in LinkedIn OAuth Callback:", error);
-      return NextResponse.redirect(new URL("/settings/linkedin?status=error", req.nextUrl.origin));
+    } catch (err: any) {
+      console.error("LinkedIn OAuth error:", err);
+      const dest = loginPurpose ? "/login?error=oauth_failed" : "/settings/linkedin?status=error";
+      return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
     }
   }
 
-  // Save/Upsert account
-  const { data: linkedinAccount, error: accError } = await db.from("linkedin_accounts").upsert({
-    user_id: userId,
-    linkedin_profile_id: accountInfo.linkedin_profile_id,
-    access_token: accountInfo.access_token,
-    profile_name: accountInfo.profile_name,
-    profile_headline: accountInfo.profile_headline,
-    profile_picture_url: accountInfo.profile_picture_url,
-    profile_email: accountInfo.profile_email || "",
-    scraping_status: "running",
-    is_primary: true,
-    last_scraped_at: new Date().toISOString(),
-  }, { onConflict: "user_id,linkedin_profile_id" }).select().single();
+  // --- Upsert User ---
+  let userId: string;
 
-  // Update user email if we obtained it from LinkedIn
-  if (accountInfo.profile_email) {
-    await db.from("users").update({
-      email: accountInfo.profile_email,
+  if (isMock) {
+    // Demo mode: use or create a fixed demo user
+    const demoId = "00000000-0000-0000-0000-000000000000";
+    await db.from("users").upsert({
+      id: demoId,
+      email: accountInfo.profile_email || "demo@voicepost.com",
       full_name: accountInfo.profile_name,
-    }).eq("id", userId);
+      industry: "SaaS & AI",
+      job_title: "Tech Founder",
+      plan: "pro",
+    }).select();
+    userId = demoId;
+  } else {
+    // Real user — upsert by linkedin_profile_id via email
+    const { data: existingUsers } = await db
+      .from("users")
+      .select("id")
+      .eq("email", accountInfo.profile_email)
+      .limit(1);
+
+    if (existingUsers?.[0]) {
+      userId = existingUsers[0].id;
+      // Update name/picture
+      await db.from("users").update({
+        full_name: accountInfo.profile_name,
+      }).eq("id", userId);
+    } else {
+      // Create new user
+      const { data: newUser } = await db.from("users").insert({
+        email: accountInfo.profile_email,
+        full_name: accountInfo.profile_name,
+        industry: "Professional",
+        job_title: "",
+        plan: "free",
+      }).select().single();
+      userId = newUser?.id;
+    }
   }
+
+  // --- Upsert LinkedIn Account ---
+  const { data: linkedinAccount, error: accError } = await db
+    .from("linkedin_accounts")
+    .upsert({
+      user_id: userId,
+      linkedin_profile_id: accountInfo.linkedin_profile_id,
+      access_token: accountInfo.access_token,
+      profile_name: accountInfo.profile_name,
+      profile_headline: accountInfo.profile_headline,
+      profile_picture_url: accountInfo.profile_picture_url,
+      profile_email: accountInfo.profile_email || "",
+      scraping_status: "running",
+      is_primary: true,
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "user_id,linkedin_profile_id" })
+    .select()
+    .single();
 
   if (accError) {
     console.error("Failed to save linkedin account:", accError);
-    return NextResponse.redirect(new URL("/settings/linkedin?status=db_error", req.nextUrl.origin));
+    const dest = loginPurpose ? "/login?error=db_error" : "/settings/linkedin?status=db_error";
+    return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
   }
 
-  // Trigger real background scraping via async fetch (Supabase Edge Function mockup)
-  // For local dev, we run a background task or mock it if Edge function is not deployed
+  // Trigger background post scraping
   try {
     fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, accountId: linkedinAccount.id }),
     }).catch(() => {});
-  } catch (e) {}
+  } catch (_) {}
 
-  const redirectUrl = new URL("/settings/linkedin", req.nextUrl.origin);
-  redirectUrl.searchParams.set("status", "connected");
-  return NextResponse.redirect(redirectUrl);
+  // --- Build redirect response ---
+  const redirectDest = loginPurpose ? "/dashboard" : "/settings/linkedin?status=connected";
+  const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
+
+  // Set session cookie (30-day expiry)
+  const sessionPayload = createSessionCookie({
+    userId,
+    email: accountInfo.profile_email,
+    name: accountInfo.profile_name,
+    picture: accountInfo.profile_picture_url,
+    linkedin_connected: true,
+  });
+
+  response.cookies.set("vp_session", sessionPayload, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    sameSite: "lax",
+  });
+
+  // Clear CSRF cookie
+  response.cookies.delete("linkedin_oauth_state");
+
+  return response;
 }

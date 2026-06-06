@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
-import { Link2, Shield, CreditCard, PenTool, LayoutGrid, ChevronRight, Sparkles } from "lucide-react";
+import { Link2, Shield, CreditCard, LayoutGrid, ChevronRight, Sparkles, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -32,6 +32,10 @@ export default function SettingsPage() {
   useEffect(() => {
     async function loadSettingsData() {
       try {
+        // Load real session user
+        const sessionRes = await fetch("/api/auth/session");
+        const sessionData = await sessionRes.json();
+
         const postsRes = await fetch("/api/posts");
         const postsData = await postsRes.json();
 
@@ -40,8 +44,9 @@ export default function SettingsPage() {
         setLinkedinConnected(statusData.status && statusData.status !== "disconnected");
 
         setUser({
-          full_name: statusData.profile_name || "John Doe",
-          email: "demo@voicepost.com",
+          full_name: sessionData.user?.name || statusData.profile_name || "John Doe",
+          email: sessionData.user?.email || "demo@voicepost.com",
+          picture: sessionData.user?.picture || statusData.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120",
           plan: "pro",
           posts_used_this_week: postsData.posts?.filter((p: any) => p.status === "published").length || 0,
           posts_limit_weekly: 3,
@@ -54,6 +59,11 @@ export default function SettingsPage() {
     }
     loadSettingsData();
   }, []);
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
   const handleStripePortal = () => {
     alert("Redirecting to your secure Stripe Customer Billing Portal...");
@@ -68,14 +78,14 @@ export default function SettingsPage() {
         {/* Profile Card Header */}
         <div className="ios-card p-5 flex items-center gap-4 bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/50">
           <Avatar className="w-16 h-16 border border-zinc-200">
-            <AvatarImage src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120" alt="Avatar" />
-            <AvatarFallback>JD</AvatarFallback>
+            <AvatarImage src={user.picture || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120"} alt="Avatar" />
+            <AvatarFallback>{user.full_name?.charAt(0) || "U"}</AvatarFallback>
           </Avatar>
-          <div>
-            <h3 className="font-extrabold text-lg text-zinc-900 dark:text-white leading-tight">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-extrabold text-lg text-zinc-900 dark:text-white leading-tight truncate">
               {user.full_name}
             </h3>
-            <p className="text-sm text-zinc-400 font-medium mt-0.5">{user.email}</p>
+            <p className="text-sm text-zinc-400 font-medium mt-0.5 truncate">{user.email}</p>
             <div className="mt-2 flex items-center">
               <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                 {user.plan} plan
@@ -167,9 +177,25 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Sign Out */}
+        <div className="ios-section-label">Account</div>
+        <div className="ios-card">
+          <button
+            onClick={handleSignOut}
+            className="ios-row w-full text-left"
+          >
+            <div className="ios-icon bg-red-500">
+              <LogOut className="w-4 h-4" />
+            </div>
+            <span className="text-sm font-semibold flex-1 text-red-500">
+              Sign Out
+            </span>
+          </button>
+        </div>
+
         {/* App Version Info */}
-        <p className="text-center text-xs text-zinc-400 mt-6 select-none">
-          VoicePost v1.0.0 (standalone PWA)
+        <p className="text-center text-xs text-zinc-400 mt-4 select-none">
+          VoicePost v1.0.0 · <span className="text-zinc-600">{user.email}</span>
         </p>
       </div>
     </IosShell>
