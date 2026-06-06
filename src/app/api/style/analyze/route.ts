@@ -3,6 +3,7 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "@/app/api/content/generate/route";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { cleanJsonString } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
@@ -119,11 +120,11 @@ Return ONLY a valid JSON object matching this schema. Do not add markdown backti
 
     let styleJson: any = {};
     try {
-      styleJson = JSON.parse(llmRes.content);
+      styleJson = JSON.parse(cleanJsonString(llmRes.content));
     } catch (e) {
       const match = llmRes.content.match(/\{[\s\S]*\}/);
       if (match) {
-        styleJson = JSON.parse(match[0]);
+        styleJson = JSON.parse(cleanJsonString(match[0]));
       } else {
         throw new Error("Failed to parse analysis results: " + llmRes.content);
       }

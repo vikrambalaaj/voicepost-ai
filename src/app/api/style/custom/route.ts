@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { cleanJsonString } from "@/lib/utils";
 
 export async function GET(req: NextRequest) {
   const db = getServiceSupabase();
@@ -108,11 +109,11 @@ Return ONLY a valid JSON object matching this schema. Do not add markdown backti
       });
 
       try {
-        styleJson = JSON.parse(llmRes.content);
+        styleJson = JSON.parse(cleanJsonString(llmRes.content));
       } catch (e) {
         const match = llmRes.content.match(/\{[\s\S]*\}/);
         if (match) {
-          styleJson = JSON.parse(match[0]);
+          styleJson = JSON.parse(cleanJsonString(match[0]));
         } else {
           throw new Error("Failed to parse extracted style: " + llmRes.content);
         }

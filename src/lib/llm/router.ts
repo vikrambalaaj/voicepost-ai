@@ -256,7 +256,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
           payload.max_tokens = request.maxTokens;
         }
 
-        if (request.responseFormat === "json") {
+        if (request.responseFormat === "json" && provider.id !== "nvidia" && provider.id !== "assemblyai") {
           payload.response_format = { type: "json_object" };
         }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "../generate/route";
+import { cleanJsonString } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
@@ -87,11 +88,11 @@ Return your response ONLY in this JSON format:
 
     let resultJson: any = {};
     try {
-      resultJson = JSON.parse(llmRes.content);
+      resultJson = JSON.parse(cleanJsonString(llmRes.content));
     } catch (e) {
       const match = llmRes.content.match(/\{[\s\S]*\}/);
       if (match) {
-        resultJson = JSON.parse(match[0]);
+        resultJson = JSON.parse(cleanJsonString(match[0]));
       } else {
         throw new Error("Failed to parse AI JSON response: " + llmRes.content);
       }

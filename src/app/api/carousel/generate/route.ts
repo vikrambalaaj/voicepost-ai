@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
+import { cleanJsonString } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -81,18 +82,17 @@ Return this exact JSON structure:
     });
 
     // Parse LLM response
-    let parsed: any;
     try {
       const cleaned = result.content
         .replace(/```json\n?/g, "")
         .replace(/```\n?/g, "")
         .trim();
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(cleanJsonString(cleaned));
     } catch {
       // Try to extract JSON from response
       const match = result.content.match(/\{[\s\S]*\}/);
       if (match) {
-        parsed = JSON.parse(match[0]);
+        parsed = JSON.parse(cleanJsonString(match[0]));
       } else {
         throw new Error("Could not parse LLM response as JSON");
       }

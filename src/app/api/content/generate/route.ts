@@ -3,6 +3,7 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { cleanJsonString } from "@/lib/utils";
 
 // Banned words list
 export const BANNED_WORDS = [
@@ -196,12 +197,12 @@ Return your response ONLY in this JSON format:
       llmRes = waterfallRes;
 
       try {
-        resultJson = JSON.parse(llmRes.content);
+        resultJson = JSON.parse(cleanJsonString(llmRes.content));
       } catch (e) {
         // If parsing fails, attempt regex extraction
         const match = llmRes.content.match(/\{[\s\S]*\}/);
         if (match) {
-          resultJson = JSON.parse(match[0]);
+          resultJson = JSON.parse(cleanJsonString(match[0]));
         } else {
           throw new Error("Failed to parse AI JSON response: " + llmRes.content);
         }
@@ -270,7 +271,7 @@ INDUSTRY: ${user.industry}`;
         const rawHashtagContent = hashtagRes.content.trim();
         const jsonMatch = rawHashtagContent.match(/\[[\s\S]*?\]/);
         if (jsonMatch) {
-          const parsed: string[] = JSON.parse(jsonMatch[0]);
+          const parsed: string[] = JSON.parse(cleanJsonString(jsonMatch[0]));
           const enriched = parsed.map((h) => h.replace(/^#/, "").toLowerCase().trim()).filter(Boolean);
           // Merge existing + enriched, deduplicate, cap at 8
           const merged = Array.from(new Set([...finalHashtags, ...enriched])).slice(0, 8);
