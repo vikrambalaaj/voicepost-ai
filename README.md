@@ -1,36 +1,100 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VoicePost AI
 
-## Getting Started
+> **Turn voice memos into polished LinkedIn posts — in seconds.**
 
-First, run the development server:
+A full-stack AI-powered content creation tool built with Next.js 14, featuring voice transcription, multi-provider LLM generation, LinkedIn OAuth, auto-publishing, and email draft notifications.
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---|---|
+| 🎙️ **Voice → Post** | Record a voice memo → AI transcribes, corrects, and rewrites it as a LinkedIn post |
+| 🏷️ **Auto-Hashtags** | LLM enrichment pass guarantees 3–8 relevant hashtags, pre-filled in the editor |
+| 🔗 **LinkedIn OAuth** | Connect your account, scrape your last 5 posts to learn your writing style |
+| 🤖 **Writing Style DNA** | Learn from your own posts or choose from expert creator voice profiles |
+| 📧 **Draft Email** | Sends a beautiful HTML email to you (via Resend) with post preview + "Review & Publish" link |
+| ✅ **Approve & Publish** | One-tap publish directly to LinkedIn via `w_member_social` OAuth scope |
+| 🎨 **Image Picker** | Search Unsplash, AI-generate (Flux), or upload your own |
+| 🎠 **Carousel Builder** | _(coming)_ Define slide template → LLM generates 5–7 slides → post as LinkedIn document |
+| 📱 **iOS PWA** | Mobile-first UI with dark mode, installable as a Progressive Web App |
+
+---
+
+## 🚀 Quick Start
 
 ```bash
+git clone https://github.com/vikrambalaaj/voicepost-ai
+cd voicepost-ai
+npm install
+cp .env.example .env
+# Fill in your keys (see .env.example for guidance)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) — the app works with mock data out of the box (no Supabase needed for basic testing).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔑 Environment Variables
 
-## Learn More
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key |
+| `ASSEMBLYAI_API_KEY` | ✅ | Voice transcription ([assemblyai.com](https://assemblyai.com)) |
+| `NVIDIA_NIM_API_KEY` | ⚡ | Primary LLM provider ([build.nvidia.com](https://build.nvidia.com)) |
+| `RESEND_API_KEY` | 📧 | Email notifications ([resend.com](https://resend.com) — free tier) |
+| `RESEND_FROM_EMAIL` | 📧 | Sender address (e.g. `noreply@yourdomain.com`) |
+| `NEXT_PUBLIC_APP_URL` | 📧 | Your deployment URL (for email deep links) |
+| `LINKEDIN_CLIENT_ID` | 🔗 | LinkedIn OAuth app client ID |
+| `LINKEDIN_CLIENT_SECRET` | 🔗 | LinkedIn OAuth app client secret |
+| `LINKEDIN_REDIRECT_URI` | 🔗 | OAuth callback URL (e.g. `https://yourdomain.com/api/auth/linkedin/callback`) |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🏗️ Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Voice Input → AssemblyAI Transcription → NVIDIA NIM / Groq LLM
+     ↓
+Post Generation → Hashtag Enrichment → Image Selection
+     ↓
+Approval Page → Resend Email Draft → LinkedIn Publish
+```
 
-## Deploy on Vercel
+### LLM Waterfall (automatic failover)
+```
+NVIDIA NIM (nemotron) → Groq (llama-3) → OpenAI (gpt-4o-mini)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📁 Project Structure
+
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── content/generate/     # Post generation + hashtag enrichment
+│   │   ├── voice/transcribe/     # AssemblyAI transcription
+│   │   ├── linkedin/scrape-posts/ # Scrape user's last 5 LinkedIn posts
+│   │   ├── notify/email/         # Resend email draft notifications
+│   │   ├── posts/[id]/publish/   # LinkedIn UGC post publishing
+│   │   └── auth/linkedin/        # OAuth flow
+│   ├── posts/new/                # Create post (voice + style + image)
+│   ├── posts/[id]/approval/      # Review, edit, publish
+│   └── settings/linkedin/        # LinkedIn connection management
+└── lib/
+    ├── llm/router.ts             # Multi-provider LLM routing
+    ├── providers/registry.ts     # Provider configurations
+    └── agents/antigravity.ts     # Antigravity AI agent wrapper
+```
+
+---
+
+## 📜 License
+
+MIT — build on it, ship it, make it yours.
