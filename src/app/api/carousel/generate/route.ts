@@ -27,12 +27,13 @@ export async function POST(req: NextRequest) {
 RULES:
 - Each slide must be punchy, scannable, and valuable on its own
 - Use short sentences. Max 2-3 lines per body
-- Title: 4-8 words, bold hook or claim
+- Title: 4-8 words, strong hook or claim (do NOT use markdown bold ** tags in JSON)
 - Body: 1-3 sentences, specific and actionable
 - First slide (cover): compelling hook that makes people want to swipe
 - Last slide (CTA): clear call to action
 - NO corporate fluff, NO "leverage", NO "delve"
-- Return ONLY valid JSON, no markdown, no backticks`;
+- Return ONLY valid JSON, no markdown, no backticks
+- Every value in the JSON must be a simple plain text string. Do NOT use ** or other markdown bold formatting inside keys or values.`;
 
     const userPrompt = `Create a LinkedIn carousel with exactly ${slideCount} slides about: "${topic}"
 Industry context: ${industry}
@@ -82,6 +83,7 @@ Return this exact JSON structure:
     });
 
     // Parse LLM response
+    let parsed: any;
     try {
       const cleaned = result.content
         .replace(/```json\n?/g, "")
