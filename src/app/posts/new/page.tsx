@@ -862,11 +862,11 @@ export default function CreatePostPage() {
         )}
 
         {/* Generate Post Button */}
-        <div className="py-4">
+        <div className="py-4 md:flex md:justify-end md:px-0">
           <button
             onClick={handleGeneratePost}
             disabled={generatingPost}
-            className="w-[calc(100%-32px)] mx-4 my-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hover:from-cyan-300 hover:via-blue-400 hover:to-purple-500 disabled:from-zinc-850 disabled:to-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
+            className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hover:from-cyan-300 hover:via-blue-400 hover:to-purple-500 disabled:from-zinc-850 disabled:to-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
           >
             {generatingPost ? (
               <>

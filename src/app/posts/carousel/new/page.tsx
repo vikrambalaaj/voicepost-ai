@@ -1127,182 +1127,190 @@ export default function CarouselBuilderPage() {
           </button>
         </div>
 
-        <div className="relative">
-          <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl">
-            <SlideCanvas
-              slide={currentSlide}
-              templateId={selectedTemplate}
-              accentColor={accentColor}
-              slideIndex={previewSlide}
-              totalSlides={slides.length}
-            />
-          </div>
-          <button
-            onClick={() => startEdit(previewSlide)}
-            className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 border-none cursor-pointer"
-            style={{ background: accentColor }}
-          >
-            <Edit3 className="w-4 h-4" />
-          </button>
-          {previewSlide > 0 && (
-            <button
-              onClick={() => setPreviewSlide(previewSlide - 1)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
-            >
-              <ChevronLeft className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
-            </button>
-          )}
-          {previewSlide < slides.length - 1 && (
-            <button
-              onClick={() => setPreviewSlide(previewSlide + 1)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
-            >
-              <ChevronRight className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex justify-center gap-1.5">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPreviewSlide(i)}
-              className="rounded-full transition-all border-none cursor-pointer"
-              style={{
-                width: i === previewSlide ? 20 : 6,
-                height: 6,
-                background: i === previewSlide ? accentColor : "#D1D5DB",
-              }}
-            />
-          ))}
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-          {slides.map((slide, i) => (
-            <button
-              key={i}
-              onClick={() => setPreviewSlide(i)}
-              className={`flex-shrink-0 w-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
-                i === previewSlide ? "scale-105 shadow-lg" : "opacity-60"
-              }`}
-              style={{ borderColor: i === previewSlide ? accentColor : "transparent" }}
-            >
-              <SlideCanvas
-                slide={slide}
-                templateId={selectedTemplate}
-                accentColor={accentColor}
-                slideIndex={i}
-                totalSlides={slides.length}
-                compact={true}
-              />
-            </button>
-          ))}
-        </div>
-
-        {editingSlide !== null && editingSlide === previewSlide ? (
-          <div className="ios-card p-4 border-2" style={{ borderColor: accentColor }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: accentColor }}>
-              Editing Slide {editingSlide + 1}
-            </p>
-            <div className="mb-3">
-              <label className="text-xs text-zinc-500 font-semibold mb-1 block">Headline</label>
-              <input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 dark:text-white outline-none focus:ring-1"
-                style={{ borderColor: accentColor } as any}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="text-xs text-zinc-500 font-semibold mb-1 block">Body text</label>
-              <textarea
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                rows={3}
-                className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 outline-none resize-none leading-relaxed"
-              />
-            </div>
-            <div className="flex gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+          {/* Left Column: Canvas Preview & Slide Selection */}
+          <div className="space-y-5">
+            <div className="relative">
+              <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl">
+                <SlideCanvas
+                  slide={currentSlide}
+                  templateId={selectedTemplate}
+                  accentColor={accentColor}
+                  slideIndex={previewSlide}
+                  totalSlides={slides.length}
+                />
+              </div>
               <button
-                onClick={() => setEditingSlide(null)}
-                className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-zinc-500 bg-zinc-100 dark:bg-zinc-800 border-none cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveEdit}
-                className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 border-none cursor-pointer"
+                onClick={() => startEdit(previewSlide)}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 border-none cursor-pointer"
                 style={{ background: accentColor }}
               >
-                <Check className="w-4 h-4" /> Save
+                <Edit3 className="w-4 h-4" />
               </button>
+              {previewSlide > 0 && (
+                <button
+                  onClick={() => setPreviewSlide(previewSlide - 1)}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                >
+                  <ChevronLeft className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                </button>
+              )}
+              {previewSlide < slides.length - 1 && (
+                <button
+                  onClick={() => setPreviewSlide(previewSlide + 1)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                >
+                  <ChevronRight className="w-5 h-5 text-zinc-700 dark:text-zinc-300" />
+                </button>
+              )}
             </div>
-          </div>
-        ) : (
-          <div className="ios-card overflow-hidden">
-            {slides.map((slide, i) => (
-              <button
-                key={i}
-                onClick={() => { setPreviewSlide(i); startEdit(i); }}
-                className={`w-full flex items-center gap-3 p-3.5 text-left border-b border-zinc-100 dark:border-zinc-800 last:border-0 active:bg-zinc-50 dark:active:bg-zinc-800/50 transition-colors cursor-pointer ${
-                  i === previewSlide ? "bg-zinc-50 dark:bg-zinc-800/50" : ""
-                }`}
-              >
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-white flex-shrink-0 text-xs font-black"
-                  style={{ background: i === previewSlide ? accentColor : "#9CA3AF" }}
-                >
-                  {i + 1}
-                </div>
-                <div className="flex-1 min-w-0 font-semibold">
-                  <p className="text-xs text-zinc-800 dark:text-zinc-200 truncate">{slide.title}</p>
-                  <p className="text-[11px] text-zinc-400 truncate mt-0.5">{slide.body}</p>
-                </div>
-                <Edit3 className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
-              </button>
-            ))}
-          </div>
-        )}
 
-        {/* Download PDF button */}
-        <button
-          onClick={downloadPdf}
-          disabled={downloadingPdf}
-          className="w-full bg-gradient-to-r from-blue-500 to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none cursor-pointer transition-colors"
-        >
-          {downloadingPdf ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
-          ) : (
-            <><Download className="w-4 h-4" /> Download PDF</>
-          )}
-        </button>
-
-        {/* Hashtags */}
-        {hashtags.length > 0 && (
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2 select-none">Hashtags</p>
-            <div className="flex flex-wrap gap-2">
-              {hashtags.map((tag, i) => (
-                <span
+            <div className="flex justify-center gap-1.5">
+              {slides.map((_, i) => (
+                <button
                   key={i}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full"
-                  style={{ background: `${accentColor}18`, color: accentColor }}
+                  onClick={() => setPreviewSlide(i)}
+                  className="rounded-full transition-all border-none cursor-pointer"
+                  style={{
+                    width: i === previewSlide ? 20 : 6,
+                    height: 6,
+                    background: i === previewSlide ? accentColor : "#D1D5DB",
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+              {slides.map((slide, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPreviewSlide(i)}
+                  className={`flex-shrink-0 w-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                    i === previewSlide ? "scale-105 shadow-lg" : "opacity-60"
+                  }`}
+                  style={{ borderColor: i === previewSlide ? accentColor : "transparent" }}
                 >
-                  #{tag}
-                </span>
+                  <SlideCanvas
+                    slide={slide}
+                    templateId={selectedTemplate}
+                    accentColor={accentColor}
+                    slideIndex={i}
+                    totalSlides={slides.length}
+                    compact={true}
+                  />
+                </button>
               ))}
             </div>
           </div>
-        )}
 
-        <button
-          onClick={() => setStep(5)}
-          className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] border-none cursor-pointer"
-          style={{ background: accentColor }}
-        >
-          <Send className="w-4 h-4" />
-          Review & Publish →
-        </button>
+          {/* Right Column: Slide Editor & Main CTA Actions */}
+          <div className="space-y-6">
+            {editingSlide !== null && editingSlide === previewSlide ? (
+              <div className="ios-card p-4 border-2 !mx-0" style={{ borderColor: accentColor }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: accentColor }}>
+                  Editing Slide {editingSlide + 1}
+                </p>
+                <div className="mb-3">
+                  <label className="text-xs text-zinc-500 font-semibold mb-1 block">Headline</label>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 dark:text-white outline-none focus:ring-1"
+                    style={{ borderColor: accentColor } as any}
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="text-xs text-zinc-500 font-semibold mb-1 block">Body text</label>
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={3}
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 outline-none resize-none leading-relaxed"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingSlide(null)}
+                    className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-zinc-500 bg-zinc-100 dark:bg-zinc-800 border-none cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 border-none cursor-pointer"
+                    style={{ background: accentColor }}
+                  >
+                    <Check className="w-4 h-4" /> Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="ios-card overflow-hidden !mx-0">
+                {slides.map((slide, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setPreviewSlide(i); startEdit(i); }}
+                    className={`w-full flex items-center gap-3 p-3.5 text-left border-b border-zinc-100 dark:border-zinc-800 last:border-0 active:bg-zinc-50 dark:active:bg-zinc-800/50 transition-colors cursor-pointer ${
+                      i === previewSlide ? "bg-zinc-50 dark:bg-zinc-800/50" : ""
+                    }`}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-white flex-shrink-0 text-xs font-black"
+                      style={{ background: i === previewSlide ? accentColor : "#9CA3AF" }}
+                    >
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0 font-semibold">
+                      <p className="text-xs text-zinc-800 dark:text-zinc-200 truncate">{slide.title}</p>
+                      <p className="text-[11px] text-zinc-400 truncate mt-0.5">{slide.body}</p>
+                    </div>
+                    <Edit3 className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Download PDF button */}
+            <button
+              onClick={downloadPdf}
+              disabled={downloadingPdf}
+              className="w-full bg-gradient-to-r from-blue-500 to-indigo-650 hover:from-blue-600 hover:to-indigo-750 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none cursor-pointer transition-colors"
+            >
+              {downloadingPdf ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
+              ) : (
+                <><Download className="w-4 h-4" /> Download PDF</>
+              )}
+            </button>
+
+            {/* Hashtags */}
+            {hashtags.length > 0 && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2 select-none">Hashtags</p>
+                <div className="flex flex-wrap gap-2">
+                  {hashtags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-full"
+                      style={{ background: `${accentColor}18`, color: accentColor }}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setStep(5)}
+              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] border-none cursor-pointer"
+              style={{ background: accentColor }}
+            >
+              <Send className="w-4 h-4" />
+              Review & Publish →
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1373,22 +1381,22 @@ export default function CarouselBuilderPage() {
             <p className="text-sm text-zinc-500">Redirecting to your posts...</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col md:flex-row-reverse md:justify-start gap-3">
             <button
               onClick={handlePublish}
               disabled={publishing}
-              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60 border-none cursor-pointer"
+              className="w-full md:w-auto md:px-8 py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60 border-none cursor-pointer"
               style={{ background: accentColor }}
             >
               {publishing ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Publishing to LinkedIn...</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Publishing...</>
               ) : (
                 <><Send className="w-4 h-4" /> Publish to LinkedIn</>
               )}
             </button>
             <button
               onClick={() => setStep(4)}
-              className="w-full py-3.5 rounded-2xl font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98] text-sm border-none cursor-pointer"
+              className="w-full md:w-auto md:px-8 py-3.5 rounded-2xl font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 transition-all active:scale-[0.98] text-sm border-none cursor-pointer"
             >
               ← Edit slides
             </button>

@@ -185,17 +185,17 @@ export default function LinkedInSettingsPage() {
                 )}
 
                 {/* Actions */}
-                <div className="space-y-3 pt-2 px-4 md:px-0">
+                <div className="space-y-3 pt-2 px-4 md:px-0 md:flex md:flex-col md:gap-3 md:space-y-0">
                   <button
                     onClick={() => router.push("/settings/linkedin/scraping")}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl active:scale-98 border-none text-[17px] font-semibold flex items-center justify-center cursor-pointer transition-colors duration-200"
+                    className="w-full md:w-auto md:px-6 bg-blue-600 hover:bg-blue-700 text-white py-4 md:py-3 rounded-2xl active:scale-98 border-none text-[17px] md:text-sm font-semibold flex items-center justify-center cursor-pointer transition-colors duration-200"
                   >
                     Re-analyze style
                   </button>
 
                   <button
                     onClick={() => setShowConfirmDisconnect(true)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl active:scale-98 border-none text-[17px] font-semibold flex items-center justify-center cursor-pointer transition-colors duration-200"
+                    className="w-full md:w-auto md:px-6 bg-red-600 hover:bg-red-700 text-white py-4 md:py-3 rounded-2xl active:scale-98 border-none text-[17px] md:text-sm font-semibold flex items-center justify-center cursor-pointer transition-colors duration-200"
                   >
                     Disconnect account
                   </button>
@@ -546,10 +546,10 @@ export default function LinkedInSettingsPage() {
                 </div>
 
                 {/* Connect CTA Button */}
-                <div className="pt-2 px-4 md:px-0">
+                <div className="pt-2 px-4 md:px-0 md:flex md:justify-start">
                   <button
                     onClick={handleConnect}
-                    className="w-full bg-[#0077b5] hover:bg-[#006297] text-white font-bold py-4 rounded-2xl active:scale-98 shadow-md border-none flex items-center justify-center gap-2 text-[17px] font-semibold cursor-pointer transition-colors duration-200"
+                    className="w-full md:w-auto md:px-8 bg-[#0077b5] hover:bg-[#006297] text-white font-bold py-4 md:py-3 rounded-2xl active:scale-98 shadow-md border-none flex items-center justify-center gap-2 text-[17px] md:text-sm font-semibold cursor-pointer transition-colors duration-200"
                   >
                     <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
                       <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />

@@ -1380,9 +1380,9 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Action Controls */}
-        <div className="py-4 space-y-3">
+        <div className="py-4 px-4 md:px-0">
           {showFeedbackInput ? (
-            <div className="ios-card p-4 space-y-3 bg-red-50/20 dark:bg-red-950/10 border border-red-500/20">
+            <div className="ios-card p-4 space-y-3 bg-red-50/20 dark:bg-red-950/10 border border-red-500/20 !mx-0">
               <label className="text-xs font-bold text-red-500 dark:text-red-400 uppercase">What needs to change?</label>
               <textarea
                 value={feedback}
@@ -1408,11 +1408,11 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           ) : (
-            <>
+            <div className="flex flex-col md:flex-row-reverse md:justify-start md:gap-4">
               <button
                 onClick={handlePublish}
                 disabled={publishing}
-                className="w-[calc(100%-32px)] mx-4 my-2 bg-green-600 hover:bg-green-700 disabled:bg-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
+                className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-green-600 hover:bg-green-700 disabled:bg-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
               >
                 {publishing ? (
                   <>
@@ -1430,12 +1430,12 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               {!isCarousel && (
                 <button
                   onClick={() => setShowFeedbackInput(true)}
-                  className="w-[calc(100%-32px)] mx-4 my-2 bg-transparent hover:bg-red-500/10 text-red-500 hover:text-red-400 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 border border-red-500/30 text-[17px] font-semibold cursor-pointer transition-all duration-200"
+                  className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-transparent hover:bg-red-500/10 text-red-500 hover:text-red-400 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 border border-red-500/30 text-[17px] font-semibold cursor-pointer transition-all duration-200"
                 >
                   Request changes
                 </button>
               )}
-            </>
+            </div>
           )}
         </div>
 

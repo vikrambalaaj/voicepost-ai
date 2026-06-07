@@ -287,3 +287,39 @@
     cursor: default !important;
   }
 }
+
+/* Responsive web layouts for desktop/tablet */
+@media (min-width: 768px) {
+  .ios-card {
+    margin: 0 0 24px;
+    border-radius: 16px;
+    border: 1.5px solid var(--ios-sep);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .ios-section-label {
+    padding: 24px 0 8px;
+    font-size: 14px;
+  }
+
+  .ios-large-title {
+    padding: 4px 0 16px;
+    font-size: 38px;
+  }
+
+  .ios-segment {
+    margin: 0 0 24px;
+    max-width: 380px;
+  }
+
+  .ios-btn {
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 12px 32px;
+    border-radius: 12px;
+    font-size: 15px;
+  }
+}

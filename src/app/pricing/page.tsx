@@ -37,8 +37,8 @@ export default function PricingPage() {
           </button>
         </div>
 
-        {/* Vertical scrollable stack of Pricing Cards */}
-        <div className="space-y-6 max-w-md mx-auto pb-10">
+        {/* Responsive grid of Pricing Cards */}
+        <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-6 max-w-md md:max-w-6xl mx-auto pb-10">
           <PricingCard
             tier="Free"
             price="$0/mo"
