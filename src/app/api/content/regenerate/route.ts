@@ -4,6 +4,9 @@ import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "../generate/route";
 import { cleanJsonString } from "@/lib/utils";
 
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 

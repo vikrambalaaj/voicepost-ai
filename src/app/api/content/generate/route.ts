@@ -6,6 +6,9 @@ import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 import { sendApprovalEmailInternal } from "@/lib/email";
 
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 // Banned words list
 export const BANNED_WORDS = [
   "delve", "leverage", "game-changer", "transformative", "paradigm shift",
@@ -176,7 +179,7 @@ Please generate a professional LinkedIn post rewritten from the transcript match
 Return your response ONLY in this JSON format:
 {
   "post_content": "The generated post text...",
-  "hashtags": ["hashtag1", "hashtag2"],
+  "hashtags": ["Generate 3 to 5 relevant lowercase hashtags without the # symbol"],
   "hook_type": "The category of hook used (e.g. contrast, question, numbers)",
   "post_structure": "Brief description of structure used",
   "style_match_score": 9,
@@ -210,78 +213,22 @@ Return your response ONLY in this JSON format:
       }
     }
 
-    // 3. Second Pass: Human Authenticity Check
-    // Send post_content to fastest provider (Groq 8B) to polish it
-    let polishedPostContent = resultJson.post_content;
-    let reviewSuggested = false;
-    
-    try {
-      const polishPrompt = `You are a human copywriter. Review this draft. Find and rewrite any phrases that sound artificial, clunky, or obviously AI-generated.
-Ensure there are no corporate buzzwords like delve, leverage, thought leader.
-Return ONLY the polished post content text. No comments, no formatting boxes.
+    resultJson.review_suggested = false;
 
-DRAFT:
-"${resultJson.post_content}"`;
-
-      const polishStartTime = Date.now();
-      const polishRes = await routeLLMRequest({
-        useCase: "transcript_correction",
-        messages: [{ role: "user", content: polishPrompt }],
-        userId: user.id,
-        userPlan: user.plan as any,
-        sessionId: "post-humanizer-" + Date.now(),
-        preferredProviderId: "groq", // Fast path
-      });
-      
-      const polishLatency = Date.now() - polishStartTime;
-      if (polishLatency <= 3000) {
-        polishedPostContent = polishRes.content.trim();
-      } else {
-        reviewSuggested = true; // flag review suggested badge if latency > 3s
-      }
-    } catch (err) {
-      reviewSuggested = true;
-    }
-
-    resultJson.post_content = polishedPostContent;
-    resultJson.review_suggested = reviewSuggested;
-
-    // 3b. Hashtag Enrichment Pass — ensure at least 3 relevant hashtags
-    let finalHashtags: string[] = (resultJson.hashtags || []).map((h: string) => h.replace(/^#/, "").toLowerCase().trim()).filter(Boolean);
+    // Clean and validate hashtags
+    let finalHashtags: string[] = (resultJson.hashtags || [])
+      .map((h: string) => h.replace(/^#/, "").toLowerCase().trim())
+      .filter(Boolean);
 
     if (finalHashtags.length < 3) {
-      try {
-        const hashtagPrompt = `Generate exactly 5 professional LinkedIn hashtags for this post. Return ONLY a valid JSON array of lowercase strings without the # symbol. Example: ["ai","saas","startup","productivity","tech"]. No explanation, no extra text.
-
-POST:
-"${resultJson.post_content}"
-
-INDUSTRY: ${user.industry}`;
-
-        const hashtagRes = await routeLLMRequest({
-          useCase: "transcript_correction",
-          messages: [
-            { role: "system", content: "Output ONLY a valid JSON array of 5 lowercase hashtag strings. No markdown, no explanation." },
-            { role: "user", content: hashtagPrompt },
-          ],
-          userId: user.id,
-          userPlan: user.plan as any,
-          sessionId: "hashtag-enrichment-" + Date.now(),
-        });
-
-        const rawHashtagContent = hashtagRes.content.trim();
-        const jsonMatch = rawHashtagContent.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          const parsed: string[] = JSON.parse(cleanJsonString(jsonMatch[0]));
-          const enriched = parsed.map((h) => h.replace(/^#/, "").toLowerCase().trim()).filter(Boolean);
-          // Merge existing + enriched, deduplicate, cap at 8
-          const merged = Array.from(new Set([...finalHashtags, ...enriched])).slice(0, 8);
-          finalHashtags = merged;
-          console.log(`[generate] Hashtag enrichment: ${finalHashtags.join(", ")}`);
-        }
-      } catch (hashtagErr) {
-        console.warn("[generate] Hashtag enrichment failed, using existing tags:", hashtagErr);
+      const industry = (user.industry || "professional").toLowerCase();
+      let fallbacks = ["growth", "productivity", "networking"];
+      if (industry.includes("saas") || industry.includes("tech") || industry.includes("ai")) {
+        fallbacks = ["saas", "startup", "tech", "ai"];
+      } else if (industry.includes("marketing") || industry.includes("brand")) {
+        fallbacks = ["marketing", "branding", "business"];
       }
+      finalHashtags = Array.from(new Set([...finalHashtags, ...fallbacks])).slice(0, 5);
     }
 
     resultJson.hashtags = finalHashtags;
@@ -364,7 +311,7 @@ INDUSTRY: ${user.industry}`;
         hook_type: resultJson.hook_type,
         post_structure: resultJson.post_structure,
         style_deviations: resultJson.style_deviations || [],
-        review_suggested: reviewSuggested,
+        review_suggested: resultJson.review_suggested,
         provider: llmRes.provider,
         latencyMs: llmRes.latencyMs,
         agent_thoughts: agentThoughts || null,
