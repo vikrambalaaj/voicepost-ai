@@ -33,9 +33,44 @@ export async function GET(req: NextRequest) {
   const serpapiKey = process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY;
   const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
   const pexelsKey = process.env.PEXELS_API_KEY;
+  const tavilyKey = process.env.TAVILY_API_KEY;
 
   let results: { id: string; url: string; thumbnail: string; attribution: string; source: string }[] = [];
   const promises = [];
+
+  // 0. Tavily Image Search (Primary key-based search)
+  if (tavilyKey) {
+    promises.push(
+      fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          query: query,
+          include_images: true,
+          max_results: 6,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.images && data.images.length > 0) {
+            return data.images.map((img: any, idx: number) => {
+              const url = typeof img === "string" ? img : img.url;
+              const description = typeof img === "string" ? "Photo from Web" : (img.description || "Photo from Web");
+              return {
+                id: `tavily_${idx}_${Date.now()}`,
+                url: url,
+                thumbnail: url,
+                attribution: description,
+                source: "tavily",
+              };
+            });
+          }
+          return [];
+        })
+        .catch(() => [])
+    );
+  }
 
   // 1. Google Images via Serper.dev (Free tier available)
   if (serperKey) {
@@ -187,9 +222,20 @@ export async function GET(req: NextRequest) {
     console.error("Parallel search fetch error:", err);
   }
 
-  // Check if search returned results
+  // Check if search returned results — if empty, fallback to Lorem Picsum
   if (results.length === 0) {
-    return NextResponse.json({ error: "Image search failed. No search results returned." }, { status: 400 });
+    const topics = ["business", "workspace", "startup", "office", "coding", "meeting"];
+    results = Array.from({ length: 12 }).map((_, idx) => {
+      const category = topics[idx % topics.length];
+      const imgId = 100 + idx;
+      return {
+        id: `picsum_${idx}_${Date.now()}`,
+        url: `https://picsum.photos/id/${imgId}/800/450`,
+        thumbnail: `https://picsum.photos/id/${imgId}/400/225`,
+        attribution: `Placeholder image (${category})`,
+        source: "picsum",
+      };
+    });
   }
 
   return NextResponse.json({ success: true, results: results.slice(0, 12) });

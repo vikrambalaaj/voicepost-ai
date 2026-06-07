@@ -20,7 +20,9 @@ export function middleware(req: NextRequest) {
   if (pathname === "/") {
     if (session) {
       try {
-        const decoded = JSON.parse(Buffer.from(session, "base64").toString("utf-8"));
+        const dotIndex = session.lastIndexOf(".");
+        const encoded = dotIndex === -1 ? session : session.substring(0, dotIndex);
+        const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
         if (decoded.exp && decoded.exp > Date.now()) {
           return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
         }
@@ -51,7 +53,9 @@ export function middleware(req: NextRequest) {
 
   // Validate session is not expired (simple base64 JSON check)
   try {
-    const decoded = JSON.parse(Buffer.from(session, "base64").toString("utf-8"));
+    const dotIndex = session.lastIndexOf(".");
+    const encoded = dotIndex === -1 ? session : session.substring(0, dotIndex);
+    const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
     if (decoded.exp && decoded.exp < Date.now()) {
       // Expired — clear cookie and redirect to login
       const loginUrl = new URL("/login", req.nextUrl.origin);

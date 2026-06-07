@@ -55,37 +55,39 @@ export async function GET(req: NextRequest) {
       const tokenData = await tokenRes.json();
       const accessToken = tokenData.access_token;
 
-      // Fetch profile with projection to get the profile picture
-      const profileRes = await fetch(
-        "https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,profilePicture(displayImage~digitalmediaAsset:playableStreams))",
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      if (!profileRes.ok) throw new Error(`Profile fetch failed: ${profileRes.statusText}`);
-      const profileData = await profileRes.json();
+      // Fetch userinfo using modern OIDC endpoint
+      const userinfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!userinfoRes.ok) throw new Error(`Userinfo fetch failed: ${userinfoRes.statusText}`);
+      const userinfoData = await userinfoRes.json();
 
-      // Fetch email
-      let profileEmail = "";
+      // Attempt to retrieve profile headline from legacy profile endpoint (OIDC token might allow it)
+      let headline = "LinkedIn Professional";
       try {
-        const emailRes = await fetch(
-          "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        if (emailRes.ok) {
-          const emailData = await emailRes.json();
-          profileEmail = emailData.elements?.[0]?.["handle~"]?.emailAddress || "";
+        const meRes = await fetch("https://api.linkedin.com/v2/me?projection=(id,localizedHeadline)", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.localizedHeadline) {
+            headline = meData.localizedHeadline;
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn("Failed to fetch headline from /v2/me, using fallback:", err);
+      }
 
       accountInfo = {
-        linkedin_profile_id: `urn:li:person:${profileData.id}`,
+        linkedin_profile_id: `urn:li:person:${userinfoData.sub}`,
         access_token: accessToken,
-        profile_name: `${profileData.localizedFirstName} ${profileData.localizedLastName}`,
-        profile_headline: "LinkedIn Professional",
-        profile_picture_url:
-          profileData.profilePicture?.["displayImage~"]?.elements?.[0]?.identifiers?.[0]?.identifier || "",
-        profile_email: profileEmail,
+        profile_name: userinfoData.name || `${userinfoData.given_name} ${userinfoData.family_name}`,
+        profile_headline: headline,
+        profile_picture_url: userinfoData.picture || "",
+        profile_email: userinfoData.email || "",
       };
     } catch (err: any) {
       console.error("LinkedIn OAuth error:", err);
@@ -119,9 +121,10 @@ export async function GET(req: NextRequest) {
 
     if (existingUsers?.[0]) {
       userId = existingUsers[0].id;
-      // Update name/picture
+      // Update name/picture/headline
       await db.from("users").update({
         full_name: accountInfo.profile_name,
+        job_title: accountInfo.profile_headline || "",
       }).eq("id", userId);
     } else {
       // Create new user
@@ -131,7 +134,7 @@ export async function GET(req: NextRequest) {
         email: accountInfo.profile_email,
         full_name: accountInfo.profile_name,
         industry: "Professional",
-        job_title: "",
+        job_title: accountInfo.profile_headline || "",
         plan: "free",
       }).select().single();
       

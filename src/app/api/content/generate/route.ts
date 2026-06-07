@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { transcript, style_type, style_id, blend_config, backend } = body;
+    const { transcript, style_type, style_id, blend_config, backend, web_search } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: "Transcript is required" }, { status: 400 });
@@ -125,6 +125,70 @@ export async function POST(req: NextRequest) {
       .limit(5);
     const recentTopics = recentPosts?.map((p: any) => p.post_content?.substring(0, 30)).filter(Boolean) || [];
 
+    // --- Web Search Grounding ---
+    let webSearchContext = "";
+    if (web_search && (process.env.TAVILY_API_KEY || (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX))) {
+      try {
+        const queryRes = await routeLLMRequest({
+          useCase: "keyword_extraction",
+          messages: [
+            {
+              role: "system",
+              content: "You are an assistant that extracts the single most effective web search query from a user's raw thoughts/transcript to find the latest news, facts, and details on the topic. Return ONLY the search query string, nothing else. No quotes, no preamble.",
+            },
+            {
+              role: "user",
+              content: transcript,
+            },
+          ],
+          userId: user.id,
+          userPlan: user.plan || "pro",
+          sessionId: "search-query-extraction-" + Date.now(),
+        });
+        const searchQuery = queryRes.content.trim().replace(/^"|"$/g, "");
+        console.log(`[web-search] Extracted query: "${searchQuery}"`);
+
+        if (process.env.TAVILY_API_KEY) {
+          const tavilyRes = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              api_key: process.env.TAVILY_API_KEY,
+              query: searchQuery,
+              search_depth: "basic",
+              max_results: 3,
+            }),
+          });
+          if (tavilyRes.ok) {
+            const searchData = await tavilyRes.json();
+            const results = searchData.results || [];
+            webSearchContext = results
+              .map((r: any) => `Source: ${r.title} (${r.url})\nContent: ${r.content}`)
+              .join("\n\n");
+          } else {
+            console.error("[web-search] Tavily API error:", tavilyRes.statusText);
+          }
+        } else if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX) {
+          const googleRes = await fetch(
+            `https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.GOOGLE_SEARCH_CX}&q=${encodeURIComponent(searchQuery)}`
+          );
+          if (googleRes.ok) {
+            const searchData = await googleRes.json();
+            const items = searchData.items || [];
+            webSearchContext = items
+              .map((r: any) => `Source: ${r.title} (${r.link})\nContent: ${r.snippet}`)
+              .join("\n\n");
+          } else {
+            console.error("[web-search] Google Custom Search API error:", googleRes.statusText);
+          }
+        }
+      } catch (err) {
+        console.error("[web-search] Failed to perform web search:", err);
+      }
+    }
+
     let resultJson: any = {};
     let llmRes: any = null;
     let agentThoughts = "";
@@ -164,6 +228,9 @@ export async function POST(req: NextRequest) {
       const userPrompt = `TRANSCRIPT TO REWRITE:
 "${transcript}"
 
+${webSearchContext ? `ADDITIONAL LATEST WEB SEARCH CONTEXT (Use this to include the most up-to-date and accurate facts):
+${webSearchContext}
+` : ""}
 STYLE PROFILE TARGET:
 ${JSON.stringify(selectedStyleJson, null, 2)}
 
@@ -195,6 +262,7 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         userPlan: user.plan as any,
         sessionId: "post-generation-" + Date.now(),
         responseFormat: "json",
+        enableSearch: web_search,
       });
 
       llmRes = waterfallRes;

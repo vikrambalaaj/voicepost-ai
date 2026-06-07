@@ -43,6 +43,9 @@ export default function CreatePostPage() {
   const [generationStatus, setGenerationStatus] = useState("");
   const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("waterfall");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [webSearch, setWebSearch] = useState(false);
+  const [generationTime, setGenerationTime] = useState(0);
+  const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("voicepost_ai_backend");
@@ -108,6 +111,41 @@ export default function CreatePostPage() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isRecording]);
+
+  // Timer for tracking generation progress
+  useEffect(() => {
+    let timerId: NodeJS.Timeout;
+    if (generatingPost) {
+      setGenerationTime(0);
+      setActiveStep(0);
+      timerId = setInterval(() => {
+        setGenerationTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setGenerationTime(0);
+      setActiveStep(0);
+    }
+    return () => {
+      if (timerId) clearInterval(timerId);
+    };
+  }, [generatingPost]);
+
+  // Handle stepping active generation phase
+  useEffect(() => {
+    if (!generatingPost) return;
+    const offset = webSearch ? 3 : 0;
+    if (webSearch && generationTime < 4) {
+      setActiveStep(0);
+    } else if (generationTime < 4 + offset) {
+      setActiveStep(1);
+    } else if (generationTime < 9 + offset) {
+      setActiveStep(2);
+    } else if (generationTime < 13 + offset) {
+      setActiveStep(3);
+    } else {
+      setActiveStep(4);
+    }
+  }, [generationTime, generatingPost, webSearch]);
 
   // Warmup Trigger
   const triggerWarmup = async () => {
@@ -356,7 +394,7 @@ export default function CreatePostPage() {
     }
 
     setGeneratingPost(true);
-    setGenerationStatus("Rewriting post...");
+    setGenerationStatus(webSearch ? "Searching the web..." : "Rewriting post...");
     try {
       const res = await fetch("/api/content/generate", {
         method: "POST",
@@ -366,6 +404,7 @@ export default function CreatePostPage() {
           style_type: styleType,
           style_id: selectedStyleId,
           backend: aiBackend,
+          web_search: webSearch,
         }),
       });
 
@@ -550,6 +589,31 @@ export default function CreatePostPage() {
               />
             </div>
           )}
+        </div>
+
+        {/* WEB SEARCH GROUNDING */}
+        <div className="ios-section-label">Web Search Grounding</div>
+        <div className="ios-card p-4 flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+          <div className="flex flex-col pr-4 text-left">
+            <span className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+              <Search className="w-4 h-4 text-cyan-400" />
+              Enable Web Search Grounding
+            </span>
+            <span className="text-[11px] text-zinc-400 mt-0.5 leading-tight">
+              Uses Google Search/Tavily to find the latest facts and news on your topic before writing.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWebSearch((v) => !v)}
+            className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer shrink-0 ${webSearch ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+            aria-label="Toggle Web Search Grounding"
+          >
+            <span
+              className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+              style={{ transform: webSearch ? "translateX(24px)" : "translateX(0)" }}
+            />
+          </button>
         </div>
 
         {/* AI GENERATION ENGINE */}
@@ -816,6 +880,100 @@ export default function CreatePostPage() {
             )}
           </button>
         </div>
+
+        {/* FULL-SCREEN GENERATION OVERLAY */}
+        {generatingPost && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-6 text-white select-none">
+            {/* Glowing background shapes */}
+            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
+            <div className="absolute bottom-1/3 left-1/3 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Loader Card */}
+            <div className="w-full max-w-md bg-zinc-900/80 border border-zinc-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden text-center">
+              {/* Top pulsing icon */}
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center relative shadow-xl shadow-cyan-500/10">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 animate-ping opacity-25" />
+                <Sparkles className="w-10 h-10 text-white animate-pulse" />
+              </div>
+
+              <h3 className="text-xl font-bold tracking-tight text-white mb-1">
+                {activeStep === 0 && "Performing Web Search..."}
+                {activeStep === 1 && "Analyzing Writing DNA..."}
+                {activeStep === 2 && "Drafting LinkedIn Post..."}
+                {activeStep === 3 && "Optimizing Hashtags & Hooks..."}
+                {activeStep === 4 && "Polishing Final Layout..."}
+              </h3>
+              <p className="text-xs text-zinc-400 mb-6">
+                {generationStatus || "Creating your post using AI..."}
+              </p>
+
+              {/* Progress Bar Container */}
+              <div className="w-full bg-zinc-800/80 rounded-full h-2.5 mb-2 overflow-hidden border border-zinc-700/50">
+                <div
+                  className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 h-full rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}%` }}
+                />
+              </div>
+
+              {/* Timer and percentage */}
+              <div className="flex justify-between text-[11px] text-zinc-500 font-bold px-1 mb-8">
+                <span>{Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}% completed</span>
+                <span>{generationTime}s elapsed</span>
+              </div>
+
+              {/* Step Indicators */}
+              <div className="space-y-3.5 text-left border-t border-zinc-800/60 pt-6">
+                {[
+                  { label: "Web Search Grounding", key: 0, visible: webSearch },
+                  { label: "Analyze target writing style", key: 1, visible: true },
+                  { label: "Ghostwrite post content matching style", key: 2, visible: true },
+                  { label: "Structure relevant hashtags & hooks", key: 3, visible: true },
+                  { label: "Assemble final layout & preview package", key: 4, visible: true },
+                ]
+                  .filter((s) => s.visible)
+                  .map((step, idx) => {
+                    const isDone = activeStep > step.key;
+                    const isActive = activeStep === step.key;
+                    return (
+                      <div
+                        key={step.key}
+                        className={`flex items-center gap-3 transition-opacity duration-300 ${
+                          isDone || isActive ? "opacity-100" : "opacity-35"
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
+                            isDone
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              : isActive
+                              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 animate-pulse"
+                              : "bg-zinc-850 text-zinc-500 border border-zinc-700/50"
+                          }`}
+                        >
+                          {isDone ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            idx + 1
+                          )}
+                        </div>
+                        <span
+                          className={`text-xs font-semibold ${
+                            isActive
+                              ? "text-cyan-400 animate-pulse"
+                              : isDone
+                              ? "text-zinc-300"
+                              : "text-zinc-500"
+                          }`}
+                        >
+                          {step.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </IosShell>
   );

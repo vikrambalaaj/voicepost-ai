@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
       .from("user_posts_raw")
       .select("content")
       .eq("user_id", user.id)
-      .limit(10); // Analyze up to 10 posts for performance/cost
+      .order("published_at", { ascending: false })
+      .limit(5); // Analyze last 5 posts for target writing style
 
     if (!rawPosts || rawPosts.length < 3) {
       // Set low_data flag in account if we have low data
@@ -59,7 +60,9 @@ export async function POST(req: NextRequest) {
         signature_structure: "concise lists",
         vocabulary_complexity: "simple",
         unique_quirks: ["short line breaks"],
-        industry_vocabulary: [user.industry || "Tech"]
+        industry_vocabulary: [user.industry || "Tech"],
+        hook_style_explanation: "Starts with personal statements, bold hooks, or direct questions to draw readers in.",
+        writing_style_explanation: "Conversational, list-oriented writing that shares practical lessons with minimal corporate buzzwords."
       };
 
       const samplePost = "Honestly, building in public is hard. Speed is everything. What I've noticed is that shipping beats overthinking every single time. What are you launching today?";
@@ -106,7 +109,9 @@ Return ONLY a valid JSON object matching this schema. Do not add markdown backti
   "signature_structure": "structure description",
   "vocabulary_complexity": "simple",
   "unique_quirks": ["list 2 quirks"],
-  "industry_vocabulary": ["list 2 key words"]
+  "industry_vocabulary": ["list 2 key words"],
+  "hook_style_explanation": "Explain what kind of hooks the user uses in their posts (e.g. FOMO, details, questions, contrast, personal stories, etc.), giving specific examples or characteristics from the analyzed posts.",
+  "writing_style_explanation": "Explain summarizing the overall writing style, formatting choices, and content theme of the user based on these last 5 posts."
 }`;
 
     const llmRes = await routeLLMRequest({

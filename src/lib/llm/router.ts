@@ -10,6 +10,7 @@ export interface LLMRequest {
   preferredProviderId?: string;
   maxTokens?: number;
   responseFormat?: "text" | "json";
+  enableSearch?: boolean;
 }
 
 export interface LLMResponse {
@@ -245,6 +246,56 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
         content = data.result?.response || "";
         inputTokens = 0; // Cloudflare doesn't return tokens, estimate
         outputTokens = 0;
+      } else if (provider.id === "google" && request.enableSearch) {
+        // Native Gemini REST API call with search grounding
+        const nativeModel = model.startsWith("models/") ? model : `models/${model}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/${nativeModel}:generateContent?key=${apiKey}`;
+        
+        let systemInstruction = "";
+        const contents = [];
+
+        for (const msg of request.messages) {
+          if (msg.role === "system") {
+            systemInstruction = msg.content;
+          } else {
+            contents.push({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.content }]
+            });
+          }
+        }
+
+        const nativePayload: any = {
+          contents,
+          tools: [{ google_search: {} }],
+        };
+
+        if (systemInstruction) {
+          nativePayload.systemInstruction = {
+            parts: [{ text: systemInstruction }]
+          };
+        }
+
+        const response = await fetchWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(nativePayload),
+          },
+          timeoutMs
+        );
+
+        if (!response.ok) {
+          throw new Error(`Gemini Native API returned status ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        inputTokens = data.usageMetadata?.promptTokenCount || 0;
+        outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
       } else {
         // OpenAI Compatible API
         const payload: any = {
@@ -266,7 +317,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${apiKey}`,
+              "Authorization": `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),

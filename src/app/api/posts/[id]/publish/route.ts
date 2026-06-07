@@ -194,7 +194,7 @@ export async function POST(
 
           // 4. Upload binary PDF buffer
           const uploadRes = await fetch(uploadUrl, {
-            method: "POST",
+            method: "PUT",
             headers: {
               Authorization: `Bearer ${account.access_token}`,
             },
@@ -252,13 +252,17 @@ export async function POST(
                   videoBuffer = Buffer.from(arrayBuffer);
                 }
 
-                await fetch(uploadUrl, {
-                  method: "POST",
+                const uploadRes = await fetch(uploadUrl, {
+                  method: "PUT",
                   headers: {
                     Authorization: `Bearer ${account.access_token}`,
                   },
                   body: videoBuffer as any,
                 });
+
+                if (!uploadRes.ok) {
+                  throw new Error(`Failed to upload video binary to LinkedIn: ${uploadRes.statusText}`);
+                }
               }
             } else {
               // Register image upload
@@ -287,13 +291,17 @@ export async function POST(
                 const imgBlobRes = await fetch(selectedImage.url);
                 const imgBlob = await imgBlobRes.blob();
 
-                await fetch(uploadUrl, {
-                  method: "POST",
+                const uploadRes = await fetch(uploadUrl, {
+                  method: "PUT",
                   headers: {
                     Authorization: `Bearer ${account.access_token}`,
                   },
                   body: imgBlob,
                 });
+
+                if (!uploadRes.ok) {
+                  throw new Error(`Failed to upload image binary to LinkedIn: ${uploadRes.statusText}`);
+                }
               }
             }
           }

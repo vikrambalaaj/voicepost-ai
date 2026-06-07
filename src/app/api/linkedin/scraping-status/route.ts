@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   // Get active account
   const { data: accounts } = await db
     .from("linkedin_accounts")
-    .select("scraping_status, posts_scraped_count, profile_name, profile_picture_url, profile_email, linkedin_profile_id")
+    .select("scraping_status, posts_scraped_count, profile_name, profile_picture_url, profile_email, linkedin_profile_id, profile_headline")
     .eq("user_id", userId)
     .eq("is_primary", true);
 
@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       status: account.scraping_status,
       posts_scraped: account.posts_scraped_count,
       profile_name: account.profile_name,
+      profile_headline: account.profile_headline || null,
       profile_picture_url: account.profile_picture_url || null,
       profile_email: account.profile_email || null,
       // Construct LinkedIn profile URL from the stored urn (e.g. "urn:li:person:AbCdEfGh")

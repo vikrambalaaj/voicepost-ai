@@ -22,6 +22,8 @@ export default function LinkedInSettingsPage() {
   const [editedPhrases, setEditedPhrases] = useState("");
   const [editedAvoided, setEditedAvoided] = useState("");
   const [editedSample, setEditedSample] = useState("");
+  const [editedHookExplanation, setEditedHookExplanation] = useState("");
+  const [editedStyleExplanation, setEditedStyleExplanation] = useState("");
   const [savingStyle, setSavingStyle] = useState(false);
 
   useEffect(() => {
@@ -47,6 +49,8 @@ export default function LinkedInSettingsPage() {
               setEditedPhrases((sj.frequently_used_phrases || []).join(", "));
               setEditedAvoided((sj.avoided_corporate_words || []).join(", "));
               setEditedSample(prof.sample_post || "");
+              setEditedHookExplanation(sj.hook_style_explanation || "");
+              setEditedStyleExplanation(sj.writing_style_explanation || "");
             }
           }
         } else {
@@ -96,6 +100,8 @@ export default function LinkedInSettingsPage() {
         cta_style: editedCta,
         frequently_used_phrases: editedPhrases.split(",").map(s => s.trim()).filter(Boolean),
         avoided_corporate_words: editedAvoided.split(",").map(s => s.trim()).filter(Boolean),
+        hook_style_explanation: editedHookExplanation,
+        writing_style_explanation: editedStyleExplanation,
       };
 
       const res = await fetch("/api/style/profile", {
@@ -276,6 +282,28 @@ export default function LinkedInSettingsPage() {
                         </div>
 
                         <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase">Hook Style Explanation (FOMO, Details, Questions, etc.)</label>
+                          <textarea
+                            value={editedHookExplanation}
+                            onChange={(e) => setEditedHookExplanation(e.target.value)}
+                            rows={3}
+                            placeholder="Describe what hook angles you use..."
+                            className="w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs font-semibold focus:outline-none focus:border-blue-500 font-sans"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase">Writing Style Summary (DNA Explanation)</label>
+                          <textarea
+                            value={editedStyleExplanation}
+                            onChange={(e) => setEditedStyleExplanation(e.target.value)}
+                            rows={3}
+                            placeholder="Summarize your overall writing style..."
+                            className="w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs font-semibold focus:outline-none focus:border-blue-500 font-sans"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
                           <label className="text-[10px] font-bold text-zinc-400 uppercase">Sample Generated Post Preview</label>
                           <textarea
                             value={editedSample}
@@ -303,6 +331,8 @@ export default function LinkedInSettingsPage() {
                               setEditedPhrases((sj.frequently_used_phrases || []).join(", "));
                               setEditedAvoided((sj.avoided_corporate_words || []).join(", "));
                               setEditedSample(styleProfile.sample_post || "");
+                              setEditedHookExplanation(sj.hook_style_explanation || "");
+                              setEditedStyleExplanation(sj.writing_style_explanation || "");
                               setIsEditingStyle(false);
                             }}
                             className="flex-1 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-2 rounded-xl text-xs bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors duration-150"
@@ -360,6 +390,27 @@ export default function LinkedInSettingsPage() {
                                     </span>
                                   ))}
                                 </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {(editedHookExplanation || editedStyleExplanation) && (
+                          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/80 space-y-3 text-left">
+                            {editedHookExplanation && (
+                              <div>
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Hook Style & Hook Angle</p>
+                                <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans mt-1">
+                                  {editedHookExplanation}
+                                </p>
+                              </div>
+                            )}
+                            {editedStyleExplanation && (
+                              <div>
+                                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Writing Style DNA Summary</p>
+                                <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans mt-1">
+                                  {editedStyleExplanation}
+                                </p>
                               </div>
                             )}
                           </div>
@@ -461,11 +512,11 @@ export default function LinkedInSettingsPage() {
                   <div className="ios-section-label">Requested API Permissions</div>
                   <div className="ios-card bg-zinc-50 dark:bg-zinc-900/50 p-4 space-y-2 text-xs font-semibold select-none">
                     <div className="flex justify-between">
-                      <span className="text-zinc-700 dark:text-zinc-300">✅ r_liteprofile</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">✅ openid & profile</span>
                       <span className="text-zinc-400">Read name, photo, headline</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-700 dark:text-zinc-300">✅ r_emailaddress</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">✅ email</span>
                       <span className="text-zinc-400">Read email for auth sync</span>
                     </div>
                     <div className="flex justify-between">

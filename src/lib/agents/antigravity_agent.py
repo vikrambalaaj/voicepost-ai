@@ -138,7 +138,7 @@ def publish_to_linkedin(post_content: str, access_token: str, profile_id: str, i
                 img_res = requests.get(image_url, timeout=10)
                 if img_res.ok:
                     # Upload to LinkedIn
-                    upload_res = requests.post(upload_url, data=img_res.content, headers={"Authorization": f"Bearer {access_token}"}, timeout=15)
+                    upload_res = requests.put(upload_url, data=img_res.content, headers={"Authorization": f"Bearer {access_token}"}, timeout=15)
                     if not upload_res.ok:
                         image_urn = None
         except Exception as e:
