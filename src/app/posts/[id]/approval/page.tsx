@@ -323,6 +323,75 @@ function drawSlideToCanvas(
   }
 }
 
+// ─── Author Branding Strip ────────────────────────────────────────────────────
+function AuthorStrip({
+  name,
+  picture,
+  accentColor,
+  dark = true,
+  compact = false,
+  linkedinUrl = "",
+  isCta = false,
+}: {
+  name: string;
+  picture?: string;
+  accentColor: string;
+  dark?: boolean;
+  compact?: boolean;
+  linkedinUrl?: string;
+  isCta?: boolean;
+}) {
+  const displayName = name || "Your Name";
+  return (
+    <div
+      className={`flex flex-col gap-1.5 ${compact ? "mt-2 pt-2" : "mt-3 pt-3"} border-t`}
+      style={{ borderColor: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }}
+    >
+      <div className="flex items-center gap-2">
+        {picture ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={picture}
+            alt={displayName}
+            className={`rounded-full object-cover flex-shrink-0 ${compact ? "w-5 h-5" : "w-8 h-8"}`}
+          />
+        ) : (
+          <div
+            className={`rounded-full flex items-center justify-center flex-shrink-0 ${compact ? "w-5 h-5" : "w-8 h-8"}`}
+            style={{ background: accentColor }}
+          >
+            <span className={`text-white font-bold ${compact ? "text-[8px]" : "text-xs"}`}>
+              {displayName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p
+            className={`font-semibold truncate ${compact ? "text-[8px]" : "text-xs"}`}
+            style={{ color: dark ? "#e4e4e7" : "#18181b" }}
+          >
+            {displayName}
+          </p>
+          {!compact && (
+            <p className="text-[10px] truncate" style={{ color: dark ? "#71717a" : "#a1a1aa" }}>
+              LinkedIn · Follow for more
+            </p>
+          )}
+        </div>
+      </div>
+      {/* Show LinkedIn URL on CTA slides when available */}
+      {isCta && !compact && linkedinUrl && (
+        <p
+          className="text-[11px] font-mono truncate"
+          style={{ color: dark ? "#60a5fa" : "#2563eb" }}
+        >
+          🔗 {linkedinUrl.replace("https://", "")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── SlideCanvas React Component ──────────────────────────────────────────────
 
 function SlideCanvasComponent({
@@ -332,6 +401,10 @@ function SlideCanvasComponent({
   slideIndex,
   totalSlides,
   compact = false,
+  showAuthor = true,
+  authorName = "",
+  authorPicture = "",
+  authorLinkedinUrl = "",
 }: {
   slide: Slide;
   templateId: string;
@@ -339,6 +412,10 @@ function SlideCanvasComponent({
   slideIndex: number;
   totalSlides: number;
   compact?: boolean;
+  showAuthor?: boolean;
+  authorName?: string;
+  authorPicture?: string;
+  authorLinkedinUrl?: string;
 }) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
@@ -373,13 +450,8 @@ function SlideCanvasComponent({
             {slide.body}
           </p>
         </div>
-        {isCover && (
-          <div className={`mt-3 flex items-center gap-2 ${compact ? "pt-2" : "pt-4"} border-t border-zinc-800`}>
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: accentColor }}>
-              <span className="text-white text-[8px] font-bold">V</span>
-            </div>
-            {!compact && <span className="text-zinc-500 text-xs">VoicePost · swipe to read →</span>}
-          </div>
+        {showAuthor && (
+          <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
         )}
       </div>
     );
@@ -411,10 +483,8 @@ function SlideCanvasComponent({
               {slide.body}
             </p>
           </div>
-          {isCover && (
-            <div className={`${compact ? "mt-2 text-[8px]" : "mt-6 text-xs"} text-zinc-400`}>
-              A thread by VoicePost
-            </div>
+          {showAuthor && (
+            <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark={false} compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
           )}
         </div>
       </div>
@@ -449,12 +519,8 @@ function SlideCanvasComponent({
               {slide.body}
             </p>
           </div>
-          {!compact && isCover && (
-            <div className="mt-4 flex items-center gap-2">
-              {[...Array(totalSlides)].map((_, i) => (
-                <div key={i} className={`rounded-full ${i === 0 ? "w-6 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40"}`} />
-              ))}
-            </div>
+          {showAuthor && (
+            <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
           )}
         </div>
       </div>
@@ -496,15 +562,19 @@ function SlideCanvasComponent({
               {slide.body}
             </p>
           </div>
-          <div className="flex gap-1">
-            {[...Array(Math.min(totalSlides, compact ? 3 : 5))].map((_, i) => (
-              <div
-                key={i}
-                className="h-1 rounded-full flex-1"
-                style={{ background: i === slideIndex ? accentColor : "#E5E7EB" }}
-              />
-            ))}
-          </div>
+          {showAuthor ? (
+            <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark={false} compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
+          ) : (
+            <div className="flex gap-1">
+              {[...Array(Math.min(totalSlides, compact ? 3 : 5))].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-1 rounded-full flex-1"
+                  style={{ background: i === slideIndex ? accentColor : "#E5E7EB" }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -559,6 +629,9 @@ function SlideCanvasComponent({
           <p className={`text-slate-300 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`}>
             {slide.body}
           </p>
+          {showAuthor && (
+            <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
+          )}
         </div>
       </div>
     </div>
@@ -607,6 +680,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [selectedTemplate, setSelectedTemplate] = useState("bold_impact");
   const [accentColor, setAccentColor] = useState("#3B82F6");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [showAuthor, setShowAuthor] = useState(true); // Author branding toggle for carousel slides
 
   // Load Data
   useEffect(() => {
@@ -782,10 +856,18 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const handlePublish = async () => {
     setPublishing(true);
     try {
-      // 1. Save changes first
+      // 1. Enforce minimum hashtags before publishing
+      const minHashtags = isCarousel ? 5 : 6;
+      if (hashtags.length < minHashtags) {
+        alert(`Please add at least ${minHashtags} hashtags before publishing. You currently have ${hashtags.length}.`);
+        setPublishing(false);
+        return;
+      }
+
+      // 2. Save changes first
       await saveChanges(postContent, hashtags);
 
-      // 2. Schedule or Publish now
+      // 3. Schedule or Publish now
       if (scheduleMode === "schedule" && scheduledAt) {
         const approveRes = await fetch(`/api/posts/${id}/approve`, {
           method: "PUT",
@@ -798,9 +880,10 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           router.push("/dashboard");
         }
       } else {
-        // Publish Now (standard text/image or document carousel)
-        const selectedBackend = localStorage.getItem("voicepost_ai_backend") || "antigravity";
-        const bodyPayload: any = { backend: selectedBackend };
+        // Publish Now — always use "waterfall" (antigravity requires local Python env)
+        const selectedBackend = localStorage.getItem("voicepost_ai_backend") || "waterfall";
+        const safeBackend = selectedBackend === "antigravity" ? "waterfall" : selectedBackend;
+        const bodyPayload: any = { backend: safeBackend };
 
         if (isCarousel) {
           const doc = await generatePdfDocument();
@@ -826,7 +909,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           window.open("https://www.linkedin.com/", "_blank");
           router.push("/dashboard");
         } else {
-          alert("Publish failed: " + pubData.error);
+          alert("Publish failed: " + (pubData.error || "Unknown error. Check server logs."));
         }
       }
     } catch (e: any) {
@@ -929,6 +1012,10 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                   accentColor={accentColor}
                   slideIndex={previewSlide}
                   totalSlides={carouselData.slides.length}
+                  showAuthor={showAuthor}
+                  authorName={linkedAccount?.profile_name || ""}
+                  authorPicture={linkedAccount?.profile_picture_url || ""}
+                  authorLinkedinUrl={linkedAccount?.linkedin_profile_url || ""}
                 />
               </div>
 
@@ -1006,6 +1093,63 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                   </code>
                 </div>
               </div>
+            </div>
+
+            {/* Author Branding Toggle */}
+            <div className="ios-card p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {linkedAccount?.profile_picture_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={linkedAccount.profile_picture_url}
+                      alt={linkedAccount.profile_name || "Author"}
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-2"
+                      style={{ ringColor: accentColor } as any}
+                    />
+                  ) : (
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm"
+                      style={{ background: accentColor }}
+                    >
+                      {(linkedAccount?.profile_name || "A").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-semibold text-sm text-zinc-900 dark:text-white">
+                      {linkedAccount?.profile_name || "Not connected"}
+                    </p>
+                    {linkedAccount?.linkedin_profile_url && (
+                      <a
+                        href={linkedAccount.linkedin_profile_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-500 hover:underline truncate block max-w-[180px]"
+                      >
+                        {linkedAccount.linkedin_profile_url.replace("https://www.linkedin.com/in/", "linkedin.com/in/")}
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Show on slides</label>
+                  <button
+                    onClick={() => setShowAuthor((v) => !v)}
+                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer ${showAuthor ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+                    aria-label="Toggle author branding"
+                  >
+                    <span
+                      className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+                      style={{ transform: showAuthor ? "translateX(24px)" : "translateX(0)" }}
+                    />
+                  </button>
+                </div>
+              </div>
+              {linkedAccount?.linkedin_profile_url && (
+                <p className="text-[11px] text-zinc-400 mt-3 leading-relaxed">
+                  💡 Your LinkedIn URL will appear on the last (CTA) slide so readers can follow you.
+                </p>
+              )}
             </div>
 
             {/* Editor Box */}

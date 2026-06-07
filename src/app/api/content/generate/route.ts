@@ -175,10 +175,10 @@ RECENT POST TOPICS (Avoid repeating these concepts/hooks):
 ${recentTopics.join("\n")}
 
 Please generate a professional LinkedIn post rewritten from the transcript matching the target style.
-Return your response ONLY in this JSON format (hashtags must be 3-5 lowercase strings without the # symbol):
+Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase strings without the # symbol, highly relevant to the post topic):
 {
   "post_content": "The generated post text...",
-  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6"],
   "hook_type": "The category of hook used (e.g. contrast, question, numbers)",
   "post_structure": "Brief description of structure used",
   "style_match_score": 9,
@@ -219,15 +219,17 @@ Return your response ONLY in this JSON format (hashtags must be 3-5 lowercase st
       .map((h: string) => h.replace(/^#/, "").toLowerCase().trim())
       .filter(Boolean);
 
-    if (finalHashtags.length < 3) {
+    if (finalHashtags.length < 6) {
       const industry = (user.industry || "professional").toLowerCase();
-      let fallbacks = ["growth", "productivity", "networking"];
+      let fallbacks = ["growth", "productivity", "networking", "leadership", "innovation", "business"];
       if (industry.includes("saas") || industry.includes("tech") || industry.includes("ai")) {
-        fallbacks = ["saas", "startup", "tech", "ai"];
+        fallbacks = ["saas", "startup", "tech", "ai", "software", "founders"];
       } else if (industry.includes("marketing") || industry.includes("brand")) {
-        fallbacks = ["marketing", "branding", "business"];
+        fallbacks = ["marketing", "branding", "business", "digitalmarketing", "contentmarketing", "growth"];
+      } else if (industry.includes("finance") || industry.includes("invest")) {
+        fallbacks = ["finance", "investing", "wealthmanagement", "fintech", "business", "money"];
       }
-      finalHashtags = Array.from(new Set([...finalHashtags, ...fallbacks])).slice(0, 5);
+      finalHashtags = Array.from(new Set([...finalHashtags, ...fallbacks])).slice(0, 8);
     }
 
     resultJson.hashtags = finalHashtags;
@@ -289,16 +291,20 @@ Return your response ONLY in this JSON format (hashtags must be 3-5 lowercase st
       latency_ms: llmRes.latencyMs,
     });
 
-    // 6. Fire draft email notification — truly non-blocking (setImmediate avoids blocking SMTP handshake)
-    setImmediate(() => {
+    // 6. Fire draft email notification — send synchronously BEFORE returning response.
+    //    setImmediate is killed by Vercel after the HTTP response is sent.
+    try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-      sendApprovalEmailInternal({
+      await sendApprovalEmailInternal({
         post_id: newPost.id,
         post_content: newPost.post_content,
         hashtags: newPost.hashtags || [],
         baseUrl,
-      }).catch((err) => console.warn("[generate] Email notification failed (non-blocking):", err));
-    });
+      });
+    } catch (emailErr) {
+      // Email failure should never block the post response
+      console.warn("[generate] Email notification failed (non-blocking):", emailErr);
+    }
 
     return NextResponse.json({
       success: true,

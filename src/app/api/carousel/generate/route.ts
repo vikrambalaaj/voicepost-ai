@@ -66,7 +66,7 @@ Return this exact JSON structure:
       "emoji": "🎯"
     }
   ],
-  "suggestedHashtags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  "suggestedHashtags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
 }`;
 
     const result = await routeLLMRequest({
