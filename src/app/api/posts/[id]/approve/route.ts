@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { sendStatusEmail } from "@/lib/email";
 
 export async function PUT(
   req: NextRequest,
@@ -39,6 +40,15 @@ export async function PUT(
     if (error || !post) {
       return NextResponse.json({ error: "Post not found or update failed" }, { status: 404 });
     }
+
+    // Send status email (non-blocking)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    sendStatusEmail({
+      post_id: id,
+      action: scheduled_at ? "scheduled" : "approved",
+      scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : undefined,
+      baseUrl,
+    }).catch((e) => console.warn("[approve] Status email failed:", e));
 
     return NextResponse.json({ success: true, post });
   } catch (error: any) {

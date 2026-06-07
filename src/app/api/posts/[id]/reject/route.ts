@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { sendStatusEmail } from "@/lib/email";
 
 export async function PUT(
   req: NextRequest,
@@ -42,6 +43,15 @@ export async function PUT(
         .eq("post_id", id)
         .eq("revision_number", post.current_revision || 1);
     }
+
+    // Send status email with feedback (non-blocking)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    sendStatusEmail({
+      post_id: id,
+      action: "rejected",
+      feedback,
+      baseUrl,
+    }).catch((e) => console.warn("[reject] Status email failed:", e));
 
     return NextResponse.json({ success: true, post });
   } catch (error: any) {
