@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Compile posts content
-    const compiledPosts = rawPosts.map((p, idx) => `POST #${idx + 1}:\n${p.content}`).join("\n\n");
+    const compiledPosts = rawPosts.map((p: any, idx: number) => `POST #${idx + 1}:\n${p.content}`).join("\n\n");
 
     const analysisPrompt = `You are a style analysis intelligence engine. Analyze these authentic LinkedIn posts written by the user and extract their writing DNA.
 USER POSTS TO ANALYZE:

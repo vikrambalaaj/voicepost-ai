@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Mask emails: j***@gmail.com
-  const maskedUsers = (usersData || []).map((u) => {
+  const maskedUsers = (usersData || []).map((u: any) => {
     const parts = u.email.split("@");
     const local = parts[0] || "";
     const domain = parts[1] || "";

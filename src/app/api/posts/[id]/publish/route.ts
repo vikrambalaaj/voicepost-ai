@@ -253,7 +253,7 @@ export async function POST(
                   headers: {
                     Authorization: `Bearer ${account.access_token}`,
                   },
-                  body: videoBuffer,
+                  body: videoBuffer as any,
                 });
               }
             } else {

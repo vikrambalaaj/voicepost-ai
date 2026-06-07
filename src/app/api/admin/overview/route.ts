@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const { data: plansData } = await db.from("users").select("plan");
   const plans = plansData || [];
 
-  const mrr = plans.reduce((acc, curr) => {
+  const mrr = plans.reduce((acc: number, curr: any) => {
     if (curr.plan === "starter") return acc + 5;
     if (curr.plan === "pro") return acc + 12;
     if (curr.plan === "agency") return acc + 29;
@@ -34,12 +34,12 @@ export async function GET(req: Request) {
     .limit(100);
 
   const totalRequests = genEvents?.length || 0;
-  const successfulRequests = genEvents?.filter((e) => e.success).length || 0;
+  const successfulRequests = genEvents?.filter((e: any) => e.success).length || 0;
   const failureRate = totalRequests > 0 ? ((totalRequests - successfulRequests) / totalRequests) * 100 : 0;
   
   const avgLatency =
     totalRequests > 0
-      ? (genEvents?.reduce((acc, curr) => acc + (curr.total_latency_ms || 0), 0) || 0) / totalRequests
+      ? (genEvents?.reduce((acc: number, curr: any) => acc + (curr.total_latency_ms || 0), 0) || 0) / totalRequests
       : 0;
 
   // Log auditing

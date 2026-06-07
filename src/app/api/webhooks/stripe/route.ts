@@ -44,7 +44,7 @@ async function processStripeEventAsync(event: Stripe.Event) {
   switch (event.type) {
     case "customer.subscription.created":
     case "customer.subscription.updated": {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
       const stripeCustomerId = subscription.customer as string;
       const priceId = subscription.items.data[0]?.price.id;
 
@@ -79,7 +79,7 @@ async function processStripeEventAsync(event: Stripe.Event) {
     }
 
     case "customer.subscription.deleted": {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
       const stripeCustomerId = subscription.customer as string;
 
       // Downgrade to free tier

@@ -68,7 +68,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
     if (dbConfigs && dbConfigs.length > 0) {
       // Re-map eligibleProviders based on database priority & status
-      dbConfigs.forEach((cfg) => {
+      dbConfigs.forEach((cfg: any) => {
         if (cfg.daily_limit_override !== null && cfg.daily_limit_override !== undefined) {
           dailyLimitOverrides.set(cfg.id, cfg.daily_limit_override);
         }
@@ -86,7 +86,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
       });
 
       // Construct merged list from active DB configs
-      const merged: ProviderConfig[] = dbConfigs.map((cfg) => {
+      const merged: ProviderConfig[] = dbConfigs.map((cfg: any) => {
         const stdReg = PROVIDERS[cfg.id];
         return {
           id: cfg.id,
@@ -137,7 +137,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
   const usageMap = new Map<string, { requests: number; tokens: number }>();
   if (usageData) {
-    usageData.forEach((row) => {
+    usageData.forEach((row: any) => {
       usageMap.set(row.provider_id, { requests: row.request_count, tokens: row.token_count });
     });
   }

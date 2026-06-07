@@ -4,7 +4,7 @@ import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
-import { sendApprovalEmailInternal } from "@/app/api/notify/email/route";
+import { sendApprovalEmailInternal } from "@/lib/email";
 
 // Banned words list
 export const BANNED_WORDS = [
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
       .select("post_content")
       .eq("user_id", user.id)
       .limit(5);
-    const recentTopics = recentPosts?.map(p => p.post_content?.substring(0, 30)).filter(Boolean) || [];
+    const recentTopics = recentPosts?.map((p: any) => p.post_content?.substring(0, 30)).filter(Boolean) || [];
 
     let resultJson: any = {};
     let llmRes: any = null;

@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const userPlan = user?.plan || "free";
 
     // 3. Build revision history logs for AI context
-    const revisionLogs = revisions?.map((rev) => {
+    const revisionLogs = revisions?.map((rev: any) => {
       return `REVISION #${rev.revision_number}:
 Content: "${rev.post_content}"
 User Feedback given for this revision: "${rev.feedback_given || "Initial draft"}"
