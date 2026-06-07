@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 // Render a beautiful HTML email for the draft post notification
 function buildEmailHtml({
@@ -162,11 +163,57 @@ export async function sendApprovalEmailInternal({
   });
 
   const subject = "📝 Your LinkedIn Draft is Ready for Review";
+
+  // 1. Try sending via SMTP if configured
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+
+  if (smtpHost && smtpUser && smtpPass) {
+    try {
+      const port = parseInt(smtpPort || "587", 10);
+      const secure = process.env.SMTP_SECURE === "true" || port === 465;
+      const fromEmail = process.env.SMTP_FROM || `VoicePost <${smtpUser}>`;
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: port,
+        secure: secure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        tls: {
+          rejectUnauthorized: false // avoids SSL certificate issues for custom mail servers
+        }
+      });
+
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        html: htmlBody,
+      });
+
+      console.log(`[notify/email] Email sent via SMTP to ${recipientEmail} — MessageId: ${info.messageId}`);
+      return {
+        success: true,
+        method: "smtp",
+        message_id: info.messageId,
+        recipient: recipientEmail,
+      };
+    } catch (smtpErr: any) {
+      console.error("[notify/email] SMTP sending failed, falling back to Resend:", smtpErr);
+    }
+  }
+
+  // 2. Fallback to Resend
   const resendApiKey = process.env.RESEND_API_KEY;
 
   if (!resendApiKey) {
-    // No Resend key — print to console as fallback
-    console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Console Fallback — set RESEND_API_KEY to send real emails) ===");
+    // No SMTP or Resend key — print to console as fallback
+    console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Console Fallback — set RESEND_API_KEY or SMTP credentials to send real emails) ===");
     console.log(`To:      ${recipientEmail}`);
     console.log(`Subject: ${subject}`);
     console.log(`Draft:   ${post_content.substring(0, 200)}...`);
