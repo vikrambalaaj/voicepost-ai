@@ -867,8 +867,13 @@ export default function CarouselBuilderPage() {
         await savePostToSupabase(serialized, hashtags, "published");
 
         setTimeout(() => router.push("/posts"), 2000);
+      } else if (pubData.pending_review) {
+        alert(pubData.message);
+        navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
+        window.open("https://www.linkedin.com/", "_blank");
+        router.push("/posts");
       } else {
-        alert("Publish failed: " + pubData.error);
+        alert("Publish failed: " + (pubData.error || "Unknown error"));
       }
     } catch (err: any) {
       console.error("Publishing error:", err);

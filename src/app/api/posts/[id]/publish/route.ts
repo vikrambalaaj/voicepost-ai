@@ -77,11 +77,13 @@ export async function POST(
 
     let isCarousel = false;
     let carouselTitle = "VoicePost Carousel";
+    let carouselTextContent = "";
     try {
       const parsed = JSON.parse(post.post_content || "");
       if (parsed.type === "carousel" || parsed.slides) {
         isCarousel = true;
         carouselTitle = parsed.title || "VoicePost Carousel";
+        carouselTextContent = `${carouselTitle}\n\n` + parsed.slides.map((s: any, idx: number) => `Slide ${idx + 1}: ${s.title || ""}\n${s.body || ""}`).join("\n\n");
       }
     } catch (e) {
       // Not a carousel
@@ -365,7 +367,7 @@ export async function POST(
         return NextResponse.json({
           success: false,
           pending_review: true,
-          post_content: isCarousel ? carouselTitle : post.post_content,
+          post_content: isCarousel ? carouselTextContent : post.post_content,
           hashtags: post.hashtags,
           message: "LinkedIn posting pending review. Your post has been copied to clipboard.",
         });
