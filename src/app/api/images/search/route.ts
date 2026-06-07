@@ -18,7 +18,7 @@ async function fetchWikiImages(query: string) {
             source: "wikipedia",
           };
         })
-        .filter((item: any) => item.url);
+        .filter((item: any) => item.url && /\.(jpe?g|png|gif|webp)$/i.test(item.url));
     }
   } catch (e) {
     console.warn("Wiki search failed:", e);
@@ -134,7 +134,9 @@ export async function GET(req: NextRequest) {
   promises.push(
     fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
       }
     })
       .then(res => res.text())
@@ -144,9 +146,12 @@ export async function GET(req: NextRequest) {
         if (!match) return fetchWikiImages(query);
         const vqd = match[1];
 
-        const imagesRes = await fetch(`https://duckduckgo.com/d.js?q=${encodeURIComponent(query)}&vqd=${vqd}&s=0&next=1`, {
+        const imagesRes = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&vqd=${vqd}&o=json`, {
           headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`
           }
         });
         const imagesText = await imagesRes.text();

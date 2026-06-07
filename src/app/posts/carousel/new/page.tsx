@@ -778,41 +778,47 @@ export default function CarouselBuilderPage() {
     }
   };
 
+  // Helper to generate the PDF document using Canvas
+  const generatePdfDocument = async () => {
+    if (!carouselData) throw new Error("No carousel data available");
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "px",
+      format: [1080, 1080],
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) throw new Error("Could not get canvas context");
+
+    const slides = carouselData.slides;
+
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
+      
+      ctx.clearRect(0, 0, 1080, 1080);
+      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+      if (i > 0) {
+        doc.addPage([1080, 1080], "portrait");
+      }
+      doc.addImage(imgData, "JPEG", 0, 0, 1080, 1080);
+    }
+    return doc;
+  };
+
   const downloadPdf = async () => {
     if (!carouselData) return;
     setDownloadingPdf(true);
 
     try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "px",
-        format: [1080, 1080],
-      });
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 1080;
-      canvas.height = 1080;
-      const ctx = canvas.getContext("2d");
-
-      if (!ctx) throw new Error("Could not get canvas context");
-
-      const slides = carouselData.slides;
-
-      for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i];
-        
-        ctx.clearRect(0, 0, 1080, 1080);
-        drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
-        if (i > 0) {
-          doc.addPage([1080, 1080], "portrait");
-        }
-        doc.addImage(imgData, "JPEG", 0, 0, 1080, 1080);
-      }
-
+      const doc = await generatePdfDocument();
       doc.save(`${(carouselData.title || "carousel").toLowerCase().replace(/[^a-z0-9]+/g, "_")}_carousel.pdf`);
     } catch (err: any) {
       alert("Failed to download PDF: " + err.message);
@@ -822,31 +828,54 @@ export default function CarouselBuilderPage() {
   };
 
   const handlePublish = async () => {
+    if (!carouselData || !postId) {
+      alert("Carousel draft not saved yet. Please wait.");
+      return;
+    }
     setPublishing(true);
     
-    // Copy hashtags to clipboard
-    navigator.clipboard.writeText(hashtags.map((h: string) => `#${h}`).join(" "));
-    alert("Note: LinkedIn API requires document carousels to be uploaded manually. We have copied the hashtags to your clipboard, and your PDF carousel will now download!");
+    try {
+      // 1. Generate PDF base64
+      const doc = await generatePdfDocument();
+      const pdfBase64 = doc.output("datauristring");
 
-    await downloadPdf();
-
-    // Update status to published in Supabase
-    if (carouselData) {
-      const serialized = JSON.stringify({
-        type: "carousel",
-        title: carouselData.title,
-        slides: carouselData.slides,
-        templateId: selectedTemplate,
-        accentColor: accentColor,
+      // 2. Publish now
+      const selectedBackend = localStorage.getItem("voicepost_ai_backend") || "antigravity";
+      const pubRes = await fetch(`/api/posts/${postId}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          backend: selectedBackend,
+          carousel_pdf: pdfBase64,
+        }),
       });
-      await savePostToSupabase(serialized, hashtags, "published");
-    }
+      const pubData = await pubRes.json();
 
-    setPublished(true);
-    setPublishing(false);
-    
-    // Redirect
-    setTimeout(() => router.push("/posts"), 2000);
+      if (pubRes.status === 403 && pubData.limit_hit) {
+        alert(`${pubData.title}: ${pubData.body}`);
+        router.push("/pricing");
+      } else if (pubData.success) {
+        setPublished(true);
+        // Save post update
+        const serialized = JSON.stringify({
+          type: "carousel",
+          title: carouselData.title,
+          slides: carouselData.slides,
+          templateId: selectedTemplate,
+          accentColor: accentColor,
+        });
+        await savePostToSupabase(serialized, hashtags, "published");
+
+        setTimeout(() => router.push("/posts"), 2000);
+      } else {
+        alert("Publish failed: " + pubData.error);
+      }
+    } catch (err: any) {
+      console.error("Publishing error:", err);
+      alert("Publish failed: " + err.message);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   // ── Step 1: Topic ──────────────────────────────────────────────────────────

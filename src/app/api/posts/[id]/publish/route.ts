@@ -69,7 +69,19 @@ export async function POST(
 
     let isPublished = false;
 
-    if (backend === "antigravity") {
+    let isCarousel = false;
+    let carouselTitle = "VoicePost Carousel";
+    try {
+      const parsed = JSON.parse(post.post_content || "");
+      if (parsed.type === "carousel" || parsed.slides) {
+        isCarousel = true;
+        carouselTitle = parsed.title || "VoicePost Carousel";
+      }
+    } catch (e) {
+      // Not a carousel
+    }
+
+    if (backend === "antigravity" && !isCarousel) {
       try {
         const { data: postImages } = await db
           .from("post_images")
@@ -129,19 +141,29 @@ export async function POST(
           }
         }
 
-        // If there's an image, register it on LinkedIn first
-        let imageUrn = "";
-        const { data: postImages } = await db
-          .from("post_images")
-          .select("url")
-          .eq("post_id", id)
-          .eq("is_selected", true)
-          .limit(1);
-        
-        const selectedImage = postImages?.[0];
+        let mediaUrn = "";
+        let mediaCategory = "NONE";
 
-        if (selectedImage) {
-          // Register upload
+        if (isCarousel) {
+          // 1. Get carousel_pdf from request body
+          let carouselPdf = "";
+          try {
+            const body = await req.json();
+            carouselPdf = body.carousel_pdf || "";
+          } catch (e) {}
+
+          if (!carouselPdf) {
+            return NextResponse.json({ error: "Carousel PDF data is required for publishing." }, { status: 400 });
+          }
+
+          // 2. Decode base64 PDF
+          const base64Content = carouselPdf.split(";base64,").pop();
+          if (!base64Content) {
+            return NextResponse.json({ error: "Invalid PDF data format." }, { status: 400 });
+          }
+          const pdfBuffer = Buffer.from(base64Content, "base64");
+
+          // 3. Register document on LinkedIn
           const registerResponse = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
             method: "POST",
             headers: {
@@ -150,34 +172,133 @@ export async function POST(
             },
             body: JSON.stringify({
               registerRequest: {
-                recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+                recipes: ["urn:li:digitalmediaRecipe:feedshare-document"],
                 owner: account.linkedin_profile_id,
                 relationshipType: "OWNER",
               },
             }),
           });
 
-          if (registerResponse.ok) {
-            const registerData = await registerResponse.json();
-            const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
-            imageUrn = registerData.value.asset;
+          if (!registerResponse.ok) {
+            throw new Error(`Failed to register document asset on LinkedIn: ${registerResponse.statusText}`);
+          }
 
-            // Fetch and upload image blob to LinkedIn uploadUrl
-            const imgBlobRes = await fetch(selectedImage.url);
-            const imgBlob = await imgBlobRes.blob();
+          const registerData = await registerResponse.json();
+          const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+          mediaUrn = registerData.value.asset;
+          mediaCategory = "DOCUMENT";
 
-            await fetch(uploadUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${account.access_token}`,
-              },
-              body: imgBlob,
-            });
+          // 4. Upload binary PDF buffer
+          const uploadRes = await fetch(uploadUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${account.access_token}`,
+            },
+            body: pdfBuffer,
+          });
+
+          if (!uploadRes.ok) {
+            throw new Error(`Failed to upload PDF binary to LinkedIn: ${uploadRes.statusText}`);
+          }
+        } else {
+          // Standard image or video check
+          const { data: postImages } = await db
+            .from("post_images")
+            .select("url")
+            .eq("post_id", id)
+            .eq("is_selected", true)
+            .limit(1);
+          
+          const selectedImage = postImages?.[0];
+
+          if (selectedImage) {
+            const isVideoAsset = selectedImage.url.startsWith("data:video/") || selectedImage.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i);
+
+            if (isVideoAsset) {
+              // Register video upload
+              const registerResponse = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${account.access_token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  registerRequest: {
+                    recipes: ["urn:li:digitalmediaRecipe:feedshare-video"],
+                    owner: account.linkedin_profile_id,
+                    relationshipType: "OWNER",
+                  },
+                }),
+              });
+
+              if (registerResponse.ok) {
+                const registerData = await registerResponse.json();
+                const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+                mediaUrn = registerData.value.asset;
+                mediaCategory = "VIDEO";
+
+                // Decode base64 or fetch remote video
+                let videoBuffer: Buffer;
+                if (selectedImage.url.startsWith("data:")) {
+                  const base64Content = selectedImage.url.split(";base64,").pop();
+                  videoBuffer = Buffer.from(base64Content!, "base64");
+                } else {
+                  const vidRes = await fetch(selectedImage.url);
+                  const arrayBuffer = await vidRes.arrayBuffer();
+                  videoBuffer = Buffer.from(arrayBuffer);
+                }
+
+                await fetch(uploadUrl, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${account.access_token}`,
+                  },
+                  body: videoBuffer,
+                });
+              }
+            } else {
+              // Register image upload
+              const registerResponse = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${account.access_token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  registerRequest: {
+                    recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+                    owner: account.linkedin_profile_id,
+                    relationshipType: "OWNER",
+                  },
+                }),
+              });
+
+              if (registerResponse.ok) {
+                const registerData = await registerResponse.json();
+                const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+                mediaUrn = registerData.value.asset;
+                mediaCategory = "IMAGE";
+
+                // Fetch and upload image blob
+                const imgBlobRes = await fetch(selectedImage.url);
+                const imgBlob = await imgBlobRes.blob();
+
+                await fetch(uploadUrl, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${account.access_token}`,
+                  },
+                  body: imgBlob,
+                });
+              }
+            }
           }
         }
 
         // Post content UGC
-        const commentary = `${post.post_content}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`;
+        const commentary = isCarousel
+          ? `${carouselTitle}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`
+          : `${post.post_content}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`;
 
         const payload: any = {
           author: account.linkedin_profile_id,
@@ -185,7 +306,7 @@ export async function POST(
           specificContent: {
             "com.linkedin.ugc.ShareContent": {
               shareCommentary: { text: commentary },
-              shareMediaCategory: imageUrn ? "IMAGE" : "NONE",
+              shareMediaCategory: mediaCategory,
             },
           },
           visibility: {
@@ -193,12 +314,12 @@ export async function POST(
           },
         };
 
-        if (imageUrn) {
+        if (mediaUrn) {
           payload.specificContent["com.linkedin.ugc.ShareContent"].media = [
             {
               status: "READY",
-              media: imageUrn,
-              title: { text: "VoicePost Image" },
+              media: mediaUrn,
+              title: { text: isCarousel ? carouselTitle : mediaCategory === "VIDEO" ? "VoicePost Video" : "VoicePost Image" },
             },
           ];
         }
@@ -232,7 +353,7 @@ export async function POST(
         return NextResponse.json({
           success: false,
           pending_review: true,
-          post_content: post.post_content,
+          post_content: isCarousel ? carouselTitle : post.post_content,
           hashtags: post.hashtags,
           message: "LinkedIn posting pending review. Your post has been copied to clipboard.",
         });

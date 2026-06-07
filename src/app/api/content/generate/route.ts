@@ -4,6 +4,7 @@ import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
+import { sendApprovalEmailInternal } from "@/app/api/notify/email/route";
 
 // Banned words list
 export const BANNED_WORDS = [
@@ -336,16 +337,12 @@ INDUSTRY: ${user.industry}`;
 
     // 6. Fire draft email notification — non-blocking
     try {
-      const baseUrl = req.nextUrl.origin;
-      fetch(`${baseUrl}/api/notify/email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          post_id: newPost.id,
-          post_content: newPost.post_content,
-          hashtags: newPost.hashtags || [],
-          approval_url: `${baseUrl}/posts/${newPost.id}/approval`,
-        }),
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+      sendApprovalEmailInternal({
+        post_id: newPost.id,
+        post_content: newPost.post_content,
+        hashtags: newPost.hashtags || [],
+        baseUrl,
       }).catch((err) => console.warn("[generate] Email notification failed (non-blocking):", err));
     } catch (_) {}
 

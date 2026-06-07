@@ -109,95 +109,134 @@ function buildEmailHtml({
 </html>`;
 }
 
-export async function POST(req: NextRequest) {
+export async function sendApprovalEmailInternal({
+  post_id,
+  post_content,
+  hashtags = [],
+  baseUrl,
+}: {
+  post_id: string;
+  post_content: string;
+  hashtags?: string[];
+  baseUrl: string;
+}) {
   const db = getServiceSupabase();
 
+  // 1. Fetch post to get user_id
+  const { data: post } = await db
+    .from("posts")
+    .select("user_id")
+    .eq("id", post_id)
+    .single();
+
+  let recipientEmail = "demo@voicepost.com";
+  let recipientName = "there";
+
+  if (post && post.user_id) {
+    const { data: user } = await db
+      .from("users")
+      .select("email, full_name")
+      .eq("id", post.user_id)
+      .single();
+    if (user) {
+      recipientEmail = user.email || recipientEmail;
+      recipientName = user.full_name || recipientName;
+    }
+  } else {
+    // Fallback: Get first user in DB
+    const { data: users } = await db
+      .from("users")
+      .select("email, full_name")
+      .limit(1);
+    const fallbackUser = users?.[0];
+    recipientEmail = fallbackUser?.email || recipientEmail;
+    recipientName = fallbackUser?.full_name || recipientName;
+  }
+
+  const finalApprovalUrl = `${baseUrl}/posts/${post_id}/approval`;
+  const htmlBody = buildEmailHtml({
+    recipientName,
+    postContent: post_content,
+    hashtags,
+    approvalUrl: finalApprovalUrl,
+  });
+
+  const subject = "📝 Your LinkedIn Draft is Ready for Review";
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  if (!resendApiKey) {
+    // No Resend key — print to console as fallback
+    console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Console Fallback — set RESEND_API_KEY to send real emails) ===");
+    console.log(`To:      ${recipientEmail}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Draft:   ${post_content.substring(0, 200)}...`);
+    console.log(`Tags:    ${hashtags.map((h: string) => `#${h}`).join(" ")}`);
+    console.log(`Review:  ${finalApprovalUrl}`);
+    console.log("================================================================================\n");
+
+    return {
+      success: true,
+      method: "console_log",
+      recipient: recipientEmail,
+    };
+  }
+
+  // Send via Resend
+  const resend = new Resend(resendApiKey);
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "VoicePost <noreply@resend.dev>";
+
+  const { data: emailData, error: emailError } = await resend.emails.send({
+    from: fromEmail,
+    to: [recipientEmail],
+    subject,
+    html: htmlBody,
+  });
+
+  if (emailError) {
+    console.error("[notify/email] Resend error:", emailError);
+    console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Resend Sandboxed Fallback) ===");
+    console.log(`To:      ${recipientEmail}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Draft:   ${post_content.substring(0, 200)}...`);
+    console.log(`Error:   ${emailError.message}`);
+    console.log("================================================================================\n");
+
+    return {
+      success: true,
+      method: "console_log_fallback",
+      error: emailError.message,
+      recipient: recipientEmail,
+    };
+  }
+
+  console.log(`[notify/email] Email sent to ${recipientEmail} — ID: ${emailData?.id}`);
+
+  return {
+    success: true,
+    method: "resend",
+    email_id: emailData?.id,
+    recipient: recipientEmail,
+  };
+}
+
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { post_id, post_content, hashtags = [], approval_url } = body;
+    const { post_id, post_content, hashtags = [] } = body;
 
     if (!post_id || !post_content) {
       return NextResponse.json({ error: "post_id and post_content are required" }, { status: 400 });
     }
 
-    // Get logged-in user's email and name from DB
-    const { data: users } = await db
-      .from("users")
-      .select("id, email, full_name")
-      .limit(1);
-
-    const user = users?.[0];
-    const recipientEmail = user?.email || "demo@voicepost.com";
-    const recipientName = user?.full_name || "there";
-
-    // Build the approval URL (fallback to a relative path if not provided)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-    const finalApprovalUrl = approval_url || `${baseUrl}/posts/${post_id}/approval`;
-
-    const htmlBody = buildEmailHtml({
-      recipientName,
-      postContent: post_content,
+    const result = await sendApprovalEmailInternal({
+      post_id,
+      post_content,
       hashtags,
-      approvalUrl: finalApprovalUrl,
+      baseUrl,
     });
 
-    const subject = "📝 Your LinkedIn Draft is Ready for Review";
-
-    const resendApiKey = process.env.RESEND_API_KEY;
-
-    if (!resendApiKey) {
-      // No Resend key — print to console as fallback
-      console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Console Fallback — set RESEND_API_KEY to send real emails) ===");
-      console.log(`To:      ${recipientEmail}`);
-      console.log(`Subject: ${subject}`);
-      console.log(`Draft:   ${post_content.substring(0, 200)}...`);
-      console.log(`Tags:    ${hashtags.map((h: string) => `#${h}`).join(" ")}`);
-      console.log(`Review:  ${finalApprovalUrl}`);
-      console.log("================================================================================\n");
-
-      return NextResponse.json({
-        success: true,
-        method: "console_log",
-        recipient: recipientEmail,
-      });
-    }
-
-    // Send via Resend
-    const resend = new Resend(resendApiKey);
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "VoicePost <noreply@resend.dev>";
-
-    const { data: emailData, error: emailError } = await resend.emails.send({
-      from: fromEmail,
-      to: [recipientEmail],
-      subject,
-      html: htmlBody,
-    });
-
-    if (emailError) {
-      console.error("[notify/email] Resend error:", emailError);
-      console.log("\n=== 📧 DRAFT EMAIL NOTIFICATION (Resend Sandboxed Fallback) ===");
-      console.log(`To:      ${recipientEmail}`);
-      console.log(`Subject: ${subject}`);
-      console.log(`Draft:   ${post_content.substring(0, 200)}...`);
-      console.log(`Error:   ${emailError.message}`);
-      console.log("================================================================================\n");
-      
-      return NextResponse.json({
-        success: true,
-        method: "console_log_fallback",
-        error: emailError.message,
-        recipient: recipientEmail,
-      });
-    }
-
-    console.log(`[notify/email] Email sent to ${recipientEmail} — ID: ${emailData?.id}`);
-
-    return NextResponse.json({
-      success: true,
-      method: "resend",
-      email_id: emailData?.id,
-      recipient: recipientEmail,
-    });
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("[notify/email] Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

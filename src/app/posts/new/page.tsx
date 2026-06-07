@@ -257,13 +257,16 @@ export default function CreatePostPage() {
     } catch (e) {}
   };
 
-  // Custom Image Upload Handler
+  // Custom Media Upload Handler
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File is too large. Max 5MB allowed.");
+    const isVideoFile = file.type.startsWith("video/");
+    const maxSize = isVideoFile ? 15 * 1024 * 1024 : 5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      alert(`File is too large. Max ${isVideoFile ? "15MB" : "5MB"} allowed.`);
       return;
     }
 
@@ -276,7 +279,7 @@ export default function CreatePostPage() {
         id: "upload_" + Date.now(),
         url: base64String,
         source_type: "upload",
-        thumbnail: base64String,
+        thumbnail: isVideoFile ? "" : base64String,
         attribution: file.name
       };
       setSelectedImage(uploadedAsset);
@@ -306,9 +309,12 @@ export default function CreatePostPage() {
         setSelectedImage(data.image);
       } else if (data.quota_hit) {
         alert("Free limit reached! Upgrade your subscription plan to generate AI images.");
+      } else {
+        alert("AI image generation failed: " + (data.error || "Unknown server error"));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("AI Generation failed:", e);
+      alert("AI image generation failed: " + (e.message || "Please check server logs."));
     } finally {
       setIsGeneratingAiImage(false);
     }
@@ -394,8 +400,9 @@ export default function CreatePostPage() {
       } else {
         alert("Failed to generate: " + data.error);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Post generation failed:", err);
+      alert("Post generation encountered an error: " + (err.message || "Please check server logs."));
     } finally {
       setGeneratingPost(false);
       setGenerationStatus("");
@@ -713,8 +720,12 @@ export default function CreatePostPage() {
               <div className="text-center py-4">
                 {uploadedImageUrl ? (
                   <div className="flex flex-col items-center">
-                    <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950">
-                      <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
+                    <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950 flex items-center justify-center">
+                      {uploadedImageUrl.startsWith("data:video/") ? (
+                        <video src={uploadedImageUrl} controls className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
+                      )}
                       <button
                         onClick={() => {
                           setUploadedImageUrl("");
@@ -726,14 +737,14 @@ export default function CreatePostPage() {
                       </button>
                     </div>
                     <span className="text-xs text-cyan-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5 animate-pulse" /> Custom image selected
+                      <Check className="w-3.5 h-3.5 animate-pulse" /> Custom media selected
                     </span>
                   </div>
                 ) : (
                   <div>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,video/*"
                       onChange={handleImageUpload}
                       className="hidden"
                       id="image-file-upload"
@@ -743,8 +754,8 @@ export default function CreatePostPage() {
                       className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/40 text-center cursor-pointer hover:border-cyan-500/40 transition-colors max-w-xs mx-auto"
                     >
                       <Upload className="w-8 h-8 text-cyan-400 mb-2" />
-                      <span className="text-xs font-bold text-zinc-200">Upload custom image</span>
-                      <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, WEBP (Max 5MB)</span>
+                      <span className="text-xs font-bold text-zinc-200">Upload custom media</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, MP4, WEBM (Max 15MB)</span>
                     </label>
                   </div>
                 )}

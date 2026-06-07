@@ -728,42 +728,48 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     await saveChanges(serialized, hashtags);
   };
 
+  // Helper to generate the PDF document using Canvas
+  const generatePdfDocument = async () => {
+    if (!carouselData) throw new Error("No carousel data available");
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "px",
+      format: [1080, 1080],
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) throw new Error("Could not get canvas context");
+
+    const slides = carouselData.slides;
+
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
+      
+      ctx.clearRect(0, 0, 1080, 1080);
+      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+      if (i > 0) {
+        doc.addPage([1080, 1080], "portrait");
+      }
+      doc.addImage(imgData, "JPEG", 0, 0, 1080, 1080);
+    }
+    return doc;
+  };
+
   // Generate and download PDF
   const downloadPdf = async () => {
     if (!carouselData) return;
     setDownloadingPdf(true);
 
     try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "px",
-        format: [1080, 1080],
-      });
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 1080;
-      canvas.height = 1080;
-      const ctx = canvas.getContext("2d");
-
-      if (!ctx) throw new Error("Could not get canvas context");
-
-      const slides = carouselData.slides;
-
-      for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i];
-        
-        ctx.clearRect(0, 0, 1080, 1080);
-        drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-
-        if (i > 0) {
-          doc.addPage([1080, 1080], "portrait");
-        }
-        doc.addImage(imgData, "JPEG", 0, 0, 1080, 1080);
-      }
-
+      const doc = await generatePdfDocument();
       doc.save(`${(carouselData.title || "carousel").toLowerCase().replace(/[^a-z0-9]+/g, "_")}_carousel.pdf`);
     } catch (err: any) {
       alert("Failed to download PDF: " + err.message);
@@ -792,45 +798,35 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           router.push("/dashboard");
         }
       } else {
-        // If it's a carousel, warn them that they need to upload manually
-        if (isCarousel) {
-          alert("Note: LinkedIn API requires document carousels to be uploaded manually. We will copy the suggested hashtags and post text, and download your PDF carousel now!");
-          await downloadPdf();
-          navigator.clipboard.writeText(hashtags.map((h: string) => `#${h}`).join(" "));
-          
-          // Set status to published in DB
-          await fetch(`/api/posts/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "published" }),
-          });
+        // Publish Now (standard text/image or document carousel)
+        const selectedBackend = localStorage.getItem("voicepost_ai_backend") || "antigravity";
+        const bodyPayload: any = { backend: selectedBackend };
 
+        if (isCarousel) {
+          const doc = await generatePdfDocument();
+          bodyPayload.carousel_pdf = doc.output("datauristring");
+        }
+
+        const pubRes = await fetch(`/api/posts/${id}/publish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyPayload),
+        });
+        const pubData = await pubRes.json();
+        
+        if (pubRes.status === 403 && pubData.limit_hit) {
+          alert(`${pubData.title}: ${pubData.body}`);
+          router.push("/pricing");
+        } else if (pubData.success) {
+          alert("Successfully published to LinkedIn!");
+          router.push("/dashboard");
+        } else if (pubData.pending_review) {
+          alert(pubData.message);
+          navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
           window.open("https://www.linkedin.com/", "_blank");
           router.push("/dashboard");
         } else {
-          // Publish Now (standard text/image post)
-          const selectedBackend = localStorage.getItem("voicepost_ai_backend") || "antigravity";
-          const pubRes = await fetch(`/api/posts/${id}/publish`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ backend: selectedBackend }),
-          });
-          const pubData = await pubRes.json();
-          
-          if (pubRes.status === 403 && pubData.limit_hit) {
-            alert(`${pubData.title}: ${pubData.body}`);
-            router.push("/pricing");
-          } else if (pubData.success) {
-            alert("Successfully published to LinkedIn!");
-            router.push("/dashboard");
-          } else if (pubData.pending_review) {
-            alert(pubData.message);
-            navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
-            window.open("https://www.linkedin.com/", "_blank");
-            router.push("/dashboard");
-          } else {
-            alert("Publish failed: " + pubData.error);
-          }
+          alert("Publish failed: " + pubData.error);
         }
       }
     } catch (e: any) {
@@ -1141,8 +1137,12 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               </div>
 
               {activeImage && (
-                <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 aspect-video mb-3 bg-zinc-100">
-                  <img src={activeImage.url} alt="Post asset" className="w-full h-full object-cover" />
+                <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 aspect-video mb-3 bg-zinc-100 flex items-center justify-center">
+                  {activeImage.url.startsWith("data:video/") || activeImage.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i) ? (
+                    <video src={activeImage.url} controls className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={activeImage.url} alt="Post asset" className="w-full h-full object-cover" />
+                  )}
                 </div>
               )}
 
