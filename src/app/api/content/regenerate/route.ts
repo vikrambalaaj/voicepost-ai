@@ -100,6 +100,14 @@ Return your response ONLY in this JSON format:
 
     const nextRevisionNum = (post.current_revision || 1) + 1;
 
+    let matchScore = parseInt(resultJson.style_match_score, 10);
+    if (isNaN(matchScore)) {
+      matchScore = 8;
+    } else if (matchScore >= 10 && matchScore <= 100) {
+      matchScore = Math.round(matchScore / 10);
+    }
+    matchScore = Math.max(1, Math.min(10, matchScore));
+
     // 4. Update parent post
     const { data: updatedPost, error: updateErr } = await db
       .from("posts")
@@ -107,7 +115,7 @@ Return your response ONLY in this JSON format:
         post_content: resultJson.post_content,
         hashtags: resultJson.hashtags || [],
         current_revision: nextRevisionNum,
-        style_match_score: resultJson.style_match_score || 8,
+        style_match_score: matchScore,
         status: "pending_approval",
         updated_at: new Date().toISOString(),
       })
@@ -127,7 +135,7 @@ Return your response ONLY in this JSON format:
       changes_made: resultJson.changes_made || [],
       provider_used: llmRes.provider,
       model_used: llmRes.model,
-      style_match_score: resultJson.style_match_score,
+      style_match_score: matchScore,
       latency_ms: llmRes.latencyMs,
     });
 

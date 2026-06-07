@@ -287,6 +287,14 @@ INDUSTRY: ${user.industry}`;
     resultJson.hashtags = finalHashtags;
 
     // 4. Save post to Database as pending_approval
+    let matchScore = parseInt(resultJson.style_match_score, 10);
+    if (isNaN(matchScore)) {
+      matchScore = 8;
+    } else if (matchScore >= 10 && matchScore <= 100) {
+      matchScore = Math.round(matchScore / 10);
+    }
+    matchScore = Math.max(1, Math.min(10, matchScore));
+
     const postPayload: any = {
       user_id: user.id,
       transcript_corrected: transcript,
@@ -295,7 +303,7 @@ INDUSTRY: ${user.industry}`;
       style_type,
       style_id,
       blend_config: blend_config || null,
-      style_match_score: resultJson.style_match_score || 8,
+      style_match_score: matchScore,
       status: "pending_approval",
       current_revision: 1,
     };
