@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -9,10 +12,13 @@ export async function POST(
   const db = getServiceSupabase();
   const { id } = params;
 
+  // Parse body ONCE — req.json() can only be called once per request
   let backend = "waterfall";
+  let carouselPdf = "";
   try {
     const body = await req.json();
     backend = body.backend || "waterfall";
+    carouselPdf = body.carousel_pdf || "";
   } catch (e) {
     // Request body may be empty
   }
@@ -117,8 +123,12 @@ export async function POST(
     // Real LinkedIn publication flow
     if (!isMock && !isPublished) {
       try {
-        // Auto-refresh token if expires in less than 7 days (check token_expires_at)
-        if (account.token_expires_at && new Date(account.token_expires_at).getTime() - Date.now() < 7 * 86400 * 1000) {
+        // Auto-refresh token only if expires in less than 7 days AND refresh_token exists
+        if (
+          account.refresh_token &&
+          account.token_expires_at &&
+          new Date(account.token_expires_at).getTime() - Date.now() < 7 * 86400 * 1000
+        ) {
           // Token refresh flow using LinkedIn OAuth refresh token
           const refreshRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
             method: "POST",
@@ -145,13 +155,7 @@ export async function POST(
         let mediaCategory = "NONE";
 
         if (isCarousel) {
-          // 1. Get carousel_pdf from request body
-          let carouselPdf = "";
-          try {
-            const body = await req.json();
-            carouselPdf = body.carousel_pdf || "";
-          } catch (e) {}
-
+          // 1. Check if carouselPdf is set
           if (!carouselPdf) {
             return NextResponse.json({ error: "Carousel PDF data is required for publishing." }, { status: 400 });
           }

@@ -60,7 +60,7 @@ POST CONTENT:
 
     const replicateToken = process.env.REPLICATE_API_TOKEN;
 
-    // 3. Replicate FLUX.1-schnell Trigger
+    // 3. Trigger Replicate FLUX.1-schnell and return predictionId for client-side polling
     if (replicateToken) {
       try {
         const triggerResponse = await fetch("https://api.replicate.com/v1/predictions", {
@@ -70,7 +70,6 @@ POST CONTENT:
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            // FLUX.1-schnell model URN
             version: "0bc9e115e3474d2fa81691a3203923d240dca1918ed9b31d87455d3f82e5b90f",
             input: {
               prompt: fluxPrompt,
@@ -84,31 +83,18 @@ POST CONTENT:
 
         if (triggerResponse.ok) {
           const prediction = await triggerResponse.json();
-          const getUrl = prediction.urls.get;
-
-          // Poll Replicate API (Max 30 retries * 3s = 90s)
-          let retries = 0;
-          while (retries < 30) {
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-            const pollResponse = await fetch(getUrl, {
-              headers: { Authorization: `Token ${replicateToken}` },
-            });
-
-            if (pollResponse.ok) {
-              const pollData = await pollResponse.json();
-              if (pollData.status === "succeeded") {
-                generatedImageUrl = pollData.output?.[0] || "";
-                providerUsed = "Replicate FLUX.1-schnell";
-                break;
-              } else if (pollData.status === "failed" || pollData.status === "canceled") {
-                throw new Error("Replicate prediction failed or was canceled.");
-              }
-            }
-            retries++;
-          }
+          // Return predictionId immediately — client polls /api/images/status?id=...
+          return NextResponse.json({
+            success: true,
+            prediction_id: prediction.id,
+            poll_url: prediction.urls?.get,
+            status: "processing",
+            post_id,
+            prompt: fluxPrompt,
+          });
         }
       } catch (err: any) {
-        console.error("Replicate FLUX failed:", err.message);
+        console.error("Replicate FLUX trigger failed:", err.message);
       }
     }
 

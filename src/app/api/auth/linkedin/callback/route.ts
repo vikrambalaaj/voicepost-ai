@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { randomUUID } from "crypto";
-
-// Creates a signed session cookie value (base64 JSON — in production use JWT + secret)
-function createSessionCookie(payload: Record<string, any>): string {
-  const data = {
-    ...payload,
-    iat: Date.now(),
-    exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
-  };
-  return Buffer.from(JSON.stringify(data)).toString("base64");
-}
+import { createSessionCookie } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
@@ -175,16 +166,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
   }
 
-  // Trigger background post scraping (await it to ensure completion before redirect)
-  try {
-    await fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, accountId: linkedinAccount.id }),
-    });
-  } catch (err) {
-    console.error("Failed to scrape posts in callback:", err);
-  }
+  // Trigger background post scraping — fire and forget (do NOT await, redirect must be instant)
+  fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, accountId: linkedinAccount.id }),
+  }).catch((err) => console.error("Failed to scrape posts in callback:", err));
 
   // --- Build redirect response ---
   const redirectDest = loginPurpose ? "/dashboard" : "/settings/linkedin/scraping?redirect=/settings/linkedin";

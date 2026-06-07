@@ -6,8 +6,7 @@ import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 import { sendApprovalEmailInternal } from "@/lib/email";
 
-export const maxDuration = 60;
-export const dynamic = "force-dynamic";
+
 
 // Banned words list
 export const BANNED_WORDS = [
@@ -176,10 +175,10 @@ RECENT POST TOPICS (Avoid repeating these concepts/hooks):
 ${recentTopics.join("\n")}
 
 Please generate a professional LinkedIn post rewritten from the transcript matching the target style.
-Return your response ONLY in this JSON format:
+Return your response ONLY in this JSON format (hashtags must be 3-5 lowercase strings without the # symbol):
 {
   "post_content": "The generated post text...",
-  "hashtags": ["Generate 3 to 5 relevant lowercase hashtags without the # symbol"],
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
   "hook_type": "The category of hook used (e.g. contrast, question, numbers)",
   "post_structure": "Brief description of structure used",
   "style_match_score": 9,
@@ -290,8 +289,8 @@ Return your response ONLY in this JSON format:
       latency_ms: llmRes.latencyMs,
     });
 
-    // 6. Fire draft email notification — non-blocking
-    try {
+    // 6. Fire draft email notification — truly non-blocking (setImmediate avoids blocking SMTP handshake)
+    setImmediate(() => {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
       sendApprovalEmailInternal({
         post_id: newPost.id,
@@ -299,7 +298,7 @@ Return your response ONLY in this JSON format:
         hashtags: newPost.hashtags || [],
         baseUrl,
       }).catch((err) => console.warn("[generate] Email notification failed (non-blocking):", err));
-    } catch (_) {}
+    });
 
     return NextResponse.json({
       success: true,

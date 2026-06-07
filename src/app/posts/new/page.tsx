@@ -46,8 +46,11 @@ export default function CreatePostPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem("voicepost_ai_backend");
-    if (saved === "waterfall" || saved === "antigravity") {
-      setAiBackend(saved);
+    // "antigravity" requires a local Python env — always force waterfall on Vercel
+    if (saved === "antigravity") {
+      localStorage.setItem("voicepost_ai_backend", "waterfall");
+    } else if (saved === "waterfall") {
+      setAiBackend("waterfall");
     }
     setIsAdmin(localStorage.getItem("voicepost_is_admin") === "true");
   }, []);
@@ -222,7 +225,7 @@ export default function CreatePostPage() {
     }
   };
 
-  // Transcribe Audio
+  // Transcribe Audio — uses async polling pattern to avoid Vercel 10s timeout
   const handleTranscribe = async (blob: Blob) => {
     setTranscribing(true);
     try {
@@ -230,17 +233,41 @@ export default function CreatePostPage() {
       formData.append("file", blob);
       formData.append("duration", recordingDuration.toString());
 
+      // Step 1: Submit audio (fast ~2s) — returns transcript_id
       const res = await fetch("/api/voice/transcribe", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-      if (data.corrected_transcript) {
-        setTranscript(data.corrected_transcript);
+      const submitData = await res.json();
+      if (!submitData.transcript_id) {
+        throw new Error(submitData.error || "Failed to submit transcription");
       }
-    } catch (err) {
+
+      const { transcript_id, user_id, industry, keywords, duration_seconds } = submitData;
+      const keywordsStr = Array.isArray(keywords) ? keywords.join(",") : "";
+
+      // Step 2: Poll /api/voice/transcribe/status every 2s from the browser
+      const pollUrl = `/api/voice/transcribe/status?id=${transcript_id}&user_id=${user_id}&duration=${duration_seconds}&industry=${encodeURIComponent(industry || "")}&keywords=${encodeURIComponent(keywordsStr)}`;
+
+      const maxAttempts = 40; // 40 × 2s = 80s max
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const pollRes = await fetch(pollUrl);
+        const pollData = await pollRes.json();
+
+        if (pollData.status === "completed" && pollData.corrected_transcript) {
+          setTranscript(pollData.corrected_transcript);
+          return;
+        } else if (pollData.status === "error") {
+          throw new Error(pollData.error || "Transcription failed");
+        }
+        // Still processing — loop continues
+      }
+      throw new Error("Transcription timed out after 80 seconds.");
+    } catch (err: any) {
       console.error("Transcription error:", err);
+      alert("Transcription failed: " + (err.message || "Please try again."));
     } finally {
       setTranscribing(false);
     }
