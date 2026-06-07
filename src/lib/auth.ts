@@ -15,9 +15,21 @@ export async function getAuthenticatedUserId(req: NextRequest): Promise<string |
     }
   }
 
-  // Fallback: Return the first user in the database (useful for local development/mock mode)
+  // Fallback: Return the user who has a connected LinkedIn account (useful for local development)
   try {
     const db = getServiceSupabase();
+    // Try to get a user with a non-mock primary LinkedIn account first
+    const { data: realAccounts } = await db
+      .from("linkedin_accounts")
+      .select("user_id")
+      .not("linkedin_profile_id", "like", "urn:li:person:mock_%")
+      .eq("is_primary", true)
+      .limit(1);
+      
+    if (realAccounts?.[0]?.user_id) {
+      return realAccounts[0].user_id;
+    }
+
     const { data: users } = await db.from("users").select("id").limit(1);
     return users?.[0]?.id || null;
   } catch (err) {

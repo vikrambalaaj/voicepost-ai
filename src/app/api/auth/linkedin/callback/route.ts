@@ -64,10 +64,13 @@ export async function GET(req: NextRequest) {
       const tokenData = await tokenRes.json();
       const accessToken = tokenData.access_token;
 
-      // Fetch profile
-      const profileRes = await fetch("https://api.linkedin.com/v2/me", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      // Fetch profile with projection to get the profile picture
+      const profileRes = await fetch(
+        "https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName,profilePicture(displayImage~digitalmediaAsset:playableStreams))",
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
       if (!profileRes.ok) throw new Error(`Profile fetch failed: ${profileRes.statusText}`);
       const profileData = await profileRes.json();
 
