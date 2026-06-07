@@ -41,7 +41,7 @@ export default function CreatePostPage() {
   // Overall Generation State
   const [generatingPost, setGeneratingPost] = useState(false);
   const [generationStatus, setGenerationStatus] = useState("");
-  const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("antigravity");
+  const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("waterfall");
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {

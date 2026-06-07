@@ -143,11 +143,12 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
   }
 
   // Determine timeout based on use case
-  let timeoutMs = 45000; // default 45s (e.g. content generation, style preview, keyword extraction)
+  // Keep well under Vercel Hobby 10s limit so each provider fails fast
+  let timeoutMs = 8000; // 8s per provider attempt
   if (request.useCase === "transcript_correction") {
-    timeoutMs = 45000; // 45s
+    timeoutMs = 8000; // 8s
   } else if (request.useCase === "style_analysis") {
-    timeoutMs = 60000; // 60s
+    timeoutMs = 8000; // 8s
   }
 
   // Helper to check if a provider has its API key or configuration set

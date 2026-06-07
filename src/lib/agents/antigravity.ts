@@ -44,6 +44,12 @@ export function runAntigravityAgent(input: AntigravityAgentInput): Promise<Antig
       GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
     };
 
+    // Hard timeout: fail fast after 8s so we can fall back to waterfall LLM
+    const timeout = setTimeout(() => {
+      try { pyProcess.kill(); } catch (_) {}
+      resolve({ success: false, error: "Agent timed out after 8s" });
+    }, 8000);
+
     const pyProcess = spawn(pythonPath, [scriptPath], { env });
 
     let stdout = "";
@@ -58,6 +64,7 @@ export function runAntigravityAgent(input: AntigravityAgentInput): Promise<Antig
     });
 
     pyProcess.on("close", (code) => {
+      clearTimeout(timeout);
       if (stderr) {
         console.warn("Python agent stderr:", stderr);
       }
