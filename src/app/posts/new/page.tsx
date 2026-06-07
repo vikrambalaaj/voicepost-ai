@@ -611,7 +611,7 @@ export default function CreatePostPage() {
 
         {/* STEP 3: Image Picker */}
         <div className="ios-section-label flex items-center justify-between select-none">
-          <span>Step 3 — Images (Optional)</span>
+          <span>Step 3 — Media (Optional)</span>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
