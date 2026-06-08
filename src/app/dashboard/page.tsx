@@ -122,7 +122,7 @@ export default function DashboardPage() {
                 <div className="mt-3 flex items-start gap-2.5">
                   <Sparkles className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                   <div className="text-xs text-zinc-400 font-semibold leading-relaxed">
-                    Record for 60 seconds or upload media (image/video/PDF) to generate professional LinkedIn posts or PDF carousels matching your exact style DNA. All drafts are protected with one-click approval, and zero user data is ever stored permanently.
+                    Speak and AI will transcribe and do it, or upload media (image/video/PDF) to generate professional LinkedIn posts or PDF carousels matching your exact style DNA. All drafts are protected with one-click approval, and zero user data is ever stored permanently.
                   </div>
                 </div>
               </div>
