@@ -18,7 +18,7 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
   ];
 
   return (
-    <div className="flex flex-col md:flex-row w-full h-screen overflow-hidden bg-zinc-950 text-white pt-[env(safe-area-inset-top)] md:pt-0">
+    <div className="flex flex-col md:flex-row w-full h-[100svh] overflow-hidden bg-zinc-950 text-white pt-[env(safe-area-inset-top)] md:pt-0">
       {/* Desktop Sidebar (visible on md screens and up) */}
       <aside className="hidden md:flex flex-col w-64 h-screen bg-zinc-900/50 border-r border-zinc-800/80 backdrop-blur-md p-6 justify-between select-none">
         <div className="space-y-8">
@@ -82,7 +82,7 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* Main Content Layout */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+      <div className="flex-1 flex flex-col h-[100svh] overflow-hidden bg-background">
         <main className="ios-scroll relative flex-1">
           {/* Content wrapper to center and align beautifully on desktop */}
           <div className="w-full md:max-w-4xl md:mx-auto md:py-8 md:px-6">

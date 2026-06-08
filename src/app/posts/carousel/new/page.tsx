@@ -1424,7 +1424,7 @@ export default function CarouselBuilderPage() {
 
   return (
     <IosShell>
-      <div className="pt-4 pb-28 md:pb-10 px-4">
+      <div className="pt-4 pb-36 md:pb-10 px-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5 select-none">
           <button

@@ -483,7 +483,7 @@ export default function CreatePostPage() {
 
   return (
     <IosShell>
-      <div className="pt-6 px-4 pb-28 md:pb-8">
+      <div className="pt-6 px-4 pb-36 md:pb-8">
         {/* iOS Nav Header */}
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => router.back()} className="ios-back-btn">
