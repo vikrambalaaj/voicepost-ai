@@ -177,7 +177,9 @@ export async function GET(req: NextRequest) {
   }).catch((err) => console.error("Failed to scrape posts in callback:", err));
 
   // --- Build redirect response ---
-  const redirectDest = loginPurpose ? "/dashboard" : "/settings/linkedin/scraping?redirect=/settings/linkedin";
+  const redirectDest = loginPurpose
+    ? "/settings/linkedin/scraping?redirect=/dashboard"
+    : "/settings/linkedin/scraping?redirect=/settings/linkedin";
   const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
 
   // Set session cookie (30-day expiry)

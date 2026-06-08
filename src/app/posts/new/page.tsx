@@ -24,7 +24,7 @@ export default function CreatePostPage() {
 
   // Step 2 Style States
   const [styleType, setStyleType] = useState<"own" | "expert" | "custom">("expert");
-  const [selectedStyleId, setSelectedStyleId] = useState("lara_acosta");
+  const [selectedStyleId, setSelectedStyleId] = useState("fomo_style");
   const [expertStyles, setExpertStyles] = useState<any[]>([]);
   const [customStyles, setCustomStyles] = useState<any[]>([]);
   
@@ -416,18 +416,18 @@ export default function CreatePostPage() {
           let imageToAttach = null;
           let dbSourceType = "search";
 
-          // Priority 1: User uploaded custom image
-          if (uploadedImageUrl) {
+          // Select image based on active imageTab
+          if (imageTab === "upload" && uploadedImageUrl) {
             imageToAttach = { url: uploadedImageUrl };
             dbSourceType = "upload";
-          }
-          // Priority 2: User manually generated or selected an image
-          else if (selectedImage) {
+          } else if (imageTab === "ai" && aiGeneratedImage) {
+            imageToAttach = aiGeneratedImage;
+            dbSourceType = "ai";
+          } else if (imageTab === "search" && selectedImage && selectedImage.source_type !== "upload") {
             imageToAttach = selectedImage;
-            dbSourceType = selectedImage.source_type || (imageTab === "ai" ? "ai" : "search");
-          }
-          // Priority 3: Auto-generate a related image
-          else {
+            dbSourceType = selectedImage.source_type || "search";
+          } else {
+            // Auto-generate a related image
             setGenerationStatus("Auto-generating related image...");
             try {
               const genRes = await fetch("/api/images/generate", {
@@ -483,7 +483,7 @@ export default function CreatePostPage() {
 
   return (
     <IosShell>
-      <div className="pt-6 px-4">
+      <div className="pt-6 px-4 pb-28 md:pb-8">
         {/* iOS Nav Header */}
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => router.back()} className="ios-back-btn">

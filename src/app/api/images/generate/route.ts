@@ -31,36 +31,103 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ quota_hit: true, error: "AI image limit reached. Upgrade to generate more images." }, { status: 403 });
     }
 
-    // 2. Extract visual theme using LLM router
-    let visualTheme = "modern office desk setup with laptops and plants";
+    // 2. Extract visual theme using LLM router and generate detailed metaphor prompt
+    let fluxPrompt = "";
     try {
-      const keywordPrompt = `Extract a single, concise visual theme or concept from this LinkedIn post that would make a great professional photographic background. 
-Return only the description of the visual theme in 4-6 words. No quotes, no preamble.
+      const promptGeneratorInstruction = `You are a creative director who generates high-end visual prompts for AI image generation (Flux model).
+Analyze the following LinkedIn post content and output a filled-out visual prompt based on the template below.
 
-POST CONTENT:
-"${post_content}"`;
+TEMPLATE RULES:
+- Fill in the values in brackets [] based on the core message and themes of the post.
+- Create a compelling, creative visual metaphor (e.g. old way vs new way, complexity vs simplicity, chaos vs control).
+- Keep the scene simple: focus on 2-3 key objects, left side represents the problem/old state, right side represents the solution/new state.
+- Keep the style strictly professional editorial (Bloomberg/WSJ/HBR style). No cartoonish or stock-photo feel.
+
+OUTPUT FORMAT:
+Return ONLY the filled-in template text. No conversational preamble, no markdown backticks, no extra text.
+
+TEMPLATE TO FILL IN:
+Photorealistic editorial-style image representing the concept of [CORE THEME OF YOUR ARTICLE].
+
+VISUAL METAPHOR:
+[Describe the main contrast or idea visually — e.g. "old way vs new way", "complexity vs simplicity", "expensive vs affordable", "chaos vs control"]
+
+SCENE SETUP:
+- Setting: [Minimal desk / Office / Abstract space / Urban environment]
+- Key objects in frame: [2–3 objects that represent your article's message]
+- Left side of frame: [Represents the problem or old state]
+- Right side of frame: [Represents the solution or new state]
+- No people / One person from behind / Hands only
+
+MOOD & LIGHTING:
+- Overall mood: [Stark / Aspirational / Urgent / Clean]
+- Light source: [Cool blue-white / Warm amber / High contrast split lighting]
+- Background: [Deep charcoal / Pure white / Blurred office environment]
+
+COLOR PALETTE:
+- Primary: [e.g. Deep navy, cool white]
+- Accent: [e.g. Warm gold, electric blue]
+- Avoid: Bright colors, gradients, stock-photo feel
+
+STYLE REFERENCE:
+- Shot style: [Bloomberg / WSJ / HBR editorial photography]
+- No text overlays, no infographics, no clip-art
+- Ultra high resolution, sharp focus on [KEY OBJECT]
+- Aspect ratio: 16:9 for LinkedIn banner / 1:1 for post / 4:5 for mobile feed`;
 
       const llmRes = await routeLLMRequest({
         useCase: "keyword_extraction",
-        messages: [{ role: "user", content: keywordPrompt }],
+        messages: [
+          { role: "system", content: promptGeneratorInstruction },
+          { role: "user", content: `POST CONTENT:\n"${post_content}"` }
+        ],
         userId: user.id,
         userPlan: user.plan as any,
-        sessionId: "image-keywords-" + Date.now(),
+        sessionId: "image-prompt-generation-" + Date.now(),
       });
 
-      visualTheme = llmRes.content.trim().replace(/^"|"$/g, "");
+      fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim();
     } catch (err) {
-      console.warn("Failed to extract visual theme, using default.");
+      console.warn("Failed to generate custom visual metaphor prompt, falling back.", err);
     }
 
-    const fluxPrompt = `Professional LinkedIn photo: ${visualTheme}. Clean modern aesthetic, natural lighting, no text, photorealistic.`;
+    if (!fluxPrompt) {
+      // Fallback filled-in prompt
+      fluxPrompt = `Photorealistic editorial-style image representing the concept of professional growth.
+
+VISUAL METAPHOR:
+Complexity vs simplicity.
+
+SCENE SETUP:
+- Setting: Minimal desk
+- Key objects in frame: A simple notebook and a complex stack of wires
+- Left side of frame: Represents chaos and complexity
+- Right side of frame: Represents order and simplicity
+- No people
+
+MOOD & LIGHTING:
+- Overall mood: Clean and aspirational
+- Light source: High contrast split lighting
+- Background: Deep charcoal
+
+COLOR PALETTE:
+- Primary: Deep navy, cool white
+- Accent: Warm gold
+- Avoid: Bright colors, gradients, stock-photo feel
+
+STYLE REFERENCE:
+- Shot style: HBR editorial photography
+- No text overlays, no infographics, no clip-art
+- Ultra high resolution, sharp focus on the notebook
+- Aspect ratio: 16:9 for LinkedIn banner`;
+    }
 
     let generatedImageUrl = "";
     let providerUsed = "MockFLUX";
 
     const replicateToken = process.env.REPLICATE_API_TOKEN;
 
-    // 3. Trigger Replicate FLUX.1-schnell and return predictionId for client-side polling
+    // 3. Trigger Replicate FLUX.1-schnell and poll until completion
     if (replicateToken) {
       try {
         const triggerResponse = await fetch("https://api.replicate.com/v1/predictions", {
@@ -83,18 +150,48 @@ POST CONTENT:
 
         if (triggerResponse.ok) {
           const prediction = await triggerResponse.json();
-          // Return predictionId immediately — client polls /api/images/status?id=...
-          return NextResponse.json({
-            success: true,
-            prediction_id: prediction.id,
-            poll_url: prediction.urls?.get,
-            status: "processing",
-            post_id,
-            prompt: fluxPrompt,
-          });
+          const predictionId = prediction.id;
+          let predictionStatus = prediction.status;
+          let predictionOutput = null;
+          let attempts = 0;
+          const maxAttempts = 5;
+
+          while (
+            (predictionStatus === "starting" || predictionStatus === "processing") &&
+            attempts < maxAttempts
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            attempts++;
+
+            try {
+              const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+                headers: {
+                  Authorization: `Token ${replicateToken}`,
+                },
+              });
+              if (pollResponse.ok) {
+                const pollData = await pollResponse.json();
+                predictionStatus = pollData.status;
+                predictionOutput = pollData.output;
+                console.log(`[Replicate Poll] Attempt ${attempts}: status is ${predictionStatus}`);
+              }
+            } catch (pollErr) {
+              console.error("[Replicate Poll] Error polling prediction:", pollErr);
+            }
+          }
+
+          if (predictionStatus === "succeeded" && predictionOutput) {
+            const outputUrl = Array.isArray(predictionOutput) ? predictionOutput[0] : predictionOutput;
+            if (outputUrl) {
+              generatedImageUrl = outputUrl;
+              providerUsed = "FLUX.1-schnell (Replicate)";
+            }
+          } else {
+            console.warn(`[Replicate Poll] Prediction did not succeed. Status: ${predictionStatus}`);
+          }
         }
       } catch (err: any) {
-        console.error("Replicate FLUX trigger failed:", err.message);
+        console.error("Replicate FLUX trigger/poll failed:", err.message);
       }
     }
 

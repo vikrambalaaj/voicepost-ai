@@ -237,34 +237,40 @@ export async function POST(
                 }),
               });
 
-              if (registerResponse.ok) {
-                const registerData = await registerResponse.json();
-                const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
-                mediaUrn = registerData.value.asset;
-                mediaCategory = "VIDEO";
-
-                // Decode base64 or fetch remote video
-                let videoBuffer: Buffer;
-                if (selectedImage.url.startsWith("data:")) {
-                  const base64Content = selectedImage.url.split(";base64,").pop();
-                  videoBuffer = Buffer.from(base64Content!, "base64");
-                } else {
-                  const vidRes = await fetch(selectedImage.url);
-                  const arrayBuffer = await vidRes.arrayBuffer();
-                  videoBuffer = Buffer.from(arrayBuffer);
+              if (!registerResponse.ok) {
+                if (registerResponse.status === 401) {
+                  await db.from("linkedin_accounts").update({ scraping_status: "token_expired" }).eq("id", account.id);
+                  return NextResponse.json({ token_expired: true, error: "LinkedIn session expired. Please reconnect." }, { status: 401 });
                 }
+                throw new Error(`Failed to register video asset on LinkedIn: ${registerResponse.status} ${registerResponse.statusText}`);
+              }
 
-                const uploadRes = await fetch(uploadUrl, {
-                  method: "PUT",
-                  headers: {
-                    Authorization: `Bearer ${account.access_token}`,
-                  },
-                  body: videoBuffer as any,
-                });
+              const registerData = await registerResponse.json();
+              const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+              mediaUrn = registerData.value.asset;
+              mediaCategory = "VIDEO";
 
-                if (!uploadRes.ok) {
-                  throw new Error(`Failed to upload video binary to LinkedIn: ${uploadRes.statusText}`);
-                }
+              // Decode base64 or fetch remote video
+              let videoBuffer: Buffer;
+              if (selectedImage.url.startsWith("data:")) {
+                const base64Content = selectedImage.url.split(";base64,").pop();
+                videoBuffer = Buffer.from(base64Content!, "base64");
+              } else {
+                const vidRes = await fetch(selectedImage.url);
+                const arrayBuffer = await vidRes.arrayBuffer();
+                videoBuffer = Buffer.from(arrayBuffer);
+              }
+
+              const uploadRes = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${account.access_token}`,
+                },
+                body: videoBuffer as any,
+              });
+
+              if (!uploadRes.ok) {
+                throw new Error(`Failed to upload video binary to LinkedIn: ${uploadRes.statusText}`);
               }
             } else {
               // Register image upload
@@ -283,27 +289,33 @@ export async function POST(
                 }),
               });
 
-              if (registerResponse.ok) {
-                const registerData = await registerResponse.json();
-                const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
-                mediaUrn = registerData.value.asset;
-                mediaCategory = "IMAGE";
-
-                // Fetch and upload image blob
-                const imgBlobRes = await fetch(selectedImage.url);
-                const imgBlob = await imgBlobRes.blob();
-
-                const uploadRes = await fetch(uploadUrl, {
-                  method: "PUT",
-                  headers: {
-                    Authorization: `Bearer ${account.access_token}`,
-                  },
-                  body: imgBlob,
-                });
-
-                if (!uploadRes.ok) {
-                  throw new Error(`Failed to upload image binary to LinkedIn: ${uploadRes.statusText}`);
+              if (!registerResponse.ok) {
+                if (registerResponse.status === 401) {
+                  await db.from("linkedin_accounts").update({ scraping_status: "token_expired" }).eq("id", account.id);
+                  return NextResponse.json({ token_expired: true, error: "LinkedIn session expired. Please reconnect." }, { status: 401 });
                 }
+                throw new Error(`Failed to register image asset on LinkedIn: ${registerResponse.status} ${registerResponse.statusText}`);
+              }
+
+              const registerData = await registerResponse.json();
+              const uploadUrl = registerData.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+              mediaUrn = registerData.value.asset;
+              mediaCategory = "IMAGE";
+
+              // Fetch and upload image blob
+              const imgBlobRes = await fetch(selectedImage.url);
+              const imgBlob = await imgBlobRes.blob();
+
+              const uploadRes = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${account.access_token}`,
+                },
+                body: imgBlob,
+              });
+
+              if (!uploadRes.ok) {
+                throw new Error(`Failed to upload image binary to LinkedIn: ${uploadRes.statusText}`);
               }
             }
           }

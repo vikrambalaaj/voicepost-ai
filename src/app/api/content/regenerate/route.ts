@@ -52,7 +52,24 @@ User Feedback given for this revision: "${rev.feedback_given || "Initial draft"}
 Changes made in response: ${rev.changes_made?.join(", ") || "None (Initial)"}`;
     }).join("\n\n") || "";
 
-    const userPrompt = `You are editing a generated LinkedIn post based on user feedback.
+    // Check if original post is a carousel
+    let isCarousel = false;
+    let originalCarouselData: any = null;
+    try {
+      const parsed = JSON.parse(post.post_content || "");
+      if (parsed.type === "carousel" || parsed.slides) {
+        isCarousel = true;
+        originalCarouselData = parsed;
+      }
+    } catch (e) {
+      // Not a carousel
+    }
+
+    let systemPrompt = buildSystemPrompt();
+    let userPrompt = "";
+
+    if (isCarousel) {
+      userPrompt = `You are editing a generated LinkedIn Carousel based on user feedback.
 ORIGINAL SPOKEN TRANSCRIPT:
 "${post.transcript_corrected}"
 
@@ -66,7 +83,116 @@ USER CONTEXT:
 Industry: ${user?.industry || "Tech"}
 Title: ${user?.job_title || "Professional"}
 
-Please rewrite the post incorporating the feedback. Make sure you don't repeat the mistakes pointed out in the revision history.
+Rewrite instructions:
+- Incorporate the user feedback into the carousel title and slides. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
+- Maintain a highly polished, professional thought-leadership LinkedIn carousel structure.
+- Each slide must be punchy, scannable, and valuable. Max 2-3 lines per body.
+- Title: 4-8 words, strong claim or hook. Do NOT use ** or markdown bold tags inside values.
+- NO corporate fluff, NO "leverage", NO "delve".
+
+Return your response ONLY in this JSON format:
+{
+  "title": "carousel title for reference",
+  "templateId": "${originalCarouselData?.templateId || "bold_impact"}",
+  "accentColor": "${originalCarouselData?.accentColor || "#3B82F6"}",
+  "slides": [
+    {
+      "slideNumber": 1,
+      "type": "cover",
+      "title": "hook headline (4-8 words)",
+      "body": "1-2 sentence hook that makes them swipe",
+      "emoji": "emoji"
+    },
+    {
+      "slideNumber": 2,
+      "type": "content",
+      "title": "slide title",
+      "body": "2-3 sentence insight",
+      "emoji": "emoji"
+    },
+    ... (additional content slides),
+    {
+      "slideNumber": ${originalCarouselData?.slides?.length || 6},
+      "type": "cta",
+      "title": "cta headline",
+      "body": "follow for more + what they'll get",
+      "emoji": "🎯"
+    }
+  ],
+  "suggestedHashtags": ["hashtag1", "hashtag2"],
+  "changes_made": ["List of specific changes made to address feedback"],
+  "style_match_score": 9,
+  "style_deviations": []
+}`;
+    } else {
+      if (post.style_id === "fomo_style") {
+        systemPrompt = `You are a LinkedIn content strategist who writes high-impression, professional posts.
+You are refining a post based on user feedback.
+
+Refine the post using these rules:
+
+TONE & STYLE:
+- FOMO-driven opening line that stops the scroll
+- Professional, authoritative, zero fluff
+- No emoji, no casual language
+- Write like a senior industry expert, not a content creator
+
+STRUCTURE:
+- Line 1: Bold provocative statement or uncomfortable truth
+- Line 2-3: Short setup that creates tension or curiosity
+- Bullet section: 3-4 grouped bullet clusters with bold headers
+  (each bullet is one sharp, specific insight — no padding)
+- Pre-close: One sentence that reinforces the cost of inaction
+- Close: One direct question that triggers comments
+
+CONSTRAINTS:
+- No preamble, no "In today's world", no "Let's dive in"
+- Each bullet must contain a specific fact, number, or action — no vague statements
+- Total length: 250–350 words
+- End with one question to drive engagement
+
+Return your response ONLY in this JSON format:
+{
+  "post_content": "The regenerated and refined post text...",
+  "hashtags": ["hashtag1", "hashtag2"],
+  "changes_made": ["List of specific changes made to address feedback"],
+  "style_match_score": 10,
+  "style_deviations": []
+}`;
+
+        userPrompt = `ORIGINAL SPOKEN TRANSCRIPT:
+"${post.transcript_corrected}"
+
+PREVIOUS REVISION HISTORY AND FEEDBACK:
+${revisionLogs}
+
+CURRENT DIRECT USER FEEDBACK FOR NEXT VERSION:
+"${feedback}"
+
+TOPIC CONTEXT:
+- Industry: ${user?.industry || "SaaS & Tech"}
+- Target audience: ${user?.job_title || "Founders / Managers / Freelancers"}
+- Core message you want readers to take away: ${post.transcript_corrected?.split(".")[0] || "One actionable insight."}`;
+      } else {
+        userPrompt = `You are editing a generated LinkedIn post based on user feedback.
+ORIGINAL SPOKEN TRANSCRIPT:
+"${post.transcript_corrected}"
+
+PREVIOUS REVISION HISTORY AND FEEDBACK:
+${revisionLogs}
+
+CURRENT DIRECT USER FEEDBACK FOR NEXT VERSION:
+"${feedback}"
+
+USER CONTEXT:
+Industry: ${user?.industry || "Tech"}
+Title: ${user?.job_title || "Professional"}
+
+Rewrite instructions:
+- Incorporate the user feedback. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
+- Maintain a highly polished, professional thought-leadership LinkedIn post structure (compelling hook, clear problem/insight delivery, concrete advice, engagement CTA).
+- DO NOT copy the feedback or transcript verbatim. Keep the tone sophisticated, direct, and elite.
+
 Return your response ONLY in this JSON format:
 {
   "post_content": "The regenerated and refined post text...",
@@ -75,11 +201,13 @@ Return your response ONLY in this JSON format:
   "style_match_score": 9,
   "style_deviations": []
 }`;
+      }
+    }
 
     const llmRes = await routeLLMRequest({
       useCase: "regeneration",
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
       userId: post.user_id,
@@ -98,6 +226,19 @@ Return your response ONLY in this JSON format:
       } else {
         throw new Error("Failed to parse AI JSON response: " + llmRes.content);
       }
+    }
+
+    if (isCarousel) {
+      // Map flat JSON structure back to Carousel schema format
+      const carouselObj = {
+        type: "carousel",
+        title: resultJson.title || "VoicePost Carousel",
+        templateId: resultJson.templateId || originalCarouselData?.templateId || "bold_impact",
+        accentColor: resultJson.accentColor || originalCarouselData?.accentColor || "#3B82F6",
+        slides: resultJson.slides || [],
+      };
+      resultJson.post_content = JSON.stringify(carouselObj);
+      resultJson.hashtags = resultJson.suggestedHashtags || [];
     }
 
     const nextRevisionNum = (post.current_revision || 1) + 1;

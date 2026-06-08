@@ -968,7 +968,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
 
   return (
     <IosShell>
-      <div className="pt-6 px-4">
+      <div className="pt-6 px-4 pb-28 md:pb-8">
         {/* iOS Nav Header */}
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => router.back()} className="ios-back-btn">
@@ -1427,14 +1427,12 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 )}
               </button>
 
-              {!isCarousel && (
-                <button
-                  onClick={() => setShowFeedbackInput(true)}
-                  className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-transparent hover:bg-red-500/10 text-red-500 hover:text-red-400 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 border border-red-500/30 text-[17px] font-semibold cursor-pointer transition-all duration-200"
-                >
-                  Request changes
-                </button>
-              )}
+              <button
+                onClick={() => setShowFeedbackInput(true)}
+                className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-transparent hover:bg-red-500/10 text-red-500 hover:text-red-400 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 border border-red-500/30 text-[17px] font-semibold cursor-pointer transition-all duration-200"
+              >
+                Request changes
+              </button>
             </div>
           )}
         </div>

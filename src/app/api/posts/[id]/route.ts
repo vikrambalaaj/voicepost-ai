@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { sendApprovalEmailInternal } from "@/lib/email";
 
 export async function GET(
   req: NextRequest,
@@ -81,6 +82,14 @@ export async function PUT(
 
     // If updating post columns
     if (post_content !== undefined || hashtags !== undefined || status !== undefined) {
+      // 1. Fetch current post status
+      const { data: existingPost } = await db
+        .from("posts")
+        .select("status")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+
       const updateData: any = {};
       if (post_content !== undefined) updateData.post_content = post_content;
       if (hashtags !== undefined) updateData.hashtags = hashtags;
@@ -96,6 +105,21 @@ export async function PUT(
 
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      // If status is updated to pending_approval, and it wasn't before
+      if (status === "pending_approval" && existingPost?.status !== "pending_approval") {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+          await sendApprovalEmailInternal({
+            post_id: updatedPost.id,
+            post_content: updatedPost.post_content,
+            hashtags: updatedPost.hashtags || [],
+            baseUrl,
+          });
+        } catch (emailErr) {
+          console.warn("[posts/[id]/route] Email notification failed (non-blocking):", emailErr);
+        }
       }
 
       return NextResponse.json({ success: true, post: updatedPost });
@@ -127,4 +151,5 @@ export async function PUT(
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
 

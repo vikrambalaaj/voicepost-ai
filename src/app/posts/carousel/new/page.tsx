@@ -645,7 +645,7 @@ export default function CarouselBuilderPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // ── Save to Supabase Helper ──
-  const savePostToSupabase = async (contentStr: string, tags: string[], status = "draft") => {
+  const savePostToSupabase = async (contentStr: string, tags: string[], status = "pending_approval") => {
     try {
       if (postId) {
         // Update
@@ -668,6 +668,7 @@ export default function CarouselBuilderPage() {
             hashtags: tags,
             style_type: "expert",
             style_id: "lara_acosta",
+            status,
           }),
         });
         const data = await res.json();
@@ -711,7 +712,7 @@ export default function CarouselBuilderPage() {
         templateId: selectedTemplate,
         accentColor: accentColor,
       });
-      await savePostToSupabase(serialized, tags, "draft");
+      await savePostToSupabase(serialized, tags, "pending_approval");
 
       setStep(4);
     } catch (err: any) {
@@ -747,7 +748,7 @@ export default function CarouselBuilderPage() {
       templateId: selectedTemplate,
       accentColor: accentColor,
     });
-    await savePostToSupabase(serialized, hashtags, "draft");
+    await savePostToSupabase(serialized, hashtags, "pending_approval");
   };
 
   const handleTemplateSelect = async (tId: string) => {
@@ -760,7 +761,7 @@ export default function CarouselBuilderPage() {
         templateId: tId,
         accentColor: accentColor,
       });
-      await savePostToSupabase(serialized, hashtags, "draft");
+      await savePostToSupabase(serialized, hashtags, "pending_approval");
     }
   };
 
@@ -774,7 +775,7 @@ export default function CarouselBuilderPage() {
         templateId: selectedTemplate,
         accentColor: color,
       });
-      await savePostToSupabase(serialized, hashtags, "draft");
+      await savePostToSupabase(serialized, hashtags, "pending_approval");
     }
   };
 
@@ -1307,12 +1308,19 @@ export default function CarouselBuilderPage() {
             )}
 
             <button
-              onClick={() => setStep(5)}
-              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] border-none cursor-pointer"
+              onClick={() => {
+                if (postId) {
+                  router.push(`/posts/${postId}/approval`);
+                } else {
+                  alert("Saving draft. Please wait a moment.");
+                }
+              }}
+              disabled={!postId}
+              className="w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 border-none cursor-pointer"
               style={{ background: accentColor }}
             >
               <Send className="w-4 h-4" />
-              Review & Publish →
+              Review & Approve →
             </button>
           </div>
         </div>
@@ -1416,7 +1424,7 @@ export default function CarouselBuilderPage() {
 
   return (
     <IosShell>
-      <div className="pt-4 pb-10 px-4">
+      <div className="pt-4 pb-28 md:pb-10 px-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5 select-none">
           <button
