@@ -1,13 +1,18 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, FileText, Plus, CreditCard, User, ChevronRight } from "lucide-react";
+import { Home, FileText, Plus, CreditCard, User, ChevronRight, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TabBar } from "./TabBar";
 
 export const IosShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const router = useRouter();
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
 
   const menuItems = [
     { label: "Home", icon: Home, path: "/dashboard" },
@@ -71,6 +76,15 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
                 </Link>
               );
             })}
+
+            {/* Desktop-only Sign Out button in sidebar */}
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-red-500 hover:text-red-400 hover:bg-red-950/20 active:scale-98 transition-all duration-150 group cursor-pointer text-left border-none bg-transparent mt-4"
+            >
+              <LogOut className="w-4 h-4 text-red-500 group-hover:text-red-400" />
+              <span>Sign Out</span>
+            </button>
           </nav>
         </div>
 

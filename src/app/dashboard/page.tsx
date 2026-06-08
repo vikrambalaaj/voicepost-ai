@@ -115,7 +115,7 @@ export default function DashboardPage() {
                     loop
                     muted
                     playsInline
-                    src="https://assets.mixkit.co/videos/preview/mixkit-software-developer-working-on-his-computer-38534-large.mp4"
+                    src="/showcase.mp4"
                     poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
                   />
                 </div>
