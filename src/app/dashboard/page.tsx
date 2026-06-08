@@ -161,31 +161,31 @@ export default function DashboardPage() {
               <div className="ios-section-label">LinkedIn Account</div>
               <div className="ios-card p-4">
                 {linkedinConnected && scrapingStatus ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <img
                         src={scrapingStatus.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"}
                         alt="LinkedIn Profile"
-                        className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-800"
+                        className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
                       />
-                      <div>
-                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight truncate">
                           {scrapingStatus.profile_name}
                         </h4>
-                        <p className="text-[10px] text-zinc-400 leading-normal truncate max-w-[180px]">
+                        <p className="text-[10px] text-zinc-400 leading-normal truncate">
                           {scrapingStatus.profile_headline || "Connected"}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <Badge className={
                         scrapingStatus.status === "complete" 
-                          ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full" 
-                          : "bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse"
+                          ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" 
+                          : "bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-bold px-2.5 py-0.5 rounded-full animate-pulse whitespace-nowrap"
                       }>
                         {scrapingStatus.status === "complete" ? "DNA Profile Loaded" : "Scraping DNA..."}
                       </Badge>
-                      <p className="text-[9px] text-zinc-500 mt-1 font-semibold">
+                      <p className="text-[9px] text-zinc-500 mt-1 font-semibold whitespace-nowrap">
                         {scrapingStatus.posts_scraped || 0} posts scraped
                       </p>
                     </div>

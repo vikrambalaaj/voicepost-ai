@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
-import { Link2, Shield, CreditCard, LayoutGrid, ChevronRight, Sparkles, LogOut } from "lucide-react";
+import { Link2, Shield, CreditCard, LayoutGrid, ChevronRight, Sparkles, LogOut, AlertTriangle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,6 +17,8 @@ export default function SettingsPage() {
     posts_limit_weekly: 3,
   });
   const [linkedinConnected, setLinkedinConnected] = useState(false);
+  const [styleProfile, setStyleProfile] = useState<any>(null);
+  const [postsScraped, setPostsScraped] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("antigravity");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -41,7 +43,20 @@ export default function SettingsPage() {
 
         const statusRes = await fetch("/api/linkedin/scraping-status");
         const statusData = await statusRes.json();
-        setLinkedinConnected(statusData.status && statusData.status !== "disconnected");
+        const connected = statusData.status && statusData.status !== "disconnected";
+        setLinkedinConnected(connected);
+        setPostsScraped(statusData.posts_scraped ?? 0);
+
+        if (connected) {
+          // Fetch style profile
+          const profileRes = await fetch("/api/style/profile");
+          if (profileRes.ok) {
+            const pData = await profileRes.json();
+            if (pData.success && pData.profile) {
+              setStyleProfile(pData.profile);
+            }
+          }
+        }
 
         setUser({
           full_name: sessionData.user?.name || statusData.profile_name || "John Doe",
@@ -93,6 +108,45 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Writing Style DNA Section */}
+        {linkedinConnected && (
+          <>
+            <div className="ios-section-label">Writing Style DNA</div>
+            {postsScraped === 0 || !styleProfile || styleProfile.posts_analyzed_count === 0 ? (
+              <div className="ios-card p-5 bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/50 space-y-2 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-white">No post</h4>
+                <p className="text-xs text-zinc-400 font-medium leading-relaxed max-w-xs mx-auto">
+                  No LinkedIn posts have been scraped yet. Write some posts on LinkedIn or click &quot;Manage LinkedIn Integration&quot; below to trigger re-analysis.
+                </p>
+              </div>
+            ) : (
+              <div className="ios-card p-5 bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/50 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">DNA Style Summary</p>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans font-medium">
+                    {styleProfile.style_json?.writing_style_explanation || "No style summary generated yet."}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+                  <div>
+                    <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Tone</p>
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 capitalize mt-0.5">
+                      {styleProfile.style_json?.tone_descriptor || "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Sentence Style</p>
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-0.5">
+                      {styleProfile.style_json?.sentence_length_pattern || "Not specified"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Settings Rows */}
         <div className="ios-section-label">Account settings</div>
