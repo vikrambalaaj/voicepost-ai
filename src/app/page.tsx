@@ -66,6 +66,28 @@ export default function LandingPage() {
         </div>
       </div>
 
+      {/* How it Works Video Walkthrough Section */}
+      <div className="max-w-4xl mx-auto px-6 py-20 text-center relative z-20 border-t border-zinc-900/60">
+        <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+          See how VoicePost works in 10 seconds
+        </h2>
+        <p className="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto mb-10 font-medium">
+          Watch our fast-paced overview showing voice/media uploader, styling engines, carousel generator, and secure approval pipeline.
+        </p>
+        <div className="relative rounded-3xl overflow-hidden border border-zinc-800 bg-zinc-950 aspect-video shadow-2xl flex items-center justify-center">
+          <video
+            className="w-full h-full object-cover"
+            controls
+            autoPlay
+            muted
+            loop
+            playsInline
+            src="https://assets.mixkit.co/videos/preview/mixkit-software-developer-working-on-his-computer-38534-large.mp4"
+            poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200"
+          />
+        </div>
+      </div>
+
       {/* Pricing Section */}
       <div ref={pricingRef} className="py-24 px-4 bg-black border-t border-zinc-900 relative z-30">
         <div className="max-w-6xl mx-auto">

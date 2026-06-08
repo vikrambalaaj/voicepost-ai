@@ -104,6 +104,30 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* How it works Walkthrough Video */}
+            <div className="space-y-1">
+              <div className="ios-section-label">How it works</div>
+              <div className="ios-card p-4 bg-zinc-900/40 border border-zinc-800/80">
+                <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-zinc-850">
+                  <video
+                    className="w-full h-full object-cover"
+                    controls
+                    loop
+                    muted
+                    playsInline
+                    src="https://assets.mixkit.co/videos/preview/mixkit-software-developer-working-on-his-computer-38534-large.mp4"
+                    poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800"
+                  />
+                </div>
+                <div className="mt-3 flex items-start gap-2.5">
+                  <Sparkles className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="text-xs text-zinc-400 font-semibold leading-relaxed">
+                    Record for 60 seconds or upload media (image/video/PDF) to generate professional LinkedIn posts or PDF carousels matching your exact style DNA. All drafts are protected with one-click approval, and zero user data is ever stored permanently.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Recent Posts List */}
             <div className="space-y-1">
               <div className="ios-section-label">Recent posts</div>
