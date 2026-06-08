@@ -381,7 +381,7 @@ export async function POST(
           pending_review: true,
           post_content: isCarousel ? carouselTextContent : post.post_content,
           hashtags: post.hashtags,
-          message: "LinkedIn posting pending review. Your post has been copied to clipboard.",
+          message: "VoicePost's LinkedIn API integration is currently in sandbox mode (pending official review). Your post content and hashtags have been copied to your clipboard so you can paste them directly on LinkedIn.",
         });
       }
     }

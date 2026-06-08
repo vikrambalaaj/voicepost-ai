@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SparklesCore } from "@/components/ui/sparkles-core";
 import { BackgroundPaths } from "@/components/ui/background-paths";
@@ -11,19 +11,83 @@ export default function LandingPage() {
   const router = useRouter();
   const pricingRef = useRef<HTMLDivElement>(null);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            setIsAuthenticated(true);
+          }
+        }
+      } catch (e) {}
+    }
+    checkSession();
+  }, []);
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setIsAuthenticated(false);
+    router.refresh();
+  };
 
   const scrollToPricing = () => {
     pricingRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const handleCtaClick = () => {
-    router.push("/login");
+    if (isAuthenticated) {
+      router.push("/dashboard");
+    } else {
+      router.push("/login");
+    }
   };
 
   return (
     <div className="min-h-screen bg-black text-white overflow-y-auto select-text scroll-smooth">
+      {/* Navigation Header */}
+      <header className="absolute top-0 left-0 right-0 z-30 px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => router.push("/")}>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center shadow-md shadow-blue-500/20">
+            <span className="font-extrabold text-white text-lg font-mono">VP</span>
+          </div>
+          <div>
+            <h2 className="font-extrabold text-sm tracking-tight text-white leading-tight">VoicePost</h2>
+            <p className="text-[9px] text-zinc-500 font-semibold uppercase tracking-wider">Social AI Studio</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-4 select-none">
+          {isAuthenticated ? (
+            <>
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="text-xs sm:text-sm font-semibold text-zinc-300 hover:text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 cursor-pointer transition-all duration-200"
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="text-xs sm:text-sm font-semibold text-red-500 hover:text-red-400 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-red-950/20 border border-red-500/20 hover:bg-red-950/40 cursor-pointer transition-all duration-200"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => router.push("/login")}
+              className="text-xs sm:text-sm font-semibold text-zinc-300 hover:text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 cursor-pointer transition-all duration-200"
+            >
+              Sign In
+            </button>
+          )}
+        </div>
+      </header>
+
       {/* Hero Section Container */}
-      <div className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden">
+      <div className="relative min-h-[90vh] w-full flex flex-col items-center justify-center overflow-hidden">
         {/* Background SVG paths */}
         <div className="absolute inset-0 z-0 opacity-40">
           <BackgroundPaths title="" showContent={false} />
@@ -54,7 +118,7 @@ export default function LandingPage() {
             ]}
             subtitle="Speak for 60 seconds. Get a perfectly written, human-sounding LinkedIn post in your exact voice. Connect LinkedIn, approve, publish."
             infoBadgeText="Free plan — 3 posts/week, no card needed"
-            ctaButtonText="Start for free"
+            ctaButtonText={isAuthenticated ? "Go to Dashboard" : "Start for free"}
             socialProofText="Join 2,400+ professionals already posting"
             onCtaClick={handleCtaClick}
             avatars={[
@@ -63,6 +127,17 @@ export default function LandingPage() {
               { src: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=40", alt: "User", fallback: "AH" }
             ]}
           />
+
+          {isAuthenticated && (
+            <div className="flex justify-center -mt-6 mb-12 relative z-30">
+              <button
+                onClick={handleSignOut}
+                className="text-sm font-bold text-red-500 hover:text-red-400 px-8 py-3.5 rounded-2xl bg-red-950/20 border border-red-500/20 hover:bg-red-950/40 cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-950/20"
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

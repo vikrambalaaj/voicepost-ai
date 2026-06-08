@@ -197,16 +197,115 @@ STYLE REFERENCE:
 
     // Check if image generation succeeded
     if (!generatedImageUrl) {
+      try {
+        console.log("[images/generate] Replicate token missing or generation failed. Fetching dynamic search image...");
+        
+        // 1. Extract a visual search query (2-3 words)
+        const searchKeywordPrompt = `Analyze the following LinkedIn post and extract a 2-3 word visual search query to find a matching symbolic editorial photo on Unsplash (e.g. "growing graph", "puzzle piece", "clean desk", "group meeting").
+POST CONTENT:
+"${post_content}"
+
+Return ONLY the 2-3 words. No preamble, no quotes, no period.`;
+
+        const searchKeywordRes = await routeLLMRequest({
+          useCase: "keyword_extraction",
+          messages: [{ role: "user", content: searchKeywordPrompt }],
+          userId: user.id,
+          userPlan: user.plan as any,
+          sessionId: "image-search-keyword-" + Date.now(),
+        });
+        const searchQuery = searchKeywordRes.content.trim().replace(/['"“”]/g, "").trim() || "business startup";
+        console.log(`[images/generate] Generated search query: "${searchQuery}"`);
+
+        let foundImageUrl = "";
+
+        // 2. Perform Tavily image search if API key exists
+        const tavilyKey = process.env.TAVILY_API_KEY;
+        if (tavilyKey) {
+          try {
+            console.log(`[images/generate] Searching Tavily for image: "${searchQuery}"`);
+            const tavilyRes = await fetch("https://api.tavily.com/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                api_key: tavilyKey,
+                query: searchQuery,
+                include_images: true,
+                max_results: 5,
+              }),
+            });
+            if (tavilyRes.ok) {
+              const data = await tavilyRes.json();
+              if (data.images && data.images.length > 0) {
+                const img = data.images[0];
+                foundImageUrl = typeof img === "string" ? img : img.url;
+                providerUsed = `Dynamic Search (Tavily: "${searchQuery}")`;
+                console.log(`[images/generate] Successfully fetched Tavily image: ${foundImageUrl}`);
+              }
+            }
+          } catch (tavilyErr) {
+            console.error("[images/generate] Tavily image search failed:", tavilyErr);
+          }
+        }
+
+        // 3. Fallback to DuckDuckGo image search
+        if (!foundImageUrl) {
+          console.log(`[images/generate] Falling back to DuckDuckGo search for: "${searchQuery}"`);
+          const ddgUrl = `https://duckduckgo.com/?q=${encodeURIComponent(searchQuery)}`;
+          const htmlRes = await fetch(ddgUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+            }
+          });
+          
+          if (htmlRes.ok) {
+            const html = await htmlRes.text();
+            const vqdRegex = /vqd=['"]?([^'"]+)['"]?/;
+            const match = html.match(vqdRegex);
+            if (match) {
+              const vqd = match[1];
+              const imagesRes = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(searchQuery)}&vqd=${vqd}&o=json`, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+                  "Referer": `https://duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&iax=images&ia=images`
+                }
+              });
+              if (imagesRes.ok) {
+                const data = await imagesRes.json();
+                if (data.results && data.results.length > 0) {
+                  foundImageUrl = data.results[0].image;
+                  providerUsed = `Dynamic Search (DuckDuckGo: "${searchQuery}")`;
+                  console.log(`[images/generate] Successfully fetched DuckDuckGo image: ${foundImageUrl}`);
+                }
+              }
+            }
+          }
+        }
+
+        if (foundImageUrl) {
+          generatedImageUrl = foundImageUrl;
+        }
+      } catch (err) {
+        console.error("[images/generate] Dynamic search image fallback failed:", err);
+      }
+    }
+
+    // Final hardcoded fallback if everything else fails
+    if (!generatedImageUrl) {
       const mockImages = [
         "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&auto=format&fit=crop",
         "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop",
         "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop"
+        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=800&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1507537297725-24a1c029d3ca?w=800&auto=format&fit=crop"
       ];
       const randIdx = Math.floor(Math.random() * mockImages.length);
       generatedImageUrl = mockImages[randIdx];
       providerUsed = "MockFLUX (Fallback)";
-      console.warn("REPLICATE_API_TOKEN is missing. Using fallback mock image: " + generatedImageUrl);
+      console.warn("REPLICATE_API_TOKEN is missing and search failed. Using fallback mock image: " + generatedImageUrl);
     }
 
     let returnedImageId = "temp_ai_" + Date.now();
