@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Home, FileText, Plus, CreditCard, User, ChevronRight, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TabBar } from "./TabBar";
+import { BeamsBackground } from "@/components/ui/beams-background";
 
 export const IosShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
@@ -96,8 +97,11 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* Main Content Layout */}
-      <div className="flex-1 flex flex-col h-[100svh] overflow-hidden bg-background">
-        <main className="ios-scroll relative flex-1">
+      <div className="flex-1 flex flex-col h-[100svh] overflow-hidden relative">
+        {/* Animated ambient beams background */}
+        <BeamsBackground className="absolute inset-0 z-0 w-full h-full" intensity="medium" />
+
+        <main className="ios-scroll relative flex-1 z-10 bg-transparent">
           {/* Content wrapper to center and align beautifully on desktop */}
           <div className="w-full md:max-w-4xl md:mx-auto md:py-8 md:px-6">
             {children}
@@ -106,7 +110,7 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
         </main>
         
         {/* Mobile Tab Bar */}
-        <div className="md:hidden">
+        <div className="md:hidden relative z-20">
           <TabBar />
         </div>
       </div>

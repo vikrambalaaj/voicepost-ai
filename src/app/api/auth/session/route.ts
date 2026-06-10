@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookie } from "@/lib/session";
+import { getServiceSupabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const session = req.cookies.get("vp_session")?.value;
@@ -15,6 +16,13 @@ export async function GET(req: NextRequest) {
     return res;
   }
 
+  const db = getServiceSupabase();
+  const { data: userDb } = await db
+    .from("users")
+    .select("plan, posts_limit_weekly, posts_limit_monthly, posts_used_this_week, posts_used_this_month")
+    .eq("id", decoded.userId)
+    .single();
+
   return NextResponse.json({
     authenticated: true,
     user: {
@@ -23,6 +31,11 @@ export async function GET(req: NextRequest) {
       name: decoded.name,
       picture: decoded.picture,
       linkedin_connected: decoded.linkedin_connected,
+      plan: userDb?.plan || "free",
+      posts_limit_weekly: userDb?.posts_limit_weekly ?? 3,
+      posts_limit_monthly: userDb?.posts_limit_monthly ?? 0,
+      posts_used_this_week: userDb?.posts_used_this_week ?? 0,
+      posts_used_this_month: userDb?.posts_used_this_month ?? 0,
     },
   });
 }

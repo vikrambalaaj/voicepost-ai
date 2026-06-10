@@ -27,7 +27,8 @@ CRITICAL RULES:
 4. Include exactly ONE personal marker (choose only one, never more): 'In my experience' OR 'Honestly,' OR 'What I've noticed'.
 5. Strictly conform to the style JSON properties (length, tone, emojis, spacing, CTA).
 6. Do NOT copy spoken transcripts verbatim or just fix grammar. Perform a deep thought leadership rewrite: structure the post with a strong hook, clear context/problem, a core actionable insight, and a conversational CTA.
-7. Return ONLY a valid raw JSON object matching the requested schema. No Markdown blocks, no backticks, no text before or after the JSON.`;
+7. Return ONLY a valid raw JSON object matching the requested schema. No Markdown blocks, no backticks, no text before or after the JSON.
+8. NEVER use asterisks (*) or double asterisks (**) anywhere in the post content (e.g., for bolding, emphasis, titles, headers, or bullet points). Since LinkedIn does not support Markdown, it displays them as raw asterisks which is highly unprofessional. If you need bullet points, use unicode bullet characters like '•' or '-' instead. If you want to emphasize a header or a key phrase, use CAPITAL LETTERS instead of bold markdown tags.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest) {
           messages: [
             {
               role: "system",
-              content: "You are an assistant that extracts the single most effective web search query from a user's raw thoughts/transcript to find the latest news, facts, and details on the topic. Return ONLY the search query string, nothing else. No quotes, no preamble.",
+              content: "You are an assistant that extracts the single most effective web search query from a user's raw thoughts/transcript to find the latest news, facts, and details on the topic. Return ONLY the plain text search query. DO NOT include any introductory or concluding text, explanation, quotes, or markdown backticks.",
             },
             {
               role: "user",
@@ -146,7 +147,11 @@ export async function POST(req: NextRequest) {
           userPlan: user.plan || "pro",
           sessionId: "search-query-extraction-" + Date.now(),
         });
-        const searchQuery = queryRes.content.trim().replace(/^"|"$/g, "");
+        let searchQuery = queryRes.content.trim();
+        // Extract quoted text if present, otherwise clean general quotes/markdown
+        searchQuery = searchQuery.replace(/^["'`]|["'`]$/g, "").trim();
+        searchQuery = searchQuery.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+        searchQuery = searchQuery.replace(/^(search query|query|search):\s*/i, "").trim();
         console.log(`[web-search] Extracted query: "${searchQuery}"`);
 
         if (process.env.TAVILY_API_KEY) {
@@ -205,6 +210,7 @@ export async function POST(req: NextRequest) {
             job_title: user.job_title || "Tech Founder",
           },
           recent_topics: recentTopics,
+          web_search_context: webSearchContext || undefined,
         });
 
         if (agentResponse.success && agentResponse.result) {
@@ -230,29 +236,45 @@ export async function POST(req: NextRequest) {
       let userPrompt = "";
 
       if (style_id === "fomo_style") {
-        systemPrompt = `You are a LinkedIn content strategist who writes high-impression, professional posts.
+        systemPrompt = `You are a LinkedIn content strategist and formatting expert. Take the article I provide and reformat it into a high-engagement LinkedIn post using FOMO-driven writing and LinkedIn's native rendering constraints.
 
-Take the article/content provided by the user and convert it into a LinkedIn post using these rules:
+FOMO WRITING RULES:
+- Open with what most people are doing wrong or missing out on
+- Make the reader feel the cost of not knowing this — in time, money, or opportunity
+- Use contrast: what others do vs. what smart people do
+- Imply scarcity of knowledge: "most people never figure this out"
+- Frame each insight as something the reader is currently leaving on the table
+- Use specific numbers and dollar amounts wherever possible — vague claims kill FOMO
+- Build cumulative tension toward the payoff (the list, the revelation, the total cost)
 
-TONE & STYLE:
-- FOMO-driven opening line that stops the scroll
-- Professional, authoritative, zero fluff
-- No emoji, no casual language
-- Write like a senior industry expert, not a content creator
+FORMAT RULES:
+- Short paragraphs: 1-2 sentences max, then a line break
+- Section headers: ALL CAPS only (no markdown headers)
+- Section dividers: use — — — between major sections
+- Numbered lists: plain numbers only (1. 2. 3.)
+- Sub-bullets: fold into short sentences, never use asterisks or dashes as bullets
+- Tables: convert to plain-text stacked lists with em dashes
+- Spacing: always one blank line between numbered items
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the post. Do NOT use them for bolding, emphasis, titles, headers, or bullet lists. Keep the text strictly plain text without any markdown or asterisk symbols. Use CAPITAL LETTERS for emphasis or headers, and standard unicode bullets like '•' or '-' if list bullets are needed.
 
-STRUCTURE:
-- Line 1: Bold provocative statement or uncomfortable truth
-- Line 2-3: Short setup that creates tension or curiosity
-- Bullet section: 3-4 grouped bullet clusters with bold headers
-  (each bullet is one sharp, specific insight — no padding)
-- Pre-close: One sentence that reinforces the cost of inaction
-- Close: One direct question that triggers comments
+HOOK RULES:
+- First 2-3 lines must create immediate FOMO before the "...see more" cutoff (~210 characters)
+- Lead with a cost, a mistake, or a gap most people don't know they have
+- Make skipping past this feel like leaving money on the table
+- Never start with "I" (LinkedIn algo penalizes it)
 
-CONSTRAINTS:
-- No preamble, no "In today's world", no "Let's dive in"
-- Each bullet must contain a specific fact, number, or action — no vague statements
-- Total length: 250–350 words
-- End with one question to drive engagement
+TONE RULES:
+- No emoji
+- No corporate filler ("I'm excited to share...")
+- No preamble or throat-clearing
+- Confident, direct, slightly provocative
+- Write like someone who knows something most people don't — and is choosing to share it
+
+CLOSING RULES:
+- End with one specific engagement question on its own line
+- One blank line above it
+- The question should trigger self-reflection or mild defensiveness ("have you been doing this wrong?")
+- Never "thoughts?" — make it sharp and specific to the content
 
 Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase strings without the # symbol, highly relevant to the post topic):
 {
@@ -295,6 +317,7 @@ Rewrite instructions:
 - Turn the chaotic raw transcript into an elite, professional thought-leadership LinkedIn post.
 - Synthesize raw spoken thoughts. DO NOT copy phrases or filler speech verbatim. Write it with high density of value, clean layout, and professional clarity.
 - Structure: Start with a scroll-stopping hook, flow into the core problem or situation, deliver a clear value-add/insight, provide a concrete actionable tip, and end with an engaging CTA/question matching the target style.
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the generated post content. Use unicode bullets (• or -) if bullets are needed, and CAPITAL LETTERS or line spacing for emphasis/headers.
 
 Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase strings without the # symbol, highly relevant to the post topic):
 {
@@ -333,6 +356,17 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
           throw new Error("Failed to parse AI JSON response: " + llmRes.content);
         }
       }
+    }
+
+    if (resultJson.post_content) {
+      let cleanedPostContent = resultJson.post_content;
+      // Remove markdown bold asterisks
+      cleanedPostContent = cleanedPostContent.replace(/\*\*/g, "");
+      // Replace bullet points starting with asterisks while preserving indentation
+      cleanedPostContent = cleanedPostContent.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");
+      // Strip any other random single asterisks
+      cleanedPostContent = cleanedPostContent.replace(/\*/g, "");
+      resultJson.post_content = cleanedPostContent;
     }
 
     resultJson.review_suggested = false;

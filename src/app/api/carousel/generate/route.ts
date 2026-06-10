@@ -27,13 +27,14 @@ export async function POST(req: NextRequest) {
 RULES:
 - Each slide must be punchy, scannable, and valuable on its own
 - Use short sentences. Max 2-3 lines per body
-- Title: 4-8 words, strong hook or claim (do NOT use markdown bold ** tags in JSON)
+- Title: 4-8 words, strong hook or claim
 - Body: 1-3 sentences, specific and actionable
 - First slide (cover): compelling hook that makes people want to swipe
 - Last slide (CTA): clear call to action
 - NO corporate fluff, NO "leverage", NO "delve"
 - Return ONLY valid JSON, no markdown, no backticks
-- Every value in the JSON must be a simple plain text string. Do NOT use ** or other markdown bold formatting inside keys or values.`;
+- Every value in the JSON must be a simple plain text string.
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.`;
 
     const userPrompt = `Create a LinkedIn carousel with exactly ${slideCount} slides about: "${topic}"
 Industry context: ${industry}
@@ -97,6 +98,25 @@ Return this exact JSON structure:
         parsed = JSON.parse(cleanJsonString(match[0]));
       } else {
         throw new Error("Could not parse LLM response as JSON");
+      }
+    }
+
+    if (parsed) {
+      if (parsed.title) {
+        parsed.title = parsed.title.replace(/\*\*/g, "").replace(/\*/g, "");
+      }
+      if (Array.isArray(parsed.slides)) {
+        parsed.slides = parsed.slides.map((slide: any) => {
+          let cleanTitle = slide.title || "";
+          let cleanBody = slide.body || "";
+          cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+          cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+          return {
+            ...slide,
+            title: cleanTitle,
+            body: cleanBody,
+          };
+        });
       }
     }
 

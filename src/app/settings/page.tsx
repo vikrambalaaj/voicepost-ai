@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<any>({
     full_name: "John Doe",
     email: "demo@voicepost.com",
-    plan: "pro",
+    plan: "free",
     posts_used_this_week: 0,
     posts_limit_weekly: 3,
   });
@@ -58,13 +58,40 @@ export default function SettingsPage() {
           }
         }
 
+        const plan = sessionData.user?.plan || "free";
+        const isFree = plan === "free";
+
+        // Calculate posts created this week (since last Monday)
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const lastMonday = new Date(now.setDate(diff));
+        lastMonday.setHours(0, 0, 0, 0);
+
+        const postsThisWeek = postsData.posts?.filter((p: any) => {
+          const postDate = new Date(p.created_at);
+          return postDate >= lastMonday;
+        }).length || 0;
+
+        // Calculate posts created this month
+        const postsThisMonth = postsData.posts?.filter((p: any) => {
+          const postDate = new Date(p.created_at);
+          const current = new Date();
+          return postDate.getMonth() === current.getMonth() && postDate.getFullYear() === current.getFullYear();
+        }).length || 0;
+
+        const postsUsedCount = isFree ? postsThisWeek : postsThisMonth;
+        const postsLimitVal = isFree 
+          ? (sessionData.user?.posts_limit_weekly || 3) 
+          : (sessionData.user?.posts_limit_monthly || 60);
+
         setUser({
           full_name: sessionData.user?.name || statusData.profile_name || "John Doe",
           email: sessionData.user?.email || "demo@voicepost.com",
           picture: sessionData.user?.picture || statusData.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120",
-          plan: "pro",
-          posts_used_this_week: postsData.posts?.filter((p: any) => p.status === "published").length || 0,
-          posts_limit_weekly: 3,
+          plan: plan,
+          posts_used_this_week: postsUsedCount,
+          posts_limit_weekly: postsLimitVal,
         });
       } catch (e) {
         console.error(e);
@@ -147,6 +174,37 @@ export default function SettingsPage() {
             )}
           </>
         )}
+
+        {/* Your Plan Benefits Section */}
+        <div className="ios-section-label">Your Plan Benefits</div>
+        <div className="ios-card p-4 bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/50">
+          <div className="space-y-2.5">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-zinc-400 font-semibold">Post Quota</span>
+              <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                {user.plan === "free" ? "3 posts / week" : user.plan === "starter" ? "15 posts / month" : user.plan === "pro" ? "60 posts / month" : "Unlimited posts"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+              <span className="text-zinc-400 font-semibold">LinkedIn Accounts</span>
+              <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                {user.plan === "free" || user.plan === "starter" ? "1 Account" : user.plan === "pro" ? "3 Accounts" : "10 Accounts"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+              <span className="text-zinc-400 font-semibold">Writing Styles</span>
+              <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                {user.plan === "free" ? "Personal + 3 Expert" : user.plan === "starter" ? "All Expert + Custom Builder" : "All Styles + Blending"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+              <span className="text-zinc-400 font-semibold">Scheduled Posting</span>
+              <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                {user.plan === "free" || user.plan === "starter" ? "Unavailable" : "Included (Pro)"}
+              </span>
+            </div>
+          </div>
+        </div>
 
         {/* Settings Rows */}
         <div className="ios-section-label">Account settings</div>

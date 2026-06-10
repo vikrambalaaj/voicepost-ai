@@ -204,7 +204,7 @@
   color: var(--ios-lbl2);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  padding: 20px 20px 6px;
+  padding: 12px 20px 6px;
 }
 
 /* Segmented control */
@@ -291,14 +291,14 @@
 /* Responsive web layouts for desktop/tablet */
 @media (min-width: 768px) {
   .ios-card {
-    margin: 0 0 24px;
+    margin: 0;
     border-radius: 16px;
     border: 1.5px solid var(--ios-sep);
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
   .ios-section-label {
-    padding: 24px 0 8px;
+    padding: 0 0 8px;
     font-size: 14px;
   }
 

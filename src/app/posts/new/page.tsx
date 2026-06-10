@@ -540,7 +540,7 @@ export default function CreatePostPage() {
 
   return (
     <IosShell>
-      <div className="pt-6 px-4 pb-36 md:pb-8">
+      <div className="pt-6 px-4 pb-56 md:pb-8">
         {/* iOS Nav Header */}
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => router.back()} className="ios-back-btn">
@@ -953,11 +953,11 @@ export default function CreatePostPage() {
         )}
 
         {/* Generate Post Button */}
-        <div className="py-4 md:flex md:justify-end md:px-0">
+        <div className="fixed bottom-0 left-0 right-0 pb-[calc(12px+env(safe-area-inset-bottom)+58px)] px-4 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent z-40 pointer-events-none md:relative md:bottom-auto md:pb-0 md:pt-0 md:bg-none md:z-auto md:flex md:justify-end md:px-0">
           <button
             onClick={handleGeneratePost}
             disabled={generatingPost}
-            className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hover:from-cyan-300 hover:via-blue-400 hover:to-purple-500 disabled:from-zinc-850 disabled:to-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
+            className="pointer-events-auto w-full md:w-auto md:px-8 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hover:from-cyan-300 hover:via-blue-400 hover:to-purple-500 disabled:from-zinc-850 disabled:to-zinc-850 disabled:text-zinc-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200"
           >
             {generatingPost ? (
               <>

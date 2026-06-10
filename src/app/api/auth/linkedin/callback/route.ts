@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
       full_name: accountInfo.profile_name,
       industry: "SaaS & AI",
       job_title: "Tech Founder",
-      plan: "pro",
+      plan: "free",
     }).select();
     userId = demoId;
   } else {

@@ -87,8 +87,9 @@ Rewrite instructions:
 - Incorporate the user feedback into the carousel title and slides. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
 - Maintain a highly polished, professional thought-leadership LinkedIn carousel structure.
 - Each slide must be punchy, scannable, and valuable. Max 2-3 lines per body.
-- Title: 4-8 words, strong claim or hook. Do NOT use ** or markdown bold tags inside values.
+- Title: 4-8 words, strong claim or hook.
 - NO corporate fluff, NO "leverage", NO "delve".
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.
 
 Return your response ONLY in this JSON format:
 {
@@ -126,30 +127,46 @@ Return your response ONLY in this JSON format:
 }`;
     } else {
       if (post.style_id === "fomo_style") {
-        systemPrompt = `You are a LinkedIn content strategist who writes high-impression, professional posts.
-You are refining a post based on user feedback.
+        systemPrompt = `You are a LinkedIn content strategist and formatting expert. You are refining a post based on user feedback.
+Take the article provided and reformat it into a high-engagement LinkedIn post using FOMO-driven writing and LinkedIn's native rendering constraints.
 
-Refine the post using these rules:
+FOMO WRITING RULES:
+- Open with what most people are doing wrong or missing out on
+- Make the reader feel the cost of not knowing this — in time, money, or opportunity
+- Use contrast: what others do vs. what smart people do
+- Imply scarcity of knowledge: "most people never figure this out"
+- Frame each insight as something the reader is currently leaving on the table
+- Use specific numbers and dollar amounts wherever possible — vague claims kill FOMO
+- Build cumulative tension toward the payoff (the list, the revelation, the total cost)
 
-TONE & STYLE:
-- FOMO-driven opening line that stops the scroll
-- Professional, authoritative, zero fluff
-- No emoji, no casual language
-- Write like a senior industry expert, not a content creator
+FORMAT RULES:
+- Short paragraphs: 1-2 sentences max, then a line break
+- Section headers: ALL CAPS only (no markdown headers)
+- Section dividers: use — — — between major sections
+- Numbered lists: plain numbers only (1. 2. 3.)
+- Sub-bullets: fold into short sentences, never use asterisks or dashes as bullets
+- Tables: convert to plain-text stacked lists with em dashes
+- Spacing: always one blank line between numbered items
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the post. Do NOT use them for bolding, emphasis, titles, headers, or bullet lists. Keep the text strictly plain text without any markdown or asterisk symbols. Use CAPITAL LETTERS for emphasis or headers, and standard unicode bullets like '•' or '-' if list bullets are needed.
 
-STRUCTURE:
-- Line 1: Bold provocative statement or uncomfortable truth
-- Line 2-3: Short setup that creates tension or curiosity
-- Bullet section: 3-4 grouped bullet clusters with bold headers
-  (each bullet is one sharp, specific insight — no padding)
-- Pre-close: One sentence that reinforces the cost of inaction
-- Close: One direct question that triggers comments
+HOOK RULES:
+- First 2-3 lines must create immediate FOMO before the "...see more" cutoff (~210 characters)
+- Lead with a cost, a mistake, or a gap most people don't know they have
+- Make skipping past this feel like leaving money on the table
+- Never start with "I" (LinkedIn algo penalizes it)
 
-CONSTRAINTS:
-- No preamble, no "In today's world", no "Let's dive in"
-- Each bullet must contain a specific fact, number, or action — no vague statements
-- Total length: 250–350 words
-- End with one question to drive engagement
+TONE RULES:
+- No emoji
+- No corporate filler ("I'm excited to share...")
+- No preamble or throat-clearing
+- Confident, direct, slightly provocative
+- Write like someone who knows something most people don't — and is choosing to share it
+
+CLOSING RULES:
+- End with one specific engagement question on its own line
+- One blank line above it
+- The question should trigger self-reflection or mild defensiveness ("have you been doing this wrong?")
+- Never "thoughts?" — make it sharp and specific to the content
 
 Return your response ONLY in this JSON format:
 {
@@ -192,6 +209,7 @@ Rewrite instructions:
 - Incorporate the user feedback. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
 - Maintain a highly polished, professional thought-leadership LinkedIn post structure (compelling hook, clear problem/insight delivery, concrete advice, engagement CTA).
 - DO NOT copy the feedback or transcript verbatim. Keep the tone sophisticated, direct, and elite.
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the generated post content. Use unicode bullets (• or -) if bullets are needed, and CAPITAL LETTERS or line spacing for emphasis/headers.
 
 Return your response ONLY in this JSON format:
 {
@@ -230,15 +248,33 @@ Return your response ONLY in this JSON format:
 
     if (isCarousel) {
       // Map flat JSON structure back to Carousel schema format
+      const slides = (resultJson.slides || []).map((slide: any) => {
+        let cleanTitle = slide.title || "";
+        let cleanBody = slide.body || "";
+        cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+        cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+        return {
+          ...slide,
+          title: cleanTitle,
+          body: cleanBody,
+        };
+      });
+
       const carouselObj = {
         type: "carousel",
-        title: resultJson.title || "VoicePost Carousel",
+        title: (resultJson.title || "VoicePost Carousel").replace(/\*\*/g, "").replace(/\*/g, ""),
         templateId: resultJson.templateId || originalCarouselData?.templateId || "bold_impact",
         accentColor: resultJson.accentColor || originalCarouselData?.accentColor || "#3B82F6",
-        slides: resultJson.slides || [],
+        slides: slides,
       };
       resultJson.post_content = JSON.stringify(carouselObj);
       resultJson.hashtags = resultJson.suggestedHashtags || [];
+    } else if (resultJson.post_content) {
+      let cleanedPostContent = resultJson.post_content;
+      cleanedPostContent = cleanedPostContent.replace(/\*\*/g, "");
+      cleanedPostContent = cleanedPostContent.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");
+      cleanedPostContent = cleanedPostContent.replace(/\*/g, "");
+      resultJson.post_content = cleanedPostContent;
     }
 
     const nextRevisionNum = (post.current_revision || 1) + 1;

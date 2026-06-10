@@ -14,6 +14,7 @@ export interface AntigravityAgentInput {
   linkedin_profile_id?: string;
   post_content?: string;
   image_url?: string;
+  web_search_context?: string;
 }
 
 export interface AntigravityAgentResponse {

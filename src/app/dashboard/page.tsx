@@ -35,8 +35,10 @@ export default function DashboardPage() {
         // Fetch posts
         const postsRes = await fetch("/api/posts");
         const postsData = await postsRes.json();
+        let loadedPosts: any[] = [];
         if (postsData.success && postsData.posts?.length > 0) {
           setPosts(postsData.posts.slice(0, 4));
+          loadedPosts = postsData.posts;
         } else {
           setPosts([]);
         }
@@ -50,13 +52,43 @@ export default function DashboardPage() {
           setScrapingStatus(statusData);
         }
 
-        // Fetch user data (mocked or loaded)
+        // Fetch session data
+        const sessionRes = await fetch("/api/auth/session");
+        const sessionData = await sessionRes.json();
+        
+        const plan = sessionData.user?.plan || "free";
+        const isFree = plan === "free";
+
+        // Calculate posts created this week (since last Monday)
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const lastMonday = new Date(now.setDate(diff));
+        lastMonday.setHours(0, 0, 0, 0);
+
+        const postsThisWeek = loadedPosts.filter((p: any) => {
+          const postDate = new Date(p.created_at);
+          return postDate >= lastMonday;
+        }).length;
+
+        // Calculate posts created this month
+        const postsThisMonth = loadedPosts.filter((p: any) => {
+          const postDate = new Date(p.created_at);
+          const current = new Date();
+          return postDate.getMonth() === current.getMonth() && postDate.getFullYear() === current.getFullYear();
+        }).length;
+
+        const postsUsedCount = isFree ? postsThisWeek : postsThisMonth;
+        const postsLimitVal = isFree 
+          ? (sessionData.user?.posts_limit_weekly || 3) 
+          : (sessionData.user?.posts_limit_monthly || 60);
+
         setUserData({
-          plan: "free",
-          posts_used_this_week: 2, // matches mockup exactly
-          posts_limit_weekly: 3,
-          ai_images_used_this_week: 1,
-          ai_images_limit_weekly: 3,
+          plan: plan,
+          posts_used_this_week: postsUsedCount,
+          posts_limit_weekly: postsLimitVal,
+          ai_images_used_this_week: plan === "free" ? 1 : 10,
+          ai_images_limit_weekly: plan === "free" ? 3 : plan === "starter" ? 10 : plan === "pro" ? 60 : 999999,
         });
       } catch (err) {
         console.error("Dashboard load failed:", err);
@@ -91,16 +123,19 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mt-4">
           {/* Main Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Hero Tagline Rect */}
-            <div className="ios-card p-5 flex items-center gap-4 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 text-white border-none shadow-md">
-              <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/10 shrink-0">
-                <Mic className="w-8 h-8 stroke-[2.5]" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-lg leading-tight">Speak. Publish. Scale.</h3>
-                <p className="text-sm text-cyan-50 font-medium mt-0.5">
-                  Turn 60 seconds of voice into high-quality LinkedIn thought leadership.
-                </p>
+            <div className="space-y-1">
+              <div className="ios-section-label lg:pt-0">Overview</div>
+              {/* Hero Tagline Rect */}
+              <div className="ios-card p-5 flex items-center gap-4 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 text-white border-none shadow-md">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/10 shrink-0">
+                  <Mic className="w-8 h-8 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg leading-tight">Speak. Publish. Scale.</h3>
+                  <p className="text-sm text-cyan-50 font-medium mt-0.5">
+                    Turn 60 seconds of voice into high-quality LinkedIn thought leadership.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -182,7 +217,7 @@ export default function DashboardPage() {
           <div className="space-y-6">
             {/* LinkedIn Connection Status Widget */}
             <div className="space-y-1">
-              <div className="ios-section-label">LinkedIn Account</div>
+              <div className="ios-section-label lg:pt-0">LinkedIn Account</div>
               <div className="ios-card p-4">
                 {linkedinConnected && scrapingStatus ? (
                   <div className="flex flex-col gap-3">
@@ -232,7 +267,7 @@ export default function DashboardPage() {
 
             {/* Weekly Usage Quota Card */}
             <div className="space-y-1">
-              <div className="ios-section-label">This Week</div>
+              <div className="ios-section-label">{userData.plan === "free" ? "This Week" : "This Month"}</div>
               <div className="ios-card p-4">
                 <div>
                   <div className="flex justify-between items-center text-sm font-semibold mb-2">
@@ -250,7 +285,7 @@ export default function DashboardPage() {
                     />
                   </div>
                   <p className="text-[10px] text-zinc-400 mt-2 font-medium">
-                    Resets Monday · {userData.plan === "free" ? "Free plan" : `${userData.plan} plan`}
+                    {userData.plan === "free" ? "Resets Monday" : "Resets Monthly"} · {userData.plan === "free" ? "Free plan" : `${userData.plan} plan`}
                   </p>
                 </div>
               </div>

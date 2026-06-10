@@ -227,7 +227,8 @@ async def run_agent(input_data):
         "3. Use contractions naturally.\n"
         "4. Include exactly ONE personal marker.\n"
         "5. Conforms exactly to the provided writing style configuration.\n"
-        "6. Leverage your custom tools (generate_flux_image, search_unsplash_images) to fetch/generate visual attachments if requested."
+        "6. Leverage your custom tools (generate_flux_image, search_unsplash_images) to fetch/generate visual attachments if requested.\n"
+        "7. NEVER use asterisks (*) or double asterisks (**) anywhere in the post content (e.g., for bolding, emphasis, titles, headers, or bullet points). LinkedIn does not support markdown syntax, so it displays them as raw asterisks. Use CAPITAL LETTERS for emphasis or headers, and standard unicode bullets like '•' or '-' if bullet lists are needed."
     )
     
     config = LocalAgentConfig(
@@ -236,9 +237,18 @@ async def run_agent(input_data):
         tools=[generate_flux_image, search_unsplash_images]
     )
 
+    web_search_context = input_data.get("web_search_context", "")
+
     prompt = (
         f"TRANSCRIPT/IDEA TO REWRITE:\n"
         f"\"{transcript}\"\n\n"
+    )
+    if web_search_context:
+        prompt += (
+            f"ADDITIONAL LATEST WEB SEARCH CONTEXT (Use this to verify/incorporate the latest accurate facts):\n"
+            f"{web_search_context}\n\n"
+        )
+    prompt += (
         f"TARGET STYLE PROFILE:\n"
         f"{json.dumps(style_json, indent=2)}\n\n"
         f"USER CONTEXT:\n"
