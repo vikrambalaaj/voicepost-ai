@@ -175,12 +175,18 @@ export async function POST(
             headers: {
               Authorization: `Bearer ${account.access_token}`,
               "Content-Type": "application/json",
+              "X-Restli-Protocol-Version": "2.0.0",
             },
             body: JSON.stringify({
-              registerRequest: {
+              registerUploadRequest: {
                 recipes: ["urn:li:digitalmediaRecipe:feedshare-document"],
                 owner: account.linkedin_profile_id,
-                relationshipType: "OWNER",
+                serviceRelationships: [
+                  {
+                    identifier: "urn:li:userGeneratedContent",
+                    relationshipType: "OWNER",
+                  },
+                ],
               },
             }),
           });
@@ -227,12 +233,18 @@ export async function POST(
                 headers: {
                   Authorization: `Bearer ${account.access_token}`,
                   "Content-Type": "application/json",
+                  "X-Restli-Protocol-Version": "2.0.0",
                 },
                 body: JSON.stringify({
-                  registerRequest: {
+                  registerUploadRequest: {
                     recipes: ["urn:li:digitalmediaRecipe:feedshare-video"],
                     owner: account.linkedin_profile_id,
-                    relationshipType: "OWNER",
+                    serviceRelationships: [
+                      {
+                        identifier: "urn:li:userGeneratedContent",
+                        relationshipType: "OWNER",
+                      },
+                    ],
                   },
                 }),
               });
@@ -279,12 +291,18 @@ export async function POST(
                 headers: {
                   Authorization: `Bearer ${account.access_token}`,
                   "Content-Type": "application/json",
+                  "X-Restli-Protocol-Version": "2.0.0",
                 },
                 body: JSON.stringify({
-                  registerRequest: {
+                  registerUploadRequest: {
                     recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
                     owner: account.linkedin_profile_id,
-                    relationshipType: "OWNER",
+                    serviceRelationships: [
+                      {
+                        identifier: "urn:li:userGeneratedContent",
+                        relationshipType: "OWNER",
+                      },
+                    ],
                   },
                 }),
               });
