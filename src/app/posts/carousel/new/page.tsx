@@ -1244,6 +1244,85 @@ function CarouselBuilderContent() {
                 </button>
               ))}
             </div>
+
+            {/* Theme & Design Selection */}
+            <div className="border-t border-zinc-150 dark:border-zinc-800 pt-5 space-y-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-1.5 select-none">
+                  <Layout className="w-3.5 h-3.5 text-cyan-400" />
+                  Select Theme / Template
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none scroll-smooth">
+                  {TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleTemplateSelect(t.id)}
+                      className={`flex-shrink-0 w-24 p-1.5 rounded-2xl border text-center cursor-pointer active:scale-95 transition-all bg-white dark:bg-zinc-900 ${
+                        selectedTemplate === t.id ? "border-cyan-500 bg-cyan-950/10" : "border-zinc-200 dark:border-zinc-850"
+                      }`}
+                    >
+                      <p className="font-bold text-[10px] text-zinc-800 dark:text-zinc-200 truncate">{t.name}</p>
+                      <div className="mt-1 w-full aspect-square rounded-lg overflow-hidden flex items-center justify-center border border-zinc-100 dark:border-zinc-800 scale-90 shadow-sm">
+                        <SlideCanvas
+                          slide={{
+                            slideNumber: 1,
+                            type: "cover",
+                            title: "",
+                            body: "",
+                            emoji: t.id === selectedTemplate ? "✨" : "",
+                          }}
+                          templateId={t.id}
+                          accentColor={accentColor}
+                          slideIndex={0}
+                          totalSlides={6}
+                          compact={true}
+                        />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-1.5 select-none">
+                  <Palette className="w-3.5 h-3.5 text-cyan-400" />
+                  Accent Color
+                </p>
+                <div className="ios-card p-3 flex items-center gap-3 overflow-x-auto scrollbar-none bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850">
+                  <div className="flex gap-2">
+                    {COLOR_PALETTES.map((c) => (
+                      <button
+                        key={c.accent}
+                        onClick={() => handleAccentColorSelect(c.accent)}
+                        className="border-none bg-transparent cursor-pointer relative shrink-0"
+                      >
+                        <div
+                          className="w-7 h-7 rounded-full transition-all shadow-md active:scale-90"
+                          style={{ background: `linear-gradient(135deg, ${c.accent} 0%, ${c.dark} 100%)` }}
+                        />
+                        {accentColor === c.accent && (
+                          <div className="absolute inset-0 flex items-center justify-center text-white">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      type="color"
+                      value={accentColor}
+                      onChange={(e) => handleAccentColorSelect(e.target.value)}
+                      className="w-7 h-7 rounded-xl cursor-pointer border-0 bg-transparent shrink-0"
+                    />
+                    <code className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-md uppercase shrink-0">
+                      {accentColor}
+                    </code>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Right Column: Slide Editor & Main CTA Actions */}
