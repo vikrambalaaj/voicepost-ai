@@ -99,7 +99,9 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
       {/* Main Content Layout */}
       <div className="flex-1 flex flex-col h-[100svh] overflow-hidden relative">
         {/* Animated ambient beams background */}
-        <BeamsBackground className="absolute inset-0 z-0 w-full h-full" intensity="medium" />
+        <BeamsBackground className="absolute inset-0 z-0 w-full h-full" intensity="medium">
+          <div />
+        </BeamsBackground>
 
         <main className="ios-scroll relative flex-1 z-10 bg-transparent">
           {/* Content wrapper to center and align beautifully on desktop */}

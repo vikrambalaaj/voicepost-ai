@@ -126,7 +126,7 @@ export default function DashboardPage() {
             <div className="space-y-1">
               <div className="ios-section-label lg:pt-0">Overview</div>
               {/* Hero Tagline Rect */}
-              <div className="ios-card p-5 flex items-center gap-4 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 text-white border-none shadow-md">
+              <div className="ios-card p-5 flex items-center gap-4 !bg-gradient-to-br !from-cyan-400 !via-blue-500 !to-purple-600 text-white border-none shadow-md">
                 <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/10 shrink-0">
                   <Mic className="w-8 h-8 stroke-[2.5]" />
                 </div>
@@ -221,22 +221,22 @@ export default function DashboardPage() {
               <div className="ios-card p-4">
                 {linkedinConnected && scrapingStatus ? (
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 pb-3">
                       <img
                         src={scrapingStatus.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"}
                         alt="LinkedIn Profile"
-                        className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
+                        className="w-11 h-11 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
                       />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 flex flex-col justify-center">
                         <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight truncate font-sans">
                           {scrapingStatus.profile_name}
                         </h4>
-                        <p className="text-[10px] text-zinc-400 leading-normal truncate font-sans">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-normal font-sans mt-0.5">
                           {scrapingStatus.profile_headline || "Connected"}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between pt-2.5 border-t border-zinc-150 dark:border-zinc-800/60">
+                    <div className="flex items-center justify-between pt-3 border-t border-zinc-150 dark:border-zinc-800/60">
                       <Badge className={
                         scrapingStatus.status === "complete" 
                           ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap" 
