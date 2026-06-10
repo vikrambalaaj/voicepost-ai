@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useRef, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
 import {
   ChevronLeft, ChevronRight, Sparkles, Palette, Layout,
@@ -622,8 +622,10 @@ function SlideCanvas({
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
-export default function CarouselBuilderPage() {
+function CarouselBuilderContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryId = searchParams.get("id");
 
   // Step: 1=topic, 2=template+colors, 3=generating, 4=edit+preview, 5=publish
   const [step, setStep] = useState(1);
@@ -643,6 +645,41 @@ export default function CarouselBuilderPage() {
   const [published, setPublished] = useState(false);
   const [postId, setPostId] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  useEffect(() => {
+    if (queryId) {
+      const loadPost = async () => {
+        try {
+          const res = await fetch(`/api/posts/${queryId}`);
+          const data = await res.json();
+          if (data.success && data.post) {
+            const post = data.post;
+            setPostId(post.id);
+            setHashtags(post.hashtags || []);
+            
+            try {
+              const parsed = JSON.parse(post.post_content);
+              if (parsed.type === "carousel") {
+                setCarouselData({
+                  title: parsed.title,
+                  slides: parsed.slides,
+                  suggestedHashtags: post.hashtags || []
+                });
+                setSelectedTemplate(parsed.templateId || "bold_impact");
+                setAccentColor(parsed.accentColor || "#3B82F6");
+                setStep(4);
+              }
+            } catch (err) {
+              console.error("Failed to parse carousel json content:", err);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load carousel post:", err);
+        }
+      };
+      loadPost();
+    }
+  }, [queryId]);
 
   // ── Save to Supabase Helper ──
   const savePostToSupabase = async (contentStr: string, tags: string[], status = "pending_approval") => {
@@ -1481,5 +1518,17 @@ export default function CarouselBuilderPage() {
         {step === 5 && renderStep5()}
       </div>
     </IosShell>
+  );
+}
+
+export default function CarouselBuilderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-white">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    }>
+      <CarouselBuilderContent />
+    </Suspense>
   );
 }

@@ -3,13 +3,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
-import { Mic, Type, Search, ImageIcon, Sparkles, Upload, Check, Trash2, ArrowLeft } from "lucide-react";
+import { Mic, Type, Search, ImageIcon, Sparkles, Upload, Check, Trash2, ArrowLeft, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function CreatePostPage() {
   const router = useRouter();
   const [activeInputMode, setActiveInputMode] = useState<"voice" | "type">("voice");
+  const [postType, setPostType] = useState<"standard" | "carousel">("standard");
+  const [slideCount, setSlideCount] = useState(6);
   
   // Voice Input States
   const [isRecording, setIsRecording] = useState(false);
@@ -394,6 +396,61 @@ export default function CreatePostPage() {
     }
 
     setGeneratingPost(true);
+
+    if (postType === "carousel") {
+      setGenerationStatus("Crafting slide content with AI...");
+      try {
+        const res = await fetch("/api/carousel/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            topic: inputContent, 
+            slideCount 
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.carousel) throw new Error(data.error || "Generation failed");
+
+        setGenerationStatus("Saving carousel draft...");
+        
+        // Save as draft in Supabase
+        const tags = data.carousel.suggestedHashtags || [];
+        const serialized = JSON.stringify({
+          type: "carousel",
+          title: data.carousel.title,
+          slides: data.carousel.slides,
+          templateId: "bold_impact", // default template
+          accentColor: "#3B82F6", // default color
+        });
+
+        const saveRes = await fetch("/api/posts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_content: serialized,
+            hashtags: tags,
+            style_type: "expert",
+            style_id: "lara_acosta",
+            status: "pending_approval",
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok || !saveData.post) throw new Error(saveData.error || "Failed to save draft");
+
+        // Redirect directly to carousel builder page with the post ID
+        router.push(`/posts/carousel/new?id=${saveData.post.id}`);
+      } catch (err: any) {
+        console.error("Carousel generation failed:", err);
+        alert("Carousel generation failed: " + err.message);
+      } finally {
+        setGeneratingPost(false);
+        setGenerationStatus("");
+      }
+      return;
+    }
+
+    // Standard text & image/video logic
     setGenerationStatus(webSearch ? "Searching the web..." : "Rewriting post...");
     try {
       const res = await fetch("/api/content/generate", {
@@ -496,14 +553,14 @@ export default function CreatePostPage() {
         {/* Post Type Selector */}
         <div className="ios-segment mb-6 select-none">
           <button
-            onClick={() => {}}
-            className="ios-segment-btn active"
+            onClick={() => setPostType("standard")}
+            className={`ios-segment-btn ${postType === "standard" ? "active" : ""}`}
           >
             Text & Image Post
           </button>
           <button
-            onClick={() => router.push("/posts/carousel/new")}
-            className="ios-segment-btn"
+            onClick={() => setPostType("carousel")}
+            className={`ios-segment-btn ${postType === "carousel" ? "active" : ""}`}
           >
             LinkedIn Carousel (Slides)
           </button>
@@ -647,218 +704,252 @@ export default function CreatePostPage() {
           </>
         )}
 
-        {/* STEP 2: Style Picker */}
-        <div className="ios-section-label">Step 2 — Pick Writing Style</div>
-        <div className="ios-card p-4">
-          <div className="flex gap-2 mb-3 select-none">
-            <Badge
-              onClick={() => setStyleType("expert")}
-              className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "expert" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
-            >
-              Expert Voices
-            </Badge>
-            <Badge
-              onClick={() => setStyleType("own")}
-              className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "own" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
-            >
-              My Voice DNA
-            </Badge>
-          </div>
-
-          {styleType === "expert" ? (
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none scroll-smooth">
-              {expertStyles.map((style) => (
-                <div
-                  key={style.id}
-                  onClick={() => setSelectedStyleId(style.id)}
-                  className={`flex-shrink-0 w-32 p-3 rounded-2xl border text-center cursor-pointer active:scale-95 transition-all ${
-                    selectedStyleId === style.id ? "border-cyan-500 bg-cyan-950/20" : "border-zinc-200 dark:border-zinc-800"
-                  }`}
+        {postType === "standard" ? (
+          <>
+            {/* STEP 2: Style Picker */}
+            <div className="ios-section-label">Step 2 — Pick Writing Style</div>
+            <div className="ios-card p-4">
+              <div className="flex gap-2 mb-3 select-none">
+                <Badge
+                  onClick={() => setStyleType("expert")}
+                  className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "expert" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
                 >
-                  <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200 truncate">{style.name}</p>
-                  <p className="text-[10px] text-zinc-400 mt-1 truncate">{style.handle}</p>
-                  {selectedStyleId === style.id && (
-                    <div className="mt-2 flex justify-center text-cyan-400">
-                      <Check className="w-4 h-4" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div
-              onClick={() => setSelectedStyleId("own")}
-              className={`p-4 rounded-2xl border cursor-pointer ${
-                selectedStyleId === "own" ? "border-cyan-500 bg-cyan-950/20" : "border-zinc-200 dark:border-zinc-800"
-              }`}
-            >
-              <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Personal Style DNA</p>
-              <p className="text-xs text-zinc-400 mt-1">
-                Generated from your scraped LinkedIn history.
-              </p>
-            </div>
-          )}
-        </div>
+                  Expert Voices
+                </Badge>
+                <Badge
+                  onClick={() => setStyleType("own")}
+                  className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "own" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
+                >
+                  My Voice DNA
+                </Badge>
+              </div>
 
-        {/* STEP 3: Image Picker */}
-        <div className="ios-section-label flex items-center justify-between select-none">
-          <span>Step 3 — Media (Optional)</span>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeImage}
-              onChange={(e) => setIncludeImage(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-650 peer-checked:bg-cyan-500"></div>
-            <span className="ml-2 text-xs font-bold text-zinc-500">
-              {includeImage ? "ON" : "OFF"}
-            </span>
-          </label>
-        </div>
-        
-        {includeImage ? (
-          <div className="ios-card p-4">
-            <div className="flex justify-around border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-4 select-none">
-              <button
-                onClick={() => setImageTab("search")}
-                className={`text-sm font-bold pb-1 ${imageTab === "search" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-              >
-                <Search className="w-3.5 h-3.5 inline mr-1" /> Search
-              </button>
-              <button
-                onClick={() => setImageTab("ai")}
-                className={`text-sm font-bold pb-1 ${imageTab === "ai" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-              >
-                <Sparkles className="w-3.5 h-3.5 inline mr-1" /> AI Generate
-              </button>
-              <button
-                onClick={() => setImageTab("upload")}
-                className={`text-sm font-bold pb-1 ${imageTab === "upload" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-              >
-                <Upload className="w-3.5 h-3.5 inline mr-1" /> Upload
-              </button>
-            </div>
-
-            {imageTab === "search" && (
-              <div>
-                <div className="flex gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search visual ideas..."
-                    className="flex-1 text-sm p-2.5 rounded-xl border bg-transparent focus:outline-none border-zinc-850"
-                  />
-                  <button
-                    onClick={handleImageSearch}
-                    className="rounded-xl px-4 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-bold h-10 border border-zinc-800 cursor-pointer transition-colors"
-                  >
-                    Find
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {searchResults.map((img) => (
+              {styleType === "expert" ? (
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none scroll-smooth">
+                  {expertStyles.map((style) => (
                     <div
-                      key={img.id}
-                      onClick={() => setSelectedImage(img)}
-                      className={`relative aspect-video rounded-lg overflow-hidden border-2 cursor-pointer ${
-                        selectedImage?.id === img.id ? "border-cyan-500 scale-[0.98]" : "border-transparent"
+                      key={style.id}
+                      onClick={() => setSelectedStyleId(style.id)}
+                      className={`flex-shrink-0 w-32 p-3 rounded-2xl border text-center cursor-pointer active:scale-95 transition-all ${
+                        selectedStyleId === style.id ? "border-cyan-500 bg-cyan-950/20" : "border-zinc-200 dark:border-zinc-800"
                       }`}
                     >
-                      <img src={img.thumbnail} alt={img.attribution} className="w-full h-full object-cover" />
-                      {selectedImage?.id === img.id && (
-                        <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center text-white">
-                          <Check className="w-6 h-6 stroke-[3]" />
+                      <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200 truncate">{style.name}</p>
+                      <p className="text-[10px] text-zinc-400 mt-1 truncate">{style.handle}</p>
+                      {selectedStyleId === style.id && (
+                        <div className="mt-2 flex justify-center text-cyan-400">
+                          <Check className="w-4 h-4" />
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div
+                  onClick={() => setSelectedStyleId("own")}
+                  className={`p-4 rounded-2xl border cursor-pointer ${
+                    selectedStyleId === "own" ? "border-cyan-500 bg-cyan-950/20" : "border-zinc-200 dark:border-zinc-800"
+                  }`}
+                >
+                  <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Personal Style DNA</p>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Generated from your scraped LinkedIn history.
+                  </p>
+                </div>
+              )}
+            </div>
 
-            {imageTab === "ai" && (
-              <div className="text-center py-4">
-                {isGeneratingAiImage ? (
-                  <div className="py-4 flex flex-col items-center">
-                    <div className="w-6 h-6 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-2" />
-                    <span className="text-xs text-zinc-400 animate-pulse">Running Flux generation model...</span>
-                  </div>
-                ) : aiGeneratedImage ? (
-                  <div className="flex flex-col items-center">
-                    <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border-2 border-cyan-500">
-                      <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
-                    </div>
-                    <Button onClick={handleAiImageGenerate} variant="outline" className="rounded-xl text-xs py-1 h-8 border-cyan-500/30 text-cyan-400">
-                      Regenerate AI Image
-                    </Button>
-                  </div>
-                ) : (
+            {/* STEP 3: Image Picker */}
+            <div className="ios-section-label flex items-center justify-between select-none">
+              <span>Step 3 — Media (Optional)</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeImage}
+                  onChange={(e) => setIncludeImage(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-650 peer-checked:bg-cyan-500"></div>
+                <span className="ml-2 text-xs font-bold text-zinc-500">
+                  {includeImage ? "ON" : "OFF"}
+                </span>
+              </label>
+            </div>
+            
+            {includeImage ? (
+              <div className="ios-card p-4">
+                <div className="flex justify-around border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-4 select-none">
+                  <button
+                    onClick={() => setImageTab("search")}
+                    className={`text-sm font-bold pb-1 ${imageTab === "search" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+                  >
+                    <Search className="w-3.5 h-3.5 inline mr-1" /> Search
+                  </button>
+                  <button
+                    onClick={() => setImageTab("ai")}
+                    className={`text-sm font-bold pb-1 ${imageTab === "ai" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 inline mr-1" /> AI Generate
+                  </button>
+                  <button
+                    onClick={() => setImageTab("upload")}
+                    className={`text-sm font-bold pb-1 ${imageTab === "upload" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+                  >
+                    <Upload className="w-3.5 h-3.5 inline mr-1" /> Upload
+                  </button>
+                </div>
+
+                {imageTab === "search" && (
                   <div>
-                    <p className="text-xs text-zinc-500 mb-4 max-w-xs mx-auto">
-                      Generate a photorealistic professional image matching your post concept.
-                    </p>
-                    <Button onClick={handleAiImageGenerate} className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl">
-                      <Sparkles className="w-4 h-4 mr-2" /> Generate with Flux
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {imageTab === "upload" && (
-              <div className="text-center py-4">
-                {uploadedImageUrl ? (
-                  <div className="flex flex-col items-center">
-                    <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950 flex items-center justify-center">
-                      {uploadedImageUrl.startsWith("data:video/") ? (
-                        <video src={uploadedImageUrl} controls className="w-full h-full object-cover" />
-                      ) : (
-                        <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
-                      )}
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search visual ideas..."
+                        className="flex-1 text-sm p-2.5 rounded-xl border bg-transparent focus:outline-none border-zinc-850"
+                      />
                       <button
-                        onClick={() => {
-                          setUploadedImageUrl("");
-                          setSelectedImage(null);
-                        }}
-                        className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 p-1.5 rounded-full text-white"
+                        onClick={handleImageSearch}
+                        className="rounded-xl px-4 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-bold h-10 border border-zinc-800 cursor-pointer transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        Find
                       </button>
                     </div>
-                    <span className="text-xs text-cyan-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5 animate-pulse" /> Custom media selected
-                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {searchResults.map((img) => (
+                        <div
+                          key={img.id}
+                          onClick={() => setSelectedImage(img)}
+                          className={`relative aspect-video rounded-lg overflow-hidden border-2 cursor-pointer ${
+                            selectedImage?.id === img.id ? "border-cyan-500 scale-[0.98]" : "border-transparent"
+                          }`}
+                        >
+                          <img src={img.thumbnail} alt={img.attribution} className="w-full h-full object-cover" />
+                          {selectedImage?.id === img.id && (
+                            <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center text-white">
+                              <Check className="w-6 h-6 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <div>
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="image-file-upload"
-                    />
-                    <label
-                      htmlFor="image-file-upload"
-                      className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/40 text-center cursor-pointer hover:border-cyan-500/40 transition-colors max-w-xs mx-auto"
-                    >
-                      <Upload className="w-8 h-8 text-cyan-400 mb-2" />
-                      <span className="text-xs font-bold text-zinc-200">Upload custom media</span>
-                      <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, MP4, WEBM (Max 15MB)</span>
-                    </label>
+                )}
+
+                {imageTab === "ai" && (
+                  <div className="text-center py-4">
+                    {isGeneratingAiImage ? (
+                      <div className="py-4 flex flex-col items-center">
+                        <div className="w-6 h-6 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-2" />
+                        <span className="text-xs text-zinc-400 animate-pulse">Running Flux generation model...</span>
+                      </div>
+                    ) : aiGeneratedImage ? (
+                      <div className="flex flex-col items-center">
+                        <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border-2 border-cyan-500">
+                          <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
+                        </div>
+                        <Button onClick={handleAiImageGenerate} variant="outline" className="rounded-xl text-xs py-1 h-8 border-cyan-500/30 text-cyan-400">
+                          Regenerate AI Image
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-zinc-500 mb-4 max-w-xs mx-auto">
+                          Generate a photorealistic professional image matching your post concept.
+                        </p>
+                        <Button onClick={handleAiImageGenerate} className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl">
+                          <Sparkles className="w-4 h-4 mr-2" /> Generate with Flux
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {imageTab === "upload" && (
+                  <div className="text-center py-4">
+                    {uploadedImageUrl ? (
+                      <div className="flex flex-col items-center">
+                        <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950 flex items-center justify-center">
+                          {uploadedImageUrl.startsWith("data:video/") ? (
+                            <video src={uploadedImageUrl} controls className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
+                          )}
+                          <button
+                            onClick={() => {
+                              setUploadedImageUrl("");
+                              setSelectedImage(null);
+                            }}
+                            className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 p-1.5 rounded-full text-white"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <span className="text-xs text-cyan-400 font-semibold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 animate-pulse" /> Custom media selected
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          id="image-file-upload"
+                        />
+                        <label
+                          htmlFor="image-file-upload"
+                          className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/40 text-center cursor-pointer hover:border-cyan-500/40 transition-colors max-w-xs mx-auto"
+                        >
+                          <Upload className="w-8 h-8 text-cyan-400 mb-2" />
+                          <span className="text-xs font-bold text-zinc-200">Upload custom media</span>
+                          <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, MP4, WEBM (Max 15MB)</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+            ) : (
+              <div className="ios-card p-6 text-center">
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                  No image will be attached to this post.
+                </p>
+              </div>
             )}
-          </div>
+          </>
         ) : (
-          <div className="ios-card p-6 text-center">
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              No image will be attached to this post.
-            </p>
-          </div>
+          <>
+            {/* STEP 2: Slide Configuration */}
+            <div className="ios-section-label">Step 2 — Slide Configuration</div>
+            <div className="ios-card p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Number of slides</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">5–7 slides perform best on LinkedIn</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSlideCount(Math.max(4, slideCount - 1))}
+                    className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
+                  </button>
+                  <span className="text-xl font-black text-zinc-900 dark:text-white w-6 text-center">{slideCount}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSlideCount(Math.min(8, slideCount + 1))}
+                    className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Generate Post Button */}
@@ -875,7 +966,7 @@ export default function CreatePostPage() {
               </>
             ) : (
               <>
-                <Sparkles className="w-5 h-5" /> Generate Post
+                <Sparkles className="w-5 h-5" /> {postType === "standard" ? "Generate Post" : "Generate Carousel"}
               </>
             )}
           </button>
@@ -897,11 +988,17 @@ export default function CreatePostPage() {
               </div>
 
               <h3 className="text-xl font-bold tracking-tight text-white mb-1">
-                {activeStep === 0 && "Performing Web Search..."}
-                {activeStep === 1 && "Analyzing Writing DNA..."}
-                {activeStep === 2 && "Drafting LinkedIn Post..."}
-                {activeStep === 3 && "Optimizing Hashtags & Hooks..."}
-                {activeStep === 4 && "Polishing Final Layout..."}
+                {postType === "carousel" ? (
+                  "Generating LinkedIn Carousel..."
+                ) : (
+                  <>
+                    {activeStep === 0 && "Performing Web Search..."}
+                    {activeStep === 1 && "Analyzing Writing DNA..."}
+                    {activeStep === 2 && "Drafting LinkedIn Post..."}
+                    {activeStep === 3 && "Optimizing Hashtags & Hooks..."}
+                    {activeStep === 4 && "Polishing Final Layout..."}
+                  </>
+                )}
               </h3>
               <p className="text-xs text-zinc-400 mb-6">
                 {generationStatus || "Creating your post using AI..."}
@@ -911,66 +1008,68 @@ export default function CreatePostPage() {
               <div className="w-full bg-zinc-800/80 rounded-full h-2.5 mb-2 overflow-hidden border border-zinc-700/50">
                 <div
                   className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 h-full rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}%` }}
+                  style={{ width: postType === "carousel" ? "75%" : `${Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}%` }}
                 />
               </div>
 
               {/* Timer and percentage */}
               <div className="flex justify-between text-[11px] text-zinc-500 font-bold px-1 mb-8">
-                <span>{Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}% completed</span>
+                <span>{postType === "carousel" ? "Building slides..." : `${Math.min(98, Math.round((generationTime / (webSearch ? 18 : 13)) * 100))}% completed`}</span>
                 <span>{generationTime}s elapsed</span>
               </div>
 
               {/* Step Indicators */}
-              <div className="space-y-3.5 text-left border-t border-zinc-800/60 pt-6">
-                {[
-                  { label: "Web Search Grounding", key: 0, visible: webSearch },
-                  { label: "Analyze target writing style", key: 1, visible: true },
-                  { label: "Ghostwrite post content matching style", key: 2, visible: true },
-                  { label: "Structure relevant hashtags & hooks", key: 3, visible: true },
-                  { label: "Assemble final layout & preview package", key: 4, visible: true },
-                ]
-                  .filter((s) => s.visible)
-                  .map((step, idx) => {
-                    const isDone = activeStep > step.key;
-                    const isActive = activeStep === step.key;
-                    return (
-                      <div
-                        key={step.key}
-                        className={`flex items-center gap-3 transition-opacity duration-300 ${
-                          isDone || isActive ? "opacity-100" : "opacity-35"
-                        }`}
-                      >
+              {postType !== "carousel" && (
+                <div className="space-y-3.5 text-left border-t border-zinc-800/60 pt-6">
+                  {[
+                    { label: "Web Search Grounding", key: 0, visible: webSearch },
+                    { label: "Analyze target writing style", key: 1, visible: true },
+                    { label: "Ghostwrite post content matching style", key: 2, visible: true },
+                    { label: "Structure relevant hashtags & hooks", key: 3, visible: true },
+                    { label: "Assemble final layout & preview package", key: 4, visible: true },
+                  ]
+                    .filter((s) => s.visible)
+                    .map((step, idx) => {
+                      const isDone = activeStep > step.key;
+                      const isActive = activeStep === step.key;
+                      return (
                         <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
-                            isDone
-                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              : isActive
-                              ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 animate-pulse"
-                              : "bg-zinc-850 text-zinc-500 border border-zinc-700/50"
+                          key={step.key}
+                          className={`flex items-center gap-3 transition-opacity duration-300 ${
+                            isDone || isActive ? "opacity-100" : "opacity-35"
                           }`}
                         >
-                          {isDone ? (
-                            <Check className="w-3.5 h-3.5" />
-                          ) : (
-                            idx + 1
-                          )}
+                          <div
+                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
+                              isDone
+                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                : isActive
+                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 animate-pulse"
+                                : "bg-zinc-850 text-zinc-500 border border-zinc-700/50"
+                            }`}
+                          >
+                            {isDone ? (
+                              <Check className="w-3.5 h-3.5" />
+                            ) : (
+                              idx + 1
+                            )}
+                          </div>
+                          <span
+                            className={`text-xs font-semibold ${
+                              isActive
+                                ? "text-cyan-400 animate-pulse"
+                                : isDone
+                                ? "text-zinc-300"
+                                : "text-zinc-500"
+                            }`}
+                          >
+                            {step.label}
+                          </span>
                         </div>
-                        <span
-                          className={`text-xs font-semibold ${
-                            isActive
-                              ? "text-cyan-400 animate-pulse"
-                              : isDone
-                              ? "text-zinc-300"
-                              : "text-zinc-500"
-                          }`}
-                        >
-                          {step.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           </div>
         )}
