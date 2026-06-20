@@ -114,14 +114,6 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
     console.error("Error loading provider configs from DB, using default waterfall:", err);
   }
 
-  // If AssemblyAI API Key is configured, make sure it's in the eligible list (as priority)
-  if (process.env.ASSEMBLYAI_API_KEY) {
-    const assemblyai = PROVIDERS.assemblyai;
-    if (assemblyai && !eligibleProviders.some((p) => p.id === "assemblyai")) {
-      eligibleProviders = [assemblyai, ...eligibleProviders];
-    }
-  }
-
   // If there's a preferred provider, put it first (if eligible)
   if (request.preferredProviderId) {
     const pref = eligibleProviders.find((p) => p.id === request.preferredProviderId);
@@ -310,7 +302,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
           payload.max_tokens = request.maxTokens;
         }
 
-        if (request.responseFormat === "json" && provider.id !== "nvidia" && provider.id !== "assemblyai") {
+        if (request.responseFormat === "json" && provider.id !== "nvidia") {
           payload.response_format = { type: "json_object" };
         }
 
@@ -371,7 +363,6 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
 function getDailyLimit(providerId: string): number {
   switch (providerId) {
-    case "assemblyai": return 5000;
     case "nvidia": return 5000;
     case "google": return 1500;
     case "groq": return 1000;

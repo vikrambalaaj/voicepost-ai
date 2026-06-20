@@ -13,17 +13,6 @@ export interface ProviderConfig {
 }
 
 export const PROVIDERS: Record<string, ProviderConfig> = {
-  assemblyai: {
-    id: "assemblyai",
-    name: "AssemblyAI LLM Gateway",
-    baseUrl: "https://llm-gateway.assemblyai.com/v1",
-    apiKeyEnvVar: "ASSEMBLYAI_API_KEY",
-    models: [
-      "gemini-2.5-flash",
-      "claude-sonnet-4-6"
-    ],
-    priority: 1,
-  },
   nvidia: {
     id: "nvidia",
     name: "NVIDIA NIM",
