@@ -1,9 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 
-// Temporary diagnostic endpoint - checks all expected tables exist in Supabase
-// Access: GET /api/admin/db-check
-export async function GET() {
+// Diagnostic endpoint — checks all expected tables exist in Supabase
+// Access: GET /api/admin/db-check?secret=vp_diag_2026
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get("secret");
+  if (secret !== "vp_diag_2026") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const sb = getServiceSupabase();
 
   const expectedTables = [
