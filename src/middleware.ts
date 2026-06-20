@@ -6,6 +6,9 @@ const PUBLIC_PATHS = [
   "/pricing",
   "/api/auth/linkedin",
   "/api/auth/linkedin/callback",
+  "/api/linkedin/scrape-posts",
+  "/api/style/analyze",
+  "/api/notify/email",
   "/api/admin/db-check",
 ];
 

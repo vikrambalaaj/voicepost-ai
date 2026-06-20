@@ -144,12 +144,14 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
   }
 
   // Determine timeout based on use case
-  // Keep well under Vercel Hobby 10s limit so each provider fails fast
-  let timeoutMs = 8000; // 8s per provider attempt
-  if (request.useCase === "transcript_correction") {
-    timeoutMs = 8000; // 8s
+  // Keep well under Vercel Hobby 10s limit on Vercel, but allow longer locally
+  let timeoutMs = 8000; // 8s default
+  if (!process.env.VERCEL) {
+    timeoutMs = 60000; // 60s locally to allow slower high-quality models to complete
+  } else if (request.useCase === "transcript_correction") {
+    timeoutMs = 8000; // 8s on Vercel
   } else if (request.useCase === "style_analysis") {
-    timeoutMs = 8000; // 8s
+    timeoutMs = 9000; // 9s on Vercel
   }
 
   // Helper to check if a provider has its API key or configuration set

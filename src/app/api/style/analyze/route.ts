@@ -9,13 +9,15 @@ export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    let userId = await getAuthenticatedUserId(req);
+    let userId = null;
+    try {
+      const clonedReq = req.clone();
+      const body = await clonedReq.json();
+      userId = body.userId;
+    } catch {}
+
     if (!userId) {
-      try {
-        const clonedReq = req.clone();
-        const body = await clonedReq.json();
-        userId = body.userId;
-      } catch {}
+      userId = await getAuthenticatedUserId(req);
     }
 
     let user: any = null;
