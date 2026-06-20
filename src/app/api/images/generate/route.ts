@@ -195,10 +195,65 @@ STYLE REFERENCE:
       }
     }
 
-    // Check if image generation succeeded
+    // 3b. Try Hugging Face Inference API if token is configured
+    const hfToken = process.env.HUGGINGFACE_API_KEY || process.env.HF_ACCESS_TOKEN || process.env.HF_API_KEY;
+    if (!generatedImageUrl && hfToken) {
+      try {
+        console.log("[images/generate] Replicate failed or not configured. Trying Hugging Face FLUX.1-schnell...");
+        const hfRes = await fetch("https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${hfToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ inputs: fluxPrompt }),
+        });
+
+        if (hfRes.ok) {
+          const buffer = await hfRes.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString("base64");
+          const contentType = hfRes.headers.get("content-type") || "image/jpeg";
+          generatedImageUrl = `data:${contentType};base64,${base64}`;
+          providerUsed = "FLUX.1-schnell (Hugging Face)";
+          console.log("[images/generate] Successfully generated image via Hugging Face!");
+        } else {
+          const errMsg = await hfRes.text();
+          console.warn(`[images/generate] Hugging Face generation failed: ${hfRes.status} ${errMsg}`);
+        }
+      } catch (hfErr: any) {
+        console.error("[images/generate] Hugging Face generation error:", hfErr.message);
+      }
+    }
+
+    // 3c. Try Pollinations.ai as a keyless, free fallback
     if (!generatedImageUrl) {
       try {
-        console.log("[images/generate] Replicate token missing or generation failed. Fetching dynamic search image...");
+        console.log("[images/generate] Trying Pollinations.ai FLUX (keyless free option)...");
+        // Format prompt for URL
+        const cleanedPrompt = fluxPrompt
+          .replace(/[\r\n]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanedPrompt)}?width=1024&height=576&model=flux&nologo=true&private=true`;
+        
+        // We do a quick fetch to pre-trigger and cache the image on Pollinations' CDN
+        const testRes = await fetch(pollinationUrl);
+        if (testRes.ok) {
+          generatedImageUrl = pollinationUrl;
+          providerUsed = "FLUX (Pollinations.ai)";
+          console.log("[images/generate] Successfully generated/cached image via Pollinations.ai!");
+        } else {
+          console.warn(`[images/generate] Pollinations.ai ping failed: ${testRes.status}`);
+        }
+      } catch (pollinationErr: any) {
+        console.error("[images/generate] Pollinations.ai generation error:", pollinationErr.message);
+      }
+    }
+
+    // Check if image generation succeeded (including Hugging Face and Pollinations.ai)
+    if (!generatedImageUrl) {
+      try {
+        console.log("[images/generate] All AI generators failed or not configured. Fetching dynamic search image...");
         
         // 1. Extract a visual search query (2-3 words)
         const searchKeywordPrompt = `Analyze the following LinkedIn post and extract a 2-3 word visual search query to find a matching symbolic editorial photo on Unsplash (e.g. "growing graph", "puzzle piece", "clean desk", "group meeting").

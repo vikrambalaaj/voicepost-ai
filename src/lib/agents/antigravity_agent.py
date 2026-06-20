@@ -67,8 +67,44 @@ def generate_flux_image(visual_theme: str) -> str:
                             return poll_data["output"][0]
                         elif poll_data["status"] in ["failed", "canceled"]:
                             break
-        except Exception as e:
             sys.stderr.write(f"Replicate FLUX error: {e}\n")
+            
+    # Try Hugging Face Inference API if token is configured
+    hf_token = os.environ.get("HUGGINGFACE_API_KEY") or os.environ.get("HF_ACCESS_TOKEN") or os.environ.get("HF_API_KEY")
+    if hf_token:
+        try:
+            sys.stderr.write("Replicate failed or not configured. Trying Hugging Face FLUX.1-schnell...\n")
+            res = requests.post(
+                "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+                headers={"Authorization": f"Bearer {hf_token}", "Content-Type": "application/json"},
+                json={"inputs": flux_prompt},
+                timeout=15
+            )
+            if res.ok:
+                import base64
+                img_data = res.content
+                b64_str = base64.b64encode(img_data).decode("utf-8")
+                content_type = res.headers.get("content-type", "image/jpeg")
+                return f"data:{content_type};base64,{b64_str}"
+            else:
+                sys.stderr.write(f"Hugging Face generation failed: {res.status_code} {res.text}\n")
+        except Exception as e:
+            sys.stderr.write(f"Hugging Face FLUX error: {e}\n")
+
+    # Try Pollinations.ai as a keyless, free option
+    try:
+        sys.stderr.write("Trying Pollinations.ai FLUX (keyless free option)...\n")
+        import urllib.parse
+        cleaned_prompt = " ".join(flux_prompt.split())
+        poll_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(cleaned_prompt)}?width=1024&height=576&model=flux&nologo=true&private=true"
+        # Pre-trigger and cache the image
+        res = requests.get(poll_url, timeout=10)
+        if res.ok:
+            return poll_url
+        else:
+            sys.stderr.write(f"Pollinations.ai ping failed: {res.status_code}\n")
+    except Exception as e:
+        sys.stderr.write(f"Pollinations.ai FLUX error: {e}\n")
             
     # Fallback mock image
     random_ids = ["1498050108023-c5249f4df085", "1460925895917-afdab827c52f", "1504384308090-c894fdcc538d", "1522071820081-009f0129c71c"]
