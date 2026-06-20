@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { post_id, post_content } = body;
+    const { post_id, post_content, style, aspect_ratio, brand_colors, composition } = body;
 
     if (!post_id || !post_content) {
       return NextResponse.json({ error: "post_id and post_content are required" }, { status: 400 });
@@ -32,48 +32,61 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Extract visual theme using LLM router and generate detailed metaphor prompt
+    const selectedStyle = style || "editorial";
+    const selectedRatio = aspect_ratio || "16:9";
+    const selectedComposition = composition || "contrast";
+    const colors = Array.isArray(brand_colors) && brand_colors.length > 0
+      ? brand_colors.join(", ")
+      : "deep navy, cool white, and a single warm gold accent";
+
+    let styleInstruction = "Shot in the style of high-end business editorial photography reminiscent of Bloomberg, The Wall Street Journal, and Harvard Business Review — clean, intentional, and sophisticated.";
+    let settingOption = "[a minimal modern desk / a clean abstract studio space / a blurred corporate office]";
+    let lightingOption = "[soft cool blue-white / warm directional amber / high-contrast split lighting]";
+    let moodOption = "[stark and aspirational / calm and authoritative / urgent]";
+    let bgOption = "[deep charcoal / pure white / softly blurred]";
+
+    if (selectedStyle === "3d") {
+      styleInstruction = "Shot style: 3D render in the style of minimalist tech assets, frosted glassmorphism, claymorphism, futuristic tech objects. Rendered in a high-end 3D engine like Blender, smooth textures, ray-traced shadows, clean focus.";
+      settingOption = "a clean abstract studio space with minimalist pedestals";
+      bgOption = "clean pastel background or soft studio gray";
+    } else if (selectedStyle === "vector") {
+      styleInstruction = "Shot style: High-end minimalist vector illustration, flat design, clean geometric paths, sharp branding graphics. Reminiscent of modern corporate editorial illustrations, clean, sophisticated, and vector-aligned.";
+      settingOption = "a clean vector grid background";
+      bgOption = "solid clean background color";
+    } else if (selectedStyle === "cyberpunk") {
+      styleInstruction = "Shot style: Cinematic cyberpunk visual style, moody neon highlights, high contrast shadows. Shot on a full-frame camera with a 50mm lens, shallow depth of field, ultra-sharp focus on the key objects.";
+      lightingOption = "strong neon highlights (electric blue, hot pink, or purple), high-contrast shadows";
+      bgOption = "dark neon-drenched background or deep pitch-black";
+    }
+
+    let templateText = "";
+    if (selectedComposition === "hero") {
+      templateText = `A photorealistic editorial photograph illustrating [CORE THEME]. The composition focuses on a single surreal hero object: [HERO OBJECT DESCRIPTION] as the main focal point, representing [what it symbolizes]. The scene is set in ${settingOption}. [No people in frame / a single person photographed from behind / only hands visible interacting with the object]. The lighting is ${lightingOption}, creating a ${moodOption} mood against a ${bgOption} background. The color palette is restrained, built around ${colors}. ${styleInstruction} Captured on a full-frame camera with a 50mm lens, shallow depth of field, ultra-sharp focus on the key object, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+    } else if (selectedComposition === "flatlay") {
+      templateText = `An overhead flat-lay photograph illustrating [CORE THEME], shot from a top-down bird's-eye perspective. On a clean workspace surface, [2-3 symbolic objects] are arranged neatly and deliberately as the focal point, representing [how they embody the message]. The scene is set on ${settingOption}. [No people in frame / only hands visible interacting with the objects]. The lighting is ${lightingOption}, creating a ${moodOption} mood against a ${bgOption} background. The color palette is restrained, built around ${colors}. ${styleInstruction} Captured on a full-frame camera, ultra-sharp focus, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+    } else {
+      // default: contrast
+      templateText = `A photorealistic editorial photograph illustrating [CORE THEME]. The composition uses a clear visual contrast between [OLD STATE / PROBLEM] on the left and [NEW STATE / SOLUTION] on the right. The scene is set in ${settingOption}. In the frame, [2–3 symbolic objects] are arranged deliberately as the focal point, [describe how they embody the message]. [No people in frame / a single person photographed from behind / only hands visible interacting with the objects]. The lighting is ${lightingOption}, creating a ${moodOption} mood against a ${bgOption} background. The color palette is restrained, built around ${colors}. ${styleInstruction} Captured on a full-frame camera with a 50mm lens, shallow depth of field, ultra-sharp focus on the key objects, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+    }
+
     let fluxPrompt = "";
     try {
       const promptGeneratorInstruction = `You are a creative director who generates high-end visual prompts for AI image generation (Flux model).
 Analyze the following LinkedIn post content and output a filled-out visual prompt based on the template below.
 
-TEMPLATE RULES:
-- Fill in the values in brackets [] based on the core message and themes of the post.
-- Create a compelling, creative visual metaphor (e.g. old way vs new way, complexity vs simplicity, chaos vs control).
-- Keep the scene simple: focus on 2-3 key objects, left side represents the problem/old state, right side represents the solution/new state.
-- Keep the style strictly professional editorial (Bloomberg/WSJ/HBR style). No cartoonish or stock-photo feel.
+CRITICAL INSTRUCTIONS:
+- First, identify the core theme of the post. If the post mentions specific technical terms, enterprise plans, or software (like "SAP Max Plan", "EAM", "Datasphere", "Snowflake"), translate them into clear, high-level visual concepts (e.g. "enterprise support scaling", "data synchronization", "database optimization").
+- Make the visual prompt abstract, conceptual, and premium. Avoid drawing literal software menus, charts, screenshots, or corporate logos.
+- Read and analyze the post to identify the core theme, the old state/problem, new state/solution, or key symbolic objects based on the chosen composition.
+- Replace the brackets like [CORE THEME], [OLD STATE / PROBLEM], [NEW STATE / SOLUTION], [HERO OBJECT DESCRIPTION], [2-3 symbolic objects], [describe how they embody the message], etc., with the filled-out values.
+- Make sure to select the most appropriate options inside brackets (e.g. choose between the options provided or use the specified value).
+- The output must be a single cohesive paragraph matching the template exactly. Do not include any bullet points, lists, or markdown.
 
 OUTPUT FORMAT:
 Return ONLY the filled-in template text. No conversational preamble, no markdown backticks, no extra text.
 
 TEMPLATE TO FILL IN:
-Photorealistic editorial-style image representing the concept of [CORE THEME OF YOUR ARTICLE].
-
-VISUAL METAPHOR:
-[Describe the main contrast or idea visually — e.g. "old way vs new way", "complexity vs simplicity", "expensive vs affordable", "chaos vs control"]
-
-SCENE SETUP:
-- Setting: [Minimal desk / Office / Abstract space / Urban environment]
-- Key objects in frame: [2–3 objects that represent your article's message]
-- Left side of frame: [Represents the problem or old state]
-- Right side of frame: [Represents the solution or new state]
-- No people / One person from behind / Hands only
-
-MOOD & LIGHTING:
-- Overall mood: [Stark / Aspirational / Urgent / Clean]
-- Light source: [Cool blue-white / Warm amber / High contrast split lighting]
-- Background: [Deep charcoal / Pure white / Blurred office environment]
-
-COLOR PALETTE:
-- Primary: [e.g. Deep navy, cool white]
-- Accent: [e.g. Warm gold, electric blue]
-- Avoid: Bright colors, gradients, stock-photo feel
-
-STYLE REFERENCE:
-- Shot style: [Bloomberg / WSJ / HBR editorial photography]
-- No text overlays, no infographics, no clip-art
-- Ultra high resolution, sharp focus on [KEY OBJECT]
-- Aspect ratio: 16:9 for LinkedIn banner / 1:1 for post / 4:5 for mobile feed`;
+${templateText}`;
 
       const llmRes = await routeLLMRequest({
         useCase: "keyword_extraction",
@@ -86,40 +99,20 @@ STYLE REFERENCE:
         sessionId: "image-prompt-generation-" + Date.now(),
       });
 
-      fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim();
+      fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim().replace(/\*/g, "");
     } catch (err) {
       console.warn("Failed to generate custom visual metaphor prompt, falling back.", err);
     }
 
     if (!fluxPrompt) {
       // Fallback filled-in prompt
-      fluxPrompt = `Photorealistic editorial-style image representing the concept of professional growth.
-
-VISUAL METAPHOR:
-Complexity vs simplicity.
-
-SCENE SETUP:
-- Setting: Minimal desk
-- Key objects in frame: A simple notebook and a complex stack of wires
-- Left side of frame: Represents chaos and complexity
-- Right side of frame: Represents order and simplicity
-- No people
-
-MOOD & LIGHTING:
-- Overall mood: Clean and aspirational
-- Light source: High contrast split lighting
-- Background: Deep charcoal
-
-COLOR PALETTE:
-- Primary: Deep navy, cool white
-- Accent: Warm gold
-- Avoid: Bright colors, gradients, stock-photo feel
-
-STYLE REFERENCE:
-- Shot style: HBR editorial photography
-- No text overlays, no infographics, no clip-art
-- Ultra high resolution, sharp focus on the notebook
-- Aspect ratio: 16:9 for LinkedIn banner`;
+      if (selectedComposition === "hero") {
+        fluxPrompt = `A photorealistic editorial photograph illustrating professional growth. The composition focuses on a single surreal hero object: a glowing glass lightbulb growing fresh green plant roots from its base as the main focal point, representing innovative ideas taking root. The scene is set in a minimal modern desk. No people in frame. The lighting is soft cool blue-white, creating a stark and aspirational mood against a deep charcoal background. The color palette is restrained, built around deep navy, cool white, and a single warm gold accent. Shot in the style of high-end business editorial photography reminiscent of Bloomberg — clean, intentional, and sophisticated. Captured on a full-frame camera with a 50mm lens, shallow depth of field, ultra-sharp focus on the key object, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+      } else if (selectedComposition === "flatlay") {
+        fluxPrompt = `An overhead flat-lay photograph illustrating professional organization, shot from a top-down bird's-eye perspective. On a clean workspace surface, a sleek modern tablet, a minimalist leather notebook, and a designer pen are arranged neatly and deliberately as the focal point, representing digital efficiency. The scene is set on a minimal modern desk. No people in frame. The lighting is soft cool blue-white, creating a stark and aspirational mood against a deep charcoal background. The color palette is restrained, built around deep navy, cool white, and a single warm gold accent. Shot in the style of high-end business editorial photography reminiscent of Bloomberg — clean, intentional, and sophisticated. Captured on a full-frame camera, ultra-sharp focus, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+      } else {
+        fluxPrompt = `A photorealistic editorial photograph illustrating professional growth. The composition uses a clear visual contrast between a chaotic stack of papers on the left and a single clean tablet on the right. The scene is set in a minimal modern desk. In the frame, the stack of papers and the tablet are arranged deliberately as the focal point, symbolizing the transition from old clutter to digital simplicity. No people in frame. The lighting is soft cool blue-white, creating a stark and aspirational mood against a deep charcoal background. The color palette is restrained, built around deep navy, cool white, and a single warm gold accent. Shot in the style of high-end business editorial photography reminiscent of Bloomberg, The Wall Street Journal, and Harvard Business Review — clean, intentional, and sophisticated. Captured on a full-frame camera with a 50mm lens, shallow depth of field, ultra-sharp focus on the key objects, high dynamic range. No text, no logos, no charts, no infographics, no clip-art. Aspect ratio [${selectedRatio}]`;
+      }
     }
 
     let generatedImageUrl = "";
@@ -141,7 +134,7 @@ STYLE REFERENCE:
             input: {
               prompt: fluxPrompt,
               num_outputs: 1,
-              aspect_ratio: "16:9",
+              aspect_ratio: selectedRatio === "4:5" ? "4:5" : (selectedRatio === "1:1" ? "1:1" : "16:9"),
               output_format: "webp",
               output_quality: 80,
             },
@@ -234,7 +227,18 @@ STYLE REFERENCE:
           .replace(/[\r\n]+/g, " ")
           .replace(/\s+/g, " ")
           .trim();
-        const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanedPrompt)}?width=1024&height=576&model=flux&nologo=true&private=true`;
+        
+        let width = 1024;
+        let height = 576;
+        if (selectedRatio === "1:1") {
+          width = 1024;
+          height = 1024;
+        } else if (selectedRatio === "4:5") {
+          width = 800;
+          height = 1000;
+        }
+        
+        const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanedPrompt)}?width=${width}&height=${height}&model=flux&nologo=true&private=true`;
         
         // We do a quick fetch to pre-trigger and cache the image on Pollinations' CDN
         const testRes = await fetch(pollinationUrl);

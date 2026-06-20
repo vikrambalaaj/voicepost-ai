@@ -129,7 +129,14 @@ export async function POST(req: NextRequest) {
 
     // --- Web Search Grounding ---
     let webSearchContext = "";
-    if (web_search && (process.env.TAVILY_API_KEY || (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX))) {
+    const cleanTranscript = transcript.trim();
+    const isShortInput = cleanTranscript.length < 80 || cleanTranscript.split(/\s+/).length < 12;
+    const shouldSearch = web_search || isShortInput;
+
+    if (shouldSearch && (process.env.TAVILY_API_KEY || (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX))) {
+      if (isShortInput && !web_search) {
+        console.log(`[web-search] Automatically triggering search grounding due to short/vague input: "${cleanTranscript}"`);
+      }
       try {
         const queryRes = await routeLLMRequest({
           useCase: "keyword_extraction",

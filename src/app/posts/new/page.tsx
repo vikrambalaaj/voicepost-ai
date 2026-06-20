@@ -40,6 +40,12 @@ export default function CreatePostPage() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string>("");
   const [includeImage, setIncludeImage] = useState(true);
 
+  // AI Image Customization States
+  const [imageStyle, setImageStyle] = useState<"editorial" | "3d" | "vector" | "cyberpunk">("editorial");
+  const [imageComposition, setImageComposition] = useState<"contrast" | "hero" | "flatlay">("contrast");
+  const [imageAspectRatio, setImageAspectRatio] = useState<"16:9" | "1:1" | "4:5">("16:9");
+  const [brandColors, setBrandColors] = useState("");
+
   // Overall Generation State
   const [generatingPost, setGeneratingPost] = useState(false);
   const [generationStatus, setGenerationStatus] = useState("");
@@ -368,6 +374,10 @@ export default function CreatePostPage() {
         body: JSON.stringify({
           post_id: "00000000-0000-0000-0000-000000000000",
           post_content: activeInputMode === "voice" ? transcript : typedIdea,
+          style: imageStyle,
+          composition: imageComposition,
+          aspect_ratio: imageAspectRatio,
+          brand_colors: brandColors ? brandColors.split(",").map((c) => c.trim()) : undefined,
         }),
       });
       const data = await res.json();
@@ -493,6 +503,10 @@ export default function CreatePostPage() {
                 body: JSON.stringify({
                   post_id: data.post_id,
                   post_content: generatedPostContent,
+                  style: imageStyle,
+                  composition: imageComposition,
+                  aspect_ratio: imageAspectRatio,
+                  brand_colors: brandColors ? brandColors.split(",").map((c) => c.trim()) : undefined,
                 }),
               });
               const genData = await genRes.json();
@@ -838,28 +852,82 @@ export default function CreatePostPage() {
                 )}
 
                 {imageTab === "ai" && (
-                  <div className="text-center py-4">
+                  <div className="text-left py-2 px-1 max-w-sm mx-auto">
                     {isGeneratingAiImage ? (
-                      <div className="py-4 flex flex-col items-center">
-                        <div className="w-6 h-6 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-2" />
-                        <span className="text-xs text-zinc-400 animate-pulse">Running Flux generation model...</span>
-                      </div>
-                    ) : aiGeneratedImage ? (
-                      <div className="flex flex-col items-center">
-                        <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border-2 border-cyan-500">
-                          <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
-                        </div>
-                        <Button onClick={handleAiImageGenerate} variant="outline" className="rounded-xl text-xs py-1 h-8 border-cyan-500/30 text-cyan-400">
-                          Regenerate AI Image
-                        </Button>
+                      <div className="py-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-8 h-8 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-3" />
+                        <span className="text-sm font-medium text-zinc-300">Generating Custom Visual Metaphor...</span>
+                        <span className="text-xs text-zinc-500 mt-1 animate-pulse">Running Flux model via Pollinations.ai</span>
                       </div>
                     ) : (
-                      <div>
-                        <p className="text-xs text-zinc-500 mb-4 max-w-xs mx-auto">
-                          Generate a photorealistic professional image matching your post concept.
-                        </p>
-                        <Button onClick={handleAiImageGenerate} className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl">
-                          <Sparkles className="w-4 h-4 mr-2" /> Generate with Flux
+                      <div className="flex flex-col space-y-4">
+                        {aiGeneratedImage && (
+                          <div className="relative aspect-video w-full rounded-xl overflow-hidden border-2 border-cyan-500">
+                            <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div>
+                            <label className="block text-zinc-400 mb-1 font-semibold">Visual Style</label>
+                            <select
+                              value={imageStyle}
+                              onChange={(e) => setImageStyle(e.target.value as any)}
+                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                            >
+                              <option value="editorial">📸 Editorial</option>
+                              <option value="3d">🎨 3D Glass</option>
+                              <option value="vector">✒️ Vector</option>
+                              <option value="cyberpunk">🌃 Cyberpunk</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-zinc-400 mb-1 font-semibold">Composition</label>
+                            <select
+                              value={imageComposition}
+                              onChange={(e) => setImageComposition(e.target.value as any)}
+                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                            >
+                              <option value="contrast">⚖️ Contrast</option>
+                              <option value="hero">🏆 Hero Object</option>
+                              <option value="flatlay">📐 Flat-lay</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-zinc-400 mb-1 font-semibold">Aspect Ratio</label>
+                            <select
+                              value={imageAspectRatio}
+                              onChange={(e) => setImageAspectRatio(e.target.value as any)}
+                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                            >
+                              <option value="16:9">Wide 16:9</option>
+                              <option value="1:1">Sq 1:1</option>
+                              <option value="4:5">Vert 4:5</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-zinc-400 mb-1 text-xs font-semibold">
+                            Brand Colors <span className="text-[10px] text-zinc-600">(Optional, comma separated)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. navy, cool white, gold"
+                            value={brandColors}
+                            onChange={(e) => setBrandColors(e.target.value)}
+                            className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs h-9 focus:border-cyan-500 outline-none placeholder:text-zinc-700"
+                          />
+                        </div>
+
+                        <Button 
+                          onClick={handleAiImageGenerate} 
+                          className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl h-10 font-medium"
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" /> 
+                          {aiGeneratedImage ? "Regenerate Image" : "Generate with Flux"}
                         </Button>
                       </div>
                     )}
