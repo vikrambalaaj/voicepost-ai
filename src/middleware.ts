@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   "/pricing",
   "/api/auth/linkedin",
   "/api/auth/linkedin/callback",
+  "/api/admin/db-check",
 ];
 
 function isPublicPath(pathname: string): boolean {
