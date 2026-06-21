@@ -282,7 +282,7 @@ CREATE TABLE public.admin_audit_log (
 -- Admins should never see raw post_content, transcripts, audio recordings, or style DNA profiles.
 -- Create privacy views for Admins to access operational metrics without violating privacy.
 
-CREATE OR REPLACE VIEW public.admin_posts AS
+CREATE OR REPLACE VIEW public.admin_posts WITH (security_invoker = true) AS
 SELECT
   id,
   user_id,
@@ -298,7 +298,7 @@ SELECT
   updated_at
 FROM public.posts;
 
-CREATE OR REPLACE VIEW public.admin_voice_recordings AS
+CREATE OR REPLACE VIEW public.admin_voice_recordings WITH (security_invoker = true) AS
 SELECT
   id,
   user_id,
@@ -310,7 +310,7 @@ SELECT
   created_at
 FROM public.voice_recordings;
 
-CREATE OR REPLACE VIEW public.admin_style_profiles AS
+CREATE OR REPLACE VIEW public.admin_style_profiles WITH (security_invoker = true) AS
 SELECT
   id,
   user_id,
@@ -358,6 +358,9 @@ CREATE POLICY linkedin_admin_read ON public.linkedin_accounts
 CREATE POLICY style_owner_all ON public.style_profiles
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+CREATE POLICY style_admin_read ON public.style_profiles
+  FOR SELECT TO authenticated USING (public.check_admin_role());
+
 -- Expert Styles (Seeded - read all, write admin)
 CREATE POLICY expert_styles_read ON public.expert_styles
   FOR SELECT TO public USING (enabled = true);
@@ -376,6 +379,9 @@ CREATE POLICY raw_posts_owner_all ON public.user_posts_raw
 -- Posts
 CREATE POLICY posts_owner_all ON public.posts
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY posts_admin_read ON public.posts
+  FOR SELECT TO authenticated USING (public.check_admin_role());
 
 -- Post Revisions
 CREATE POLICY revisions_owner_all ON public.post_revisions
@@ -398,6 +404,9 @@ CREATE POLICY images_owner_all ON public.post_images
 -- Voice Recordings
 CREATE POLICY recordings_owner_all ON public.voice_recordings
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY recordings_admin_read ON public.voice_recordings
+  FOR SELECT TO authenticated USING (public.check_admin_role());
 
 -- Generation Events
 CREATE POLICY gen_events_owner_all ON public.generation_events
