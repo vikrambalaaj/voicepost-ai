@@ -22,7 +22,10 @@ class MockSupabaseQueryBuilder {
 
   constructor(tableName: string) {
     this.tableName = tableName;
-    this.dbPath = path.join(process.cwd(), "scratch", "db.json");
+    const isVercel = process.env.VERCEL === "1";
+    this.dbPath = isVercel
+      ? path.join("/tmp", "db.json")
+      : path.join(process.cwd(), "scratch", "db.json");
     this.initDb();
   }
 
