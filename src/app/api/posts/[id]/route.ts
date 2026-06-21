@@ -77,7 +77,19 @@ export async function PUT(
     // Find active user
     const userId = await getAuthenticatedUserId(req);
     if (!userId) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Verify post ownership
+    const { data: postExists, error: postErr } = await db
+      .from("posts")
+      .select("id")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (postErr || !postExists) {
+      return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
 
     // If updating post columns

@@ -254,19 +254,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Trigger background post scraping — fire and forget (do NOT await, redirect must be instant)
-  fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, accountId: linkedinAccount.id }),
-  }).catch((err) => console.error("Failed to scrape posts in callback:", err));
-
-  // --- Build redirect response ---
-  const redirectDest = loginPurpose
-    ? "/settings/linkedin/scraping?redirect=/dashboard"
-    : "/settings/linkedin/scraping?redirect=/settings/linkedin";
-  const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
-
   // Set session cookie (30-day expiry)
   const sessionPayload = createSessionCookie({
     userId,
@@ -275,6 +262,22 @@ export async function GET(req: NextRequest) {
     picture: accountInfo.profile_picture_url,
     linkedin_connected: true,
   });
+
+  // Trigger background post scraping — fire and forget (do NOT await, redirect must be instant)
+  fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": `vp_session=${sessionPayload}`,
+    },
+    body: JSON.stringify({ accountId: linkedinAccount.id }),
+  }).catch((err) => console.error("Failed to scrape posts in callback:", err));
+
+  // --- Build redirect response ---
+  const redirectDest = loginPurpose
+    ? "/settings/linkedin/scraping?redirect=/dashboard"
+    : "/settings/linkedin/scraping?redirect=/settings/linkedin";
+  const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
 
   response.cookies.set("vp_session", sessionPayload, {
     httpOnly: true,

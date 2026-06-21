@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { PROVIDERS } from "@/lib/providers/registry";
+import { getAuthenticatedUserId } from "@/lib/auth";
+
+async function verifyAdmin(req: NextRequest) {
+  const db = getServiceSupabase();
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return { error: "Unauthorized", status: 401 };
+
+  const { data: user } = await db.from("users").select("role").eq("id", userId).single();
+  if (user?.role !== "admin") return { error: "Access Denied", status: 403 };
+
+  return { success: true, userId };
+}
 
 export async function GET(req: NextRequest) {
-  const db = getServiceSupabase();
-
-  // 1. Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
-  const isAdmin = user?.role === "admin" || true;
-
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Access Denied" }, { status: 403 });
+  const authCheck = await verifyAdmin(req);
+  if (authCheck.error) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
+
+  const db = getServiceSupabase();
+  const userId = authCheck.userId;
 
   try {
     // 2. Fetch existing provider configurations
@@ -54,7 +63,7 @@ export async function GET(req: NextRequest) {
 
     // Audit action
     await db.from("admin_audit_log").insert({
-      admin_user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+      admin_user_id: userId || "00000000-0000-0000-0000-000000000000",
       action: "READ_PROVIDERS",
       details: "Accessed provider priority mapping page.",
     });
@@ -66,16 +75,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const db = getServiceSupabase();
-
-  // Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
-  const isAdmin = user?.role === "admin" || true;
-
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Access Denied" }, { status: 403 });
+  const authCheck = await verifyAdmin(req);
+  if (authCheck.error) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
+
+  const db = getServiceSupabase();
+  const userId = authCheck.userId;
 
   try {
     const body = await req.json();
@@ -108,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     // Audit action
     await db.from("admin_audit_log").insert({
-      admin_user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+      admin_user_id: userId || "00000000-0000-0000-0000-000000000000",
       action: "UPSERT_PROVIDER",
       details: `Created or updated provider config: ${id}`,
     });

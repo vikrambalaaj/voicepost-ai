@@ -12,13 +12,13 @@ export async function POST(req: NextRequest) {
     const { style_json, topic } = body;
 
     const userId = await getAuthenticatedUserId(req);
-    let user: any = null;
-    if (userId) {
-      const { data } = await db.from("users").select("id, plan").eq("id", userId).single();
-      user = data;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { data: user } = await db.from("users").select("id, plan").eq("id", userId).single();
     if (!user) {
-      user = { id: "00000000-0000-0000-0000-000000000000", plan: "free" };
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const style = style_json || {

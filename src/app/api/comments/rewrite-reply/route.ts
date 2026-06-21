@@ -8,7 +8,10 @@ export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    const userId = await getAuthenticatedUserId(req) || "00000000-0000-0000-0000-000000000000";
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const body = await req.json();
     const { transcript, post_content, comment_text } = body;
 

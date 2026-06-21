@@ -14,16 +14,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "post_id and post_content are required" }, { status: 400 });
     }
 
-    // 1. Fetch user to check quotas and plans
     const userId = await getAuthenticatedUserId(req);
-    let user: any = null;
-    if (userId) {
-      const { data } = await db.from("users").select("id, plan, ai_images_used_this_week, ai_images_limit_weekly").eq("id", userId).single();
-      user = data;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { data: user } = await db.from("users").select("id, plan, ai_images_used_this_week, ai_images_limit_weekly").eq("id", userId).single();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Verify post ownership
+    if (post_id !== "00000000-0000-0000-0000-000000000000") {
+      const { data: post, error: postErr } = await db
+        .from("posts")
+        .select("id")
+        .eq("id", post_id)
+        .eq("user_id", userId)
+        .single();
+      if (postErr || !post) {
+        return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
+      }
     }
 
     // Check plan quotas

@@ -3,6 +3,7 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "../generate/route";
 import { cleanJsonString } from "@/lib/utils";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 
 
@@ -17,15 +18,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "post_id and feedback are required" }, { status: 400 });
     }
 
-    // 1. Fetch current post
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 1. Fetch current post and verify ownership
     const { data: post, error: postErr } = await db
       .from("posts")
       .select("*")
       .eq("id", post_id)
+      .eq("user_id", userId)
       .single();
 
     if (postErr || !post) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
 
     // 2. Fetch past revisions

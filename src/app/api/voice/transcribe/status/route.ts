@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const transcriptId = req.nextUrl.searchParams.get("id");
-  const userId = req.nextUrl.searchParams.get("user_id") || "00000000-0000-0000-0000-000000000000";
+
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const durationSeconds = parseInt(req.nextUrl.searchParams.get("duration") || "30", 10);
   const industry = req.nextUrl.searchParams.get("industry") || "Professional";
   const keywordsRaw = req.nextUrl.searchParams.get("keywords") || "";

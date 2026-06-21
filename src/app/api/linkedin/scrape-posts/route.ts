@@ -30,22 +30,16 @@ export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    let userId = null;
-    let accountId = null;
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
+    let accountId = null;
     try {
       const body = await req.json();
-      userId = body.userId;
       accountId = body.accountId;
     } catch {}
-
-    if (!userId) {
-      userId = await getAuthenticatedUserId(req);
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required or unauthorized" }, { status: 400 });
-    }
 
     if (!accountId) {
       // Find the primary LinkedIn account for this user
@@ -64,22 +58,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "accountId is required and LinkedIn account not found" }, { status: 400 });
     }
 
-    // Set status to running
-    await db
-      .from("linkedin_accounts")
-      .update({ scraping_status: "running" })
-      .eq("id", accountId);
-
-    // Fetch the LinkedIn account
+    // Fetch the LinkedIn account and verify ownership
     const { data: account, error: accErr } = await db
       .from("linkedin_accounts")
       .select("*")
       .eq("id", accountId)
+      .eq("user_id", userId)
       .single();
 
     if (accErr || !account) {
-      return NextResponse.json({ error: "LinkedIn account not found" }, { status: 404 });
+      return NextResponse.json({ error: "LinkedIn account not found or unauthorized" }, { status: 404 });
     }
+
+    // Set status to running
+    await db
+      .from("linkedin_accounts")
+      .update({ scraping_status: "running" })
+      .eq("id", accountId)
+      .eq("user_id", userId);
 
     const isMock = account.access_token.startsWith("mock_") || !process.env.LINKEDIN_CLIENT_ID;
 
@@ -177,8 +173,11 @@ export async function POST(req: NextRequest) {
       try {
         const analyzeRes = await fetch(`${req.nextUrl.origin}/api/style/analyze`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, accountId }),
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": req.headers.get("Cookie") || "",
+          },
+          body: JSON.stringify({ accountId }),
         });
         if (!analyzeRes.ok) {
           console.error("[scrape-posts] Style analysis failed with status:", analyzeRes.status);
@@ -196,7 +195,8 @@ export async function POST(req: NextRequest) {
         posts_scraped_count: postsToSave.length,
         last_scraped_at: new Date().toISOString(),
       })
-      .eq("id", accountId);
+      .eq("id", accountId)
+      .eq("user_id", userId);
 
     if (updateErr) {
       console.error("[scrape-posts] Failed to update scraping status:", updateErr);

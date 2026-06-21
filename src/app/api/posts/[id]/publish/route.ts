@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -11,6 +12,11 @@ export async function POST(
 ) {
   const db = getServiceSupabase();
   const { id } = params;
+
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   // Parse body ONCE — req.json() can only be called once per request
   let backend = "waterfall";
@@ -24,15 +30,16 @@ export async function POST(
   }
 
   try {
-    // 1. Fetch post details
+    // 1. Fetch post details and verify ownership
     const { data: post, error: postErr } = await db
       .from("posts")
       .select("*")
       .eq("id", id)
+      .eq("user_id", userId)
       .single();
 
     if (postErr || !post) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
 
     const userId = post.user_id;

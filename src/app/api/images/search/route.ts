@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 async function fetchWikiImages(query: string) {
   try {
@@ -27,6 +28,11 @@ async function fetchWikiImages(query: string) {
 }
 
 export async function GET(req: NextRequest) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const query = req.nextUrl.searchParams.get("query") || "business growth";
 
   const serperKey = process.env.SERPER_API_KEY;

@@ -158,41 +158,40 @@ export async function GET(req: NextRequest) {
       combos.set("saas & ai|us", { industry: "SaaS & AI", region: "US" });
     }
 
-    const results = [];
+    const combosArray = Array.from(combos.values());
 
-    // 3. Run trend ingestion & LLM distillation for each combination
-    for (const [_, combo] of combos) {
-      const { industry, region } = combo;
+    const processed = await Promise.allSettled(
+      combosArray.map(async (combo) => {
+        const { industry, region } = combo;
 
-      // Ingest in parallel
-      const [gdeltItems, redditItems] = await Promise.all([
-        fetchGdelt(industry, region),
-        fetchReddit(industry, region)
-      ]);
+        // Ingest in parallel
+        const [gdeltItems, redditItems] = await Promise.all([
+          fetchGdelt(industry, region),
+          fetchReddit(industry, region)
+        ]);
 
-      // Normalize & Filter
-      const rawItems = [...gdeltItems, ...redditItems];
-      let filteredItems = rawItems.filter(
-        (item) => item.title && item.title.trim().length > 0 && item.url
-      );
+        // Normalize & Filter
+        const rawItems = [...gdeltItems, ...redditItems];
+        let filteredItems = rawItems.filter(
+          (item) => item.title && item.title.trim().length > 0 && item.url
+        );
 
-      console.log(`[trends] Normalized ${filteredItems.length} items for ${industry}/${region}.`);
+        console.log(`[trends] Normalized ${filteredItems.length} items for ${industry}/${region}.`);
 
-      // Fallback/Seed mock data for local testing or dev fallback if low signal
-      if (filteredItems.length < 5) {
-        console.log(`[trends] Low signal (${filteredItems.length} items) for ${industry}/${region}. Seeding mock raw feeds for testing.`);
-        filteredItems = getMockRawItems(industry, region);
-      }
+        // Fallback/Seed mock data for local testing or dev fallback if low signal
+        if (filteredItems.length < 5) {
+          console.log(`[trends] Low signal (${filteredItems.length} items) for ${industry}/${region}. Seeding mock raw feeds for testing.`);
+          filteredItems = getMockRawItems(industry, region);
+        }
 
-      // Skip if still fewer than 5 items
-      if (filteredItems.length < 5) {
-        console.log(`[trends] Skipping ${industry}/${region} due to insufficient signal (< 5 items).`);
-        results.push({ industry, region, status: "skipped", reason: "insufficient signal" });
-        continue;
-      }
+        // Skip if still fewer than 5 items
+        if (filteredItems.length < 5) {
+          console.log(`[trends] Skipping ${industry}/${region} due to insufficient signal (< 5 items).`);
+          return { industry, region, status: "skipped", reason: "insufficient signal" };
+        }
 
-      // Build Prompt
-      const systemPrompt = `You are a trend-analysis engine for a LinkedIn content tool. You receive a raw list of news articles and forum posts from the last 24 hours. Your job is to distill them into the TOP 10 distinct trending topics that a professional could write a LinkedIn post about, ranked by momentum.
+        // Build Prompt
+        const systemPrompt = `You are a trend-analysis engine for a LinkedIn content tool. You receive a raw list of news articles and forum posts from the last 24 hours. Your job is to distill them into the TOP 10 distinct trending topics that a professional could write a LinkedIn post about, ranked by momentum.
 RULES:
 
 DEDUPLICATE aggressively. Multiple items about the same underlying story or theme = ONE topic. Merge them and treat the combined coverage as a stronger signal. Two articles on "OpenAI release" and one Reddit thread on the same release are ONE topic, not three.
@@ -219,61 +218,65 @@ Raw items (${filteredItems.length} total):
 ${JSON.stringify(filteredItems.slice(0, 40), null, 2)}
 Return the top 10 deduplicated trending topics as JSON.`;
 
-      // Call LLM Router
-      const llmRes = await routeLLMRequest({
-        useCase: "trend_analysis",
-        messages: [{ role: "user", content: systemPrompt }],
-        userId: "00000000-0000-0000-0000-000000000000",
-        userPlan: "agency",
-        sessionId: "cron-trends",
-        preferredProviderId: "nvidia",
-        responseFormat: "json"
-      });
-
-      let parsedPayload: any;
-      try {
-        let cleanText = llmRes.content.trim();
-        if (cleanText.startsWith("```")) {
-          cleanText = cleanText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-        }
-        parsedPayload = JSON.parse(cleanText);
-      } catch (parseErr: any) {
-        console.error(`[trends] Failed to parse LLM response for ${industry}/${region}:`, parseErr, llmRes.content);
-        results.push({ industry, region, status: "failed", reason: "json parse error" });
-        continue;
-      }
-
-      // Validate array of <= 10
-      if (!parsedPayload || !Array.isArray(parsedPayload.topics)) {
-        console.error(`[trends] Invalid structure for ${industry}/${region}: 'topics' not an array.`);
-        results.push({ industry, region, status: "failed", reason: "invalid schema" });
-        continue;
-      }
-
-      if (parsedPayload.topics.length > 10) {
-        parsedPayload.topics = parsedPayload.topics.slice(0, 10);
-      }
-
-      // Upsert into DB
-      const { error: upsertErr } = await db
-        .from("trending_topics")
-        .upsert({
-          industry,
-          region,
-          payload: parsedPayload,
-          computed_at: new Date().toISOString()
-        }, {
-          onConflict: "industry,region"
+        // Call LLM Router
+        const llmRes = await routeLLMRequest({
+          useCase: "trend_analysis",
+          messages: [{ role: "user", content: systemPrompt }],
+          userId: "00000000-0000-0000-0000-000000000000",
+          userPlan: "agency",
+          sessionId: "cron-trends",
+          preferredProviderId: "nvidia",
+          responseFormat: "json"
         });
 
-      if (upsertErr) {
-        console.error(`[trends] Failed to upsert trends for ${industry}/${region}:`, upsertErr);
-        results.push({ industry, region, status: "failed", reason: "database upsert error" });
-      } else {
-        console.log(`[trends] Successfully updated trends for ${industry}/${region}.`);
-        results.push({ industry, region, status: "success", count: parsedPayload.topics.length });
-      }
-    }
+        let parsedPayload: any;
+        try {
+          let cleanText = llmRes.content.trim();
+          if (cleanText.startsWith("```")) {
+            cleanText = cleanText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+          }
+          parsedPayload = JSON.parse(cleanText);
+        } catch (parseErr: any) {
+          console.error(`[trends] Failed to parse LLM response for ${industry}/${region}:`, parseErr, llmRes.content);
+          return { industry, region, status: "failed", reason: "json parse error" };
+        }
+
+        // Validate array of <= 10
+        if (!parsedPayload || !Array.isArray(parsedPayload.topics)) {
+          console.error(`[trends] Invalid structure for ${industry}/${region}: 'topics' not an array.`);
+          return { industry, region, status: "failed", reason: "invalid schema" };
+        }
+
+        if (parsedPayload.topics.length > 10) {
+          parsedPayload.topics = parsedPayload.topics.slice(0, 10);
+        }
+
+        // Upsert into DB
+        const { error: upsertErr } = await db
+          .from("trending_topics")
+          .upsert({
+            industry,
+            region,
+            payload: parsedPayload,
+            computed_at: new Date().toISOString()
+          }, {
+            onConflict: "industry,region"
+          });
+
+        if (upsertErr) {
+          console.error(`[trends] Failed to upsert trends for ${industry}/${region}:`, upsertErr);
+          return { industry, region, status: "failed", reason: "database upsert error" };
+        } else {
+          console.log(`[trends] Successfully updated trends for ${industry}/${region}.`);
+          return { industry, region, status: "success", count: parsedPayload.topics.length };
+        }
+      })
+    );
+
+    const results = processed.map((p) => {
+      if (p.status === "fulfilled") return p.value;
+      return { status: "rejected", reason: p.reason };
+    });
 
     return NextResponse.json({ success: true, processed: results }, { status: 200 });
 

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const db = getServiceSupabase();
 
   // 1. Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  // In a real app we'd verify auth.uid() role in JWT
-  const isAdmin = user?.role === "admin" || true; // Bypass for test/demo ease
+  const { data: user } = await db
+    .from("users")
+    .select("id, role")
+    .eq("id", userId)
+    .single();
 
-  if (!isAdmin) {
+  if (user?.role !== "admin") {
     return NextResponse.json({ error: "Access Denied" }, { status: 403 });
   }
 

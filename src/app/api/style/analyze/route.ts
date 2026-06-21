@@ -9,22 +9,18 @@ export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
-    let userId = null;
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let accountId = null;
     try {
-      const clonedReq = req.clone();
-      const body = await clonedReq.json();
-      userId = body.userId;
+      const body = await req.json();
+      accountId = body.accountId;
     } catch {}
 
-    if (!userId) {
-      userId = await getAuthenticatedUserId(req);
-    }
-
-    let user: any = null;
-    if (userId) {
-      const { data } = await db.from("users").select("id, plan, industry, keywords").eq("id", userId).single();
-      user = data;
-    }
+    const { data: user } = await db.from("users").select("id, plan, industry, keywords").eq("id", userId).single();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -40,9 +36,14 @@ export async function POST(req: NextRequest) {
 
     if (!rawPosts || rawPosts.length < 3) {
       // Set low_data flag in account if we have low data
-      await db.from("linkedin_accounts")
+      const updateQuery = db.from("linkedin_accounts")
         .update({ low_data: true, scraping_status: "complete" })
         .eq("user_id", user.id);
+
+      if (accountId) {
+        updateQuery.eq("id", accountId);
+      }
+      await updateQuery;
 
       // Return a default style profile so user can still proceed
       const defaultStyle = {
