@@ -31,22 +31,21 @@ export default function LinkedInSettingsPage() {
   useEffect(() => {
     async function checkStatus() {
       try {
-        const res = await fetch("/api/linkedin/scraping-status");
-        const data = await res.json();
+        // Fetch status and accounts list in parallel
+        const [statusRes, accsRes] = await Promise.all([
+          fetch("/api/linkedin/scraping-status"),
+          fetch("/api/linkedin/accounts")
+        ]);
+
+        const data = await statusRes.json();
         if (data.status && data.status !== "disconnected") {
           setAccount(data);
 
-          // Fetch all accounts connected to the user
-          try {
-            const accsRes = await fetch("/api/linkedin/accounts");
-            if (accsRes.ok) {
-              const accsData = await accsRes.json();
-              if (accsData.success) {
-                setAccountsList(accsData.accounts || []);
-              }
+          if (accsRes.ok) {
+            const accsData = await accsRes.json();
+            if (accsData.success) {
+              setAccountsList(accsData.accounts || []);
             }
-          } catch (e) {
-            console.error("Failed to fetch accounts list:", e);
           }
           
           // Fetch style profile
@@ -91,16 +90,29 @@ export default function LinkedInSettingsPage() {
       if (selectRes.ok) {
         const selectData = await selectRes.json();
         if (selectData.success) {
-          // Re-fetch scraping status & accounts list
-          const statusRes = await fetch("/api/linkedin/scraping-status");
-          const statusData = await statusRes.json();
-          if (statusData.status && statusData.status !== "disconnected") {
-            setAccount(statusData);
-          }
+          // Re-fetch only the accounts list since we can resolve primary account details from it
           const accsRes = await fetch("/api/linkedin/accounts");
-          const accsData = await accsRes.json();
-          if (accsData.success) {
-            setAccountsList(accsData.accounts || []);
+          if (accsRes.ok) {
+            const accsData = await accsRes.json();
+            if (accsData.success) {
+              const updatedAccounts = accsData.accounts || [];
+              setAccountsList(updatedAccounts);
+              
+              const primary = updatedAccounts.find((a: any) => a.is_primary);
+              if (primary) {
+                setAccount({
+                  status: primary.scraping_status,
+                  posts_scraped: primary.posts_scraped_count,
+                  profile_name: primary.profile_name,
+                  profile_headline: primary.profile_headline || null,
+                  profile_picture_url: primary.profile_picture_url || null,
+                  profile_email: primary.profile_email || null,
+                  linkedin_profile_url: primary.linkedin_profile_id
+                    ? `https://www.linkedin.com/in/${primary.linkedin_profile_id.replace("urn:li:person:", "").replace("urn:li:organization:", "")}`
+                    : null,
+                });
+              }
+            }
           }
         }
       }

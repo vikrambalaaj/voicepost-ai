@@ -211,13 +211,15 @@ export async function GET(req: NextRequest) {
         const orgIds = aclsData.elements?.map((el: any) => el.organizationalTarget) || [];
         const orgs = orgIds.filter((urn: string) => urn.startsWith("urn:li:organization:"));
 
-        for (const orgUrn of orgs) {
-          const orgId = orgUrn.split(":").pop();
-          try {
-            const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~:playableStreams))`, {
-              headers: { Authorization: `Bearer ${accountInfo.access_token}` },
-            });
-            if (orgRes.ok) {
+        // Parallelize fetching details for all managed organization pages
+        await Promise.allSettled(
+          orgs.map(async (orgUrn: string) => {
+            const orgId = orgUrn.split(":").pop();
+            try {
+              const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~:playableStreams))`, {
+                headers: { Authorization: `Bearer ${accountInfo.access_token}` },
+              });
+              if (!orgRes.ok) return;
               const orgData = await orgRes.json();
               
               let logoUrl = "";
@@ -241,11 +243,11 @@ export async function GET(req: NextRequest) {
                 account_type: "organization",
                 last_scraped_at: new Date().toISOString(),
               }, { onConflict: "user_id,linkedin_profile_id" });
+            } catch (err) {
+              console.warn(`Failed to fetch details for organization ${orgUrn}:`, err);
             }
-          } catch (err) {
-            console.warn(`Failed to fetch details for organization ${orgUrn}:`, err);
-          }
-        }
+          })
+        );
       }
     } catch (err) {
       console.warn("LinkedIn Pages API access failed:", err);

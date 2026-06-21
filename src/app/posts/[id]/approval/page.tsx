@@ -1073,6 +1073,30 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const getWhatsAppShareLink = () => {
+    let rawText = "";
+    if (isCarousel && carouselData) {
+      rawText = (carouselData.title || "") + "\n\n" + 
+        carouselData.slides.map((s: any, idx: number) => `Slide ${idx + 1}: ${s.title || ""}\n${s.body || ""}`).join("\n\n");
+    } else {
+      rawText = postContent;
+    }
+
+    const maxTextLength = 600;
+    if (rawText.length > maxTextLength) {
+      rawText = rawText.substring(0, maxTextLength) + "... (truncated)";
+    }
+
+    const tagLines = hashtags.length > 0
+      ? "\n\n" + hashtags.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ")
+      : "";
+    const imgLine = activeImage?.url ? `\n\nImage: ${activeImage.url}` : "";
+    const linkLine = post?.linkedin_post_url ? `\n\nLink: ${post.linkedin_post_url}` : "";
+
+    const fullMessage = `${rawText}${tagLines}${imgLine}${linkLine}`;
+    return `https://api.whatsapp.com/send?text=${encodeURIComponent(fullMessage)}`;
+  };
+
   // Handle Request Changes / Regenerate
   const handleRegenerate = async () => {
     if (!feedback.trim()) {
@@ -1581,15 +1605,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               </button>
 
               <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  (isCarousel && carouselData
-                    ? (carouselData.title || "") + "\n\n" + carouselData.slides.map((s: any, idx: number) => `Slide ${idx + 1}: ${s.title || ""}\n${s.body || ""}`).join("\n\n")
-                    : postContent) +
-                  "\n\n" +
-                  hashtags.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") +
-                  (activeImage?.url ? `\n\nImage: ${activeImage.url}` : "") +
-                  (post?.linkedin_post_url ? `\n\nLink: ${post.linkedin_post_url}` : "")
-                )}`}
+                href={getWhatsAppShareLink()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200 no-underline"
