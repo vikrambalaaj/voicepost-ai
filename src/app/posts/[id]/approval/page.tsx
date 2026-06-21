@@ -1580,6 +1580,26 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 )}
               </button>
 
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                  (isCarousel && carouselData
+                    ? (carouselData.title || "") + "\n\n" + carouselData.slides.map((s: any, idx: number) => `Slide ${idx + 1}: ${s.title || ""}\n${s.body || ""}`).join("\n\n")
+                    : postContent) +
+                  "\n\n" +
+                  hashtags.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") +
+                  (activeImage?.url ? `\n\nImage: ${activeImage.url}` : "") +
+                  (post?.linkedin_post_url ? `\n\nLink: ${post.linkedin_post_url}` : "")
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none text-[17px] font-semibold cursor-pointer transition-all duration-200 no-underline"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.424 5.429 0 12.085 0c3.225.001 6.258 1.258 8.54 3.541 2.283 2.283 3.538 5.32 3.538 8.545 0 6.661-5.429 12.085-12.088 12.085-2.007-.001-3.98-.502-5.732-1.464L0 24zm6.076-3.488c1.65.981 3.267 1.498 4.908 1.499 5.568 0 10.101-4.53 10.105-10.103.002-2.701-1.047-5.241-2.956-7.151C16.281 2.847 13.743 1.797 11.047 1.797c-5.572 0-10.105 4.534-10.109 10.107-.002 1.812.479 3.582 1.393 5.161l-.92 3.364 3.447-.905.175.104zM16.59 13.9c-.3-.15-1.78-.88-2.03-1.025-.25-.09-.43-.15-.61.15-.18.3-.7.88-.86 1.05-.16.18-.32.2-.62.05-.3-.15-1.27-.47-2.42-1.5-1-.89-1.675-2-1.875-2.35-.2-.3-.02-.45.13-.6.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.02-.53-.07-.15-.6-1.46-.82-2-1.99-.215-.26-.15-.43-.15-.6 0-.18-.08-.3-.08-.43 0-.15-.05-.3-.05-.45c-.07-.15-.3-.23-.6-.08-2.61 1.31-2.82 4.82-2.82 5.09 0 .27.1 2.69 2.5 5.04 1.71 1.68 3.51 2.76 5.36 3.42.92.33 1.76.27 2.42.17.74-.11 2.27-.93 2.59-1.83.32-.9.32-1.67.23-1.83-.09-.15-.3-.25-.6-.4z"/>
+                </svg>
+                Forward to WhatsApp
+              </a>
+
               <button
                 onClick={() => setShowFeedbackInput(true)}
                 className="w-[calc(100%-32px)] md:w-auto md:px-8 mx-4 md:mx-0 my-2 bg-transparent hover:bg-red-500/10 text-red-500 hover:text-red-400 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-98 border border-red-500/30 text-[17px] font-semibold cursor-pointer transition-all duration-200"

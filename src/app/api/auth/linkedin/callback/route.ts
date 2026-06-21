@@ -158,6 +158,7 @@ export async function GET(req: NextRequest) {
       profile_email: accountInfo.profile_email || "",
       scraping_status: "running",
       is_primary: true,
+      account_type: "personal",
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "user_id,linkedin_profile_id" })
     .select()
@@ -167,6 +168,88 @@ export async function GET(req: NextRequest) {
     console.error("Failed to save linkedin account:", accError);
     const dest = loginPurpose ? "/login?error=db_error" : "/settings/linkedin?status=db_error";
     return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
+  }
+
+  // --- Fetch and Upsert LinkedIn Pages ---
+  if (isMock) {
+    // Seed mock pages for the user in the database
+    await db.from("linkedin_accounts").upsert({
+      user_id: userId,
+      linkedin_profile_id: "urn:li:organization:mock_scaleup_solutions",
+      access_token: accountInfo.access_token,
+      profile_name: "ScaleUp Solutions (Company Page)",
+      profile_headline: "LinkedIn Company Page",
+      profile_picture_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60",
+      profile_email: accountInfo.profile_email || "",
+      scraping_status: "complete",
+      is_primary: false,
+      account_type: "organization",
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "user_id,linkedin_profile_id" });
+
+    await db.from("linkedin_accounts").upsert({
+      user_id: userId,
+      linkedin_profile_id: "urn:li:organization:mock_cloudnative_inc",
+      access_token: accountInfo.access_token,
+      profile_name: "CloudNative Inc (Company Page)",
+      profile_headline: "LinkedIn Company Page",
+      profile_picture_url: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=80&auto=format&fit=crop&q=60",
+      profile_email: accountInfo.profile_email || "",
+      scraping_status: "complete",
+      is_primary: false,
+      account_type: "organization",
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "user_id,linkedin_profile_id" });
+  } else {
+    // Real LinkedIn Pages lookup
+    try {
+      const aclsRes = await fetch("https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", {
+        headers: { Authorization: `Bearer ${accountInfo.access_token}` },
+      });
+      if (aclsRes.ok) {
+        const aclsData = await aclsRes.json();
+        const orgIds = aclsData.elements?.map((el: any) => el.organizationalTarget) || [];
+        const orgs = orgIds.filter((urn: string) => urn.startsWith("urn:li:organization:"));
+
+        for (const orgUrn of orgs) {
+          const orgId = orgUrn.split(":").pop();
+          try {
+            const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~:playableStreams))`, {
+              headers: { Authorization: `Bearer ${accountInfo.access_token}` },
+            });
+            if (orgRes.ok) {
+              const orgData = await orgRes.json();
+              
+              let logoUrl = "";
+              try {
+                const logoStreams = orgData.logoV2?.["original~"]?.elements || [];
+                if (logoStreams.length > 0) {
+                  logoUrl = logoStreams[0].identifiers?.[0]?.identifier || "";
+                }
+              } catch {}
+
+              await db.from("linkedin_accounts").upsert({
+                user_id: userId,
+                linkedin_profile_id: orgUrn,
+                access_token: accountInfo.access_token,
+                profile_name: orgData.localizedName || "LinkedIn Page",
+                profile_headline: "LinkedIn Company Page",
+                profile_picture_url: logoUrl,
+                profile_email: accountInfo.profile_email || "",
+                scraping_status: "complete",
+                is_primary: false,
+                account_type: "organization",
+                last_scraped_at: new Date().toISOString(),
+              }, { onConflict: "user_id,linkedin_profile_id" });
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch details for organization ${orgUrn}:`, err);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("LinkedIn Pages API access failed:", err);
+    }
   }
 
   // Trigger background post scraping — fire and forget (do NOT await, redirect must be instant)

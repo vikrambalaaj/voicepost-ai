@@ -40,6 +40,7 @@ class MockSupabaseQueryBuilder {
         data = JSON.parse(fs.readFileSync(this.dbPath, "utf8"));
       } catch {}
     }
+    let updated = false;
     if (!data.users || data.users.length === 0) {
       data.users = [
         {
@@ -54,6 +55,56 @@ class MockSupabaseQueryBuilder {
           created_at: new Date().toISOString()
         }
       ];
+      updated = true;
+    }
+    if (!data.linkedin_accounts || data.linkedin_accounts.length === 0) {
+      data.linkedin_accounts = [
+        {
+          id: "mock_account_john_doe",
+          user_id: "f868e53c-80eb-4855-a289-e3cfe803ec33",
+          linkedin_profile_id: "urn:li:person:mock_john_doe",
+          access_token: "mock_token_xyz123",
+          profile_name: "Bala J (Personal Profile)",
+          profile_headline: "Tech Founder | Building AI automation for creators",
+          profile_picture_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
+          profile_email: "balamurugan@linkedinpost.com",
+          scraping_status: "complete",
+          is_primary: true,
+          account_type: "personal",
+          created_at: new Date().toISOString()
+        },
+        {
+          id: "mock_account_scaleup",
+          user_id: "f868e53c-80eb-4855-a289-e3cfe803ec33",
+          linkedin_profile_id: "urn:li:organization:mock_scaleup_solutions",
+          access_token: "mock_token_xyz123",
+          profile_name: "ScaleUp Solutions (Company Page)",
+          profile_headline: "LinkedIn Company Page",
+          profile_picture_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60",
+          profile_email: "balamurugan@linkedinpost.com",
+          scraping_status: "complete",
+          is_primary: false,
+          account_type: "organization",
+          created_at: new Date().toISOString()
+        },
+        {
+          id: "mock_account_cloudnative",
+          user_id: "f868e53c-80eb-4855-a289-e3cfe803ec33",
+          linkedin_profile_id: "urn:li:organization:mock_cloudnative_inc",
+          access_token: "mock_token_xyz123",
+          profile_name: "CloudNative Inc (Company Page)",
+          profile_headline: "LinkedIn Company Page",
+          profile_picture_url: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=80&auto=format&fit=crop&q=60",
+          profile_email: "balamurugan@linkedinpost.com",
+          scraping_status: "complete",
+          is_primary: false,
+          account_type: "organization",
+          created_at: new Date().toISOString()
+        }
+      ];
+      updated = true;
+    }
+    if (updated) {
       fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
     }
   }
@@ -262,19 +313,7 @@ class MockSupabaseClient {
 const isPlaceholder = !supabaseUrl || supabaseUrl.includes("placeholder-project") || supabaseUrl.includes("your-supabase-project");
 
 const createProxiedClient = (client: any) => {
-  return new Proxy(client, {
-    get(target, prop, receiver) {
-      if (prop === "from") {
-        return (tableName: string) => {
-          if (tableName === "post_comments" || tableName === "trending_topics" || tableName === "users") {
-            return new MockSupabaseQueryBuilder(tableName);
-          }
-          return target.from(tableName);
-        };
-      }
-      return Reflect.get(target, prop, receiver);
-    },
-  });
+  return client;
 };
 
 const rawSupabase = isPlaceholder

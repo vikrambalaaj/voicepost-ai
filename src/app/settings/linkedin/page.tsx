@@ -11,6 +11,8 @@ export default function LinkedInSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [account, setAccount] = useState<any>(null);
   const [showConfirmDisconnect, setShowConfirmDisconnect] = useState(false);
+  const [accountsList, setAccountsList] = useState<any[]>([]);
+  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
 
   // Style profile states
   const [styleProfile, setStyleProfile] = useState<any>(null);
@@ -33,6 +35,19 @@ export default function LinkedInSettingsPage() {
         const data = await res.json();
         if (data.status && data.status !== "disconnected") {
           setAccount(data);
+
+          // Fetch all accounts connected to the user
+          try {
+            const accsRes = await fetch("/api/linkedin/accounts");
+            if (accsRes.ok) {
+              const accsData = await accsRes.json();
+              if (accsData.success) {
+                setAccountsList(accsData.accounts || []);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch accounts list:", e);
+          }
           
           // Fetch style profile
           const profileRes = await fetch("/api/style/profile");
@@ -64,6 +79,37 @@ export default function LinkedInSettingsPage() {
     }
     checkStatus();
   }, []);
+
+  const handleSelectAccount = async (accountId: string) => {
+    setSwitchingAccountId(accountId);
+    try {
+      const selectRes = await fetch("/api/linkedin/accounts/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId }),
+      });
+      if (selectRes.ok) {
+        const selectData = await selectRes.json();
+        if (selectData.success) {
+          // Re-fetch scraping status & accounts list
+          const statusRes = await fetch("/api/linkedin/scraping-status");
+          const statusData = await statusRes.json();
+          if (statusData.status && statusData.status !== "disconnected") {
+            setAccount(statusData);
+          }
+          const accsRes = await fetch("/api/linkedin/accounts");
+          const accsData = await accsRes.json();
+          if (accsData.success) {
+            setAccountsList(accsData.accounts || []);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to switch account:", err);
+    } finally {
+      setSwitchingAccountId(null);
+    }
+  };
 
   const handleConnect = () => {
     // Redirect to LinkedIn OAuth API route
@@ -173,6 +219,58 @@ export default function LinkedInSettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Switch posting target */}
+                {accountsList.length > 1 && (
+                  <div className="space-y-2">
+                    <div className="ios-section-label">Switch posting target</div>
+                    <div className="space-y-2">
+                      {accountsList.map((accItem) => (
+                        <div
+                          key={accItem.id}
+                          className={`ios-card p-3.5 flex items-center justify-between bg-white dark:bg-zinc-900 border ${accItem.is_primary ? "border-blue-500/50 dark:border-blue-500/40" : "border-zinc-200 dark:border-zinc-800"}`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {accItem.profile_picture_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={accItem.profile_picture_url}
+                                alt={accItem.profile_name}
+                                className="w-9 h-9 rounded-full object-cover shrink-0 border border-zinc-200 dark:border-zinc-800"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-blue-600/10 flex items-center justify-center text-blue-600 shrink-0 border border-blue-500/20">
+                                <Link2 className="w-5 h-5" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <h5 className="font-bold text-zinc-900 dark:text-white leading-tight text-xs flex items-center gap-1">
+                                {accItem.profile_name}
+                              </h5>
+                              <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 ${accItem.account_type === "personal" ? "bg-zinc-100 dark:bg-zinc-850 text-zinc-500" : "bg-purple-500/10 text-purple-400"}`}>
+                                {accItem.account_type === "personal" ? "Personal" : "Company Page"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {accItem.is_primary ? (
+                            <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2.5 py-1 rounded-full flex items-center gap-1 select-none shrink-0">
+                              <CheckCircle2 className="w-3 h-3" /> Active
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleSelectAccount(accItem.id)}
+                              disabled={switchingAccountId !== null}
+                              className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-xl text-[10px] font-bold border-none cursor-pointer transition-colors active:scale-95 disabled:opacity-50 shrink-0"
+                            >
+                              {switchingAccountId === accItem.id ? "..." : "Select"}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Warning yellow badge if low data */}
                 {account.status === "low_data" && (
