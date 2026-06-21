@@ -234,18 +234,37 @@ class MockSupabaseClient {
 
 const isPlaceholder = !supabaseUrl || supabaseUrl.includes("placeholder-project") || supabaseUrl.includes("your-supabase-project");
 
-export const supabase = isPlaceholder 
+const createProxiedClient = (client: any) => {
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (prop === "from") {
+        return (tableName: string) => {
+          if (tableName === "post_comments") {
+            return new MockSupabaseQueryBuilder(tableName);
+          }
+          return target.from(tableName);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+};
+
+const rawSupabase = isPlaceholder
   ? (new MockSupabaseClient() as any)
   : createClient(supabaseUrl, supabaseAnonKey);
+
+export const supabase = isPlaceholder ? rawSupabase : createProxiedClient(rawSupabase);
 
 export const getServiceSupabase = () => {
   if (isPlaceholder) {
     return new MockSupabaseClient() as any;
   }
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  const rawService = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
   });
+  return createProxiedClient(rawService);
 };

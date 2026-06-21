@@ -670,6 +670,17 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   // Publish States
   const [publishing, setPublishing] = useState(false);
 
+  // Comments & Engagement States
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentReplies, setCommentReplies] = useState<Record<string, string>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string[]>>({});
+  const [loadingDrafts, setLoadingDrafts] = useState<Record<string, boolean>>({});
+  const [voiceRecordingCommentId, setVoiceRecordingCommentId] = useState<string | null>(null);
+  const [voiceTranscribingCommentId, setVoiceTranscribingCommentId] = useState<string | null>(null);
+  const [postingReply, setPostingReply] = useState<Record<string, boolean>>({});
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+
   // Carousel Specific States
   const [isCarousel, setIsCarousel] = useState(false);
   const [carouselData, setCarouselData] = useState<any>(null);
@@ -728,6 +739,148 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
     loadPostData();
   }, [id]);
+
+  useEffect(() => {
+    if (post?.id) {
+      fetchComments();
+    }
+  }, [post?.id]);
+
+  const fetchComments = async () => {
+    setLoadingComments(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/comments`);
+      const data = await res.json();
+      if (data.success) {
+        setComments(data.comments || []);
+      }
+    } catch (err) {
+      console.error("Failed to load comments:", err);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleGenerateDrafts = async (comment: any) => {
+    const cid = comment.id;
+    setLoadingDrafts((prev) => ({ ...prev, [cid]: true }));
+    try {
+      const res = await fetch("/api/comments/draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_content: postContent,
+          comment_text: comment.comment_text
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.options) {
+        setCommentDrafts((prev) => ({ ...prev, [cid]: data.options }));
+      }
+    } catch (err) {
+      console.error("Failed to generate drafts:", err);
+    } finally {
+      setLoadingDrafts((prev) => ({ ...prev, [cid]: false }));
+    }
+  };
+
+  const startVoiceRecording = async (cid: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const chunks: Blob[] = [];
+      
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: "audio/webm" });
+        setVoiceTranscribingCommentId(cid);
+        
+        try {
+          const formData = new FormData();
+          formData.append("file", audioBlob, "comment_reply.webm");
+          
+          const transcribeRes = await fetch("/api/voice/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          const transcribeData = await transcribeRes.json();
+          
+          if (transcribeData.success && transcribeData.transcript) {
+            const rawTranscript = transcribeData.transcript;
+            
+            const rewriteRes = await fetch("/api/comments/rewrite-reply", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                transcript: rawTranscript,
+                post_content: postContent,
+                comment_text: comments.find(c => c.id === cid)?.comment_text
+              })
+            });
+            const rewriteData = await rewriteRes.json();
+            
+            if (rewriteData.success && rewriteData.rewritten_reply) {
+              setCommentReplies((prev) => ({ ...prev, [cid]: rewriteData.rewritten_reply }));
+            }
+          }
+        } catch (err) {
+          console.error("Voice reply processing failed:", err);
+          alert("Voice processing failed. Please try typing your reply.");
+        } finally {
+          setVoiceTranscribingCommentId(null);
+        }
+      };
+
+      setMediaRecorder(recorder);
+      setVoiceRecordingCommentId(cid);
+      recorder.start();
+    } catch (err) {
+      console.error("Failed to access microphone:", err);
+      alert("Microphone access denied or not supported.");
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+    setVoiceRecordingCommentId(null);
+  };
+
+  const handlePostReply = async (commentId: string) => {
+    const replyText = commentReplies[commentId]?.trim();
+    if (!replyText) {
+      alert("Please enter or select a reply draft first.");
+      return;
+    }
+
+    setPostingReply((prev) => ({ ...prev, [commentId]: true }));
+    try {
+      const res = await fetch(`/api/posts/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          comment_id: commentId,
+          reply_text: replyText
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchComments();
+        alert("Reply successfully posted!");
+      } else {
+        alert("Failed to post reply: " + data.error);
+      }
+    } catch (err) {
+      console.error("Failed to post reply:", err);
+    } finally {
+      setPostingReply((prev) => ({ ...prev, [commentId]: false }));
+    }
+  };
 
   // Handle Hashtag management
   const handleRemoveHash = (idx: number) => {
@@ -1433,6 +1586,156 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               >
                 Request changes
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Engagement Comments Console */}
+        <div className="ios-section-label">LinkedIn Comments & Engagement</div>
+        <div className="ios-card p-4 space-y-4 mb-6">
+          {loadingComments ? (
+            <div className="py-6 flex flex-col items-center">
+              <Loader2 className="w-6 h-6 animate-spin text-cyan-500 mb-2" />
+              <span className="text-xs text-zinc-500 font-medium">Checking LinkedIn comments...</span>
+            </div>
+          ) : comments.length === 0 ? (
+            <p className="text-xs text-zinc-500 text-center py-4">No comments found on this post yet.</p>
+          ) : (
+            <div className="space-y-6">
+              {comments.map((comment) => {
+                const cid = comment.id;
+                const drafts = commentDrafts[cid] || [];
+                const isDrafting = loadingDrafts[cid];
+                const isRecording = voiceRecordingCommentId === cid;
+                const isTranscribing = voiceTranscribingCommentId === cid;
+                const isPosting = postingReply[cid];
+
+                return (
+                  <div key={cid} className="border-b border-zinc-200 dark:border-zinc-800 pb-6 last:border-0 last:pb-0">
+                    {/* Commenter info */}
+                    <div className="flex items-start gap-2.5 mb-2.5">
+                      <div className="w-8 h-8 rounded-full bg-cyan-950/40 border border-cyan-500/20 text-cyan-400 font-bold flex items-center justify-center text-xs shrink-0 select-none">
+                        {comment.commenter_name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-800 dark:text-white truncate">
+                            {comment.commenter_name}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {new Date(comment.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 truncate">{comment.commenter_headline}</p>
+                      </div>
+                    </div>
+
+                    {/* Comment Text */}
+                    <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed mb-3">
+                      {comment.comment_text}
+                    </div>
+
+                    {/* Existing Reply if already posted */}
+                    {comment.reply_text ? (
+                      <div className="ml-6 border-l-2 border-green-500 pl-3 py-0.5 space-y-1">
+                        <span className="text-[10px] font-bold text-green-500 uppercase tracking-wider block">Your Reply:</span>
+                        <p className="text-xs text-zinc-800 dark:text-zinc-300 leading-relaxed bg-green-50/10 p-2.5 rounded-xl border border-green-500/10">
+                          {comment.reply_text}
+                        </p>
+                      </div>
+                    ) : (
+                      /* Drafting and Action Panel */
+                      <div className="space-y-3">
+                        {/* 3 Auto Draft options */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Suggested Replies</span>
+                            <button
+                              onClick={() => handleGenerateDrafts(comment)}
+                              disabled={isDrafting}
+                              className="text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 bg-transparent border-none cursor-pointer flex items-center gap-1"
+                            >
+                              {isDrafting ? "Drafting..." : (drafts.length > 0 ? "Regenerate" : "Draft Replies")}
+                            </button>
+                          </div>
+
+                          {drafts.length > 0 && (
+                            <div className="grid grid-cols-1 gap-2">
+                              {drafts.map((draft, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => setCommentReplies(prev => ({ ...prev, [cid]: draft }))}
+                                  className="text-left p-2.5 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-850 transition-colors rounded-xl text-[11px] text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 leading-relaxed cursor-pointer"
+                                >
+                                  <span className="font-semibold text-cyan-450 block mb-0.5">
+                                    {idx === 0 ? "Short & Punchy:" : idx === 1 ? "Value-Add:" : "Question-based:"}
+                                  </span>
+                                  {draft}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Editor Input Area */}
+                        <div className="relative">
+                          <textarea
+                            value={commentReplies[cid] || ""}
+                            onChange={(e) => setCommentReplies(prev => ({ ...prev, [cid]: e.target.value }))}
+                            placeholder="Draft your reply or record voice input..."
+                            className="w-full min-h-[70px] p-3 pr-10 bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl text-xs focus:border-cyan-500 outline-none leading-relaxed resize-none"
+                          />
+                          
+                          {/* Voice input button inside editor */}
+                          <div className="absolute right-2 bottom-2 flex items-center gap-1.5">
+                            {isTranscribing ? (
+                              <Loader2 className="w-5 h-5 animate-spin text-cyan-500" />
+                            ) : isRecording ? (
+                              <button
+                                onClick={stopVoiceRecording}
+                                className="w-7 h-7 rounded-full bg-red-650 flex items-center justify-center text-white border-none cursor-pointer animate-pulse"
+                              >
+                                <span className="w-2.5 h-2.5 bg-white rounded-sm" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => startVoiceRecording(cid)}
+                                className="w-7 h-7 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-350 border-none cursor-pointer"
+                                title="Reply with voice"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-2">
+                          {commentReplies[cid] && (
+                            <button
+                              onClick={() => setCommentReplies(prev => {
+                                const copy = { ...prev };
+                                delete copy[cid];
+                                return copy;
+                              })}
+                              className="px-3 h-8 text-[11px] font-semibold text-zinc-400 bg-transparent border border-zinc-800 rounded-xl cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handlePostReply(cid)}
+                            disabled={isPosting || !commentReplies[cid]}
+                            className="bg-green-600 hover:bg-green-700 disabled:bg-zinc-850 disabled:text-zinc-500 px-4 h-8 text-[11px] font-semibold rounded-xl text-white border-none cursor-pointer flex items-center gap-1.5 transition-colors"
+                          >
+                            {isPosting ? "Posting..." : "Post Reply"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
