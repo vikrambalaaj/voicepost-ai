@@ -34,8 +34,27 @@ class MockSupabaseQueryBuilder {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    if (!fs.existsSync(this.dbPath)) {
-      fs.writeFileSync(this.dbPath, JSON.stringify({}));
+    let data: any = {};
+    if (fs.existsSync(this.dbPath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(this.dbPath, "utf8"));
+      } catch {}
+    }
+    if (!data.users || data.users.length === 0) {
+      data.users = [
+        {
+          id: "f868e53c-80eb-4855-a289-e3cfe803ec33",
+          email: "balamurugan@linkedinpost.com",
+          full_name: "Bala J",
+          industry: "SaaS & AI",
+          region: "US",
+          plan: "agency",
+          posts_used_this_week: 0,
+          posts_limit_weekly: 10,
+          created_at: new Date().toISOString()
+        }
+      ];
+      fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
     }
   }
 
@@ -181,6 +200,11 @@ class MockSupabaseQueryBuilder {
 
         for (const item of upsertedItems) {
           const conflictIndex = rows.findIndex((row: any) => {
+            if (row.industry !== undefined && item.industry !== undefined &&
+                row.region !== undefined && item.region !== undefined) {
+              return row.industry.toLowerCase() === item.industry.toLowerCase() &&
+                     row.region.toLowerCase() === item.region.toLowerCase();
+            }
             return conflictFields.every(field => row[field] === item[field] && item[field] !== undefined);
           });
           if (conflictIndex !== -1) {
@@ -242,7 +266,7 @@ const createProxiedClient = (client: any) => {
     get(target, prop, receiver) {
       if (prop === "from") {
         return (tableName: string) => {
-          if (tableName === "post_comments") {
+          if (tableName === "post_comments" || tableName === "trending_topics" || tableName === "users") {
             return new MockSupabaseQueryBuilder(tableName);
           }
           return target.from(tableName);

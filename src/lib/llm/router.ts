@@ -2,7 +2,7 @@ import { getEligibleProviders, PROVIDERS, ProviderConfig } from "../providers/re
 import { getServiceSupabase } from "../supabase";
 
 export interface LLMRequest {
-  useCase: "content_generation" | "style_analysis" | "regeneration" | "transcript_correction" | "keyword_extraction" | "style_preview";
+  useCase: "content_generation" | "style_analysis" | "regeneration" | "transcript_correction" | "keyword_extraction" | "style_preview" | "trend_analysis";
   messages: { role: string; content: string }[];
   userId: string;
   userPlan: "free" | "starter" | "pro" | "agency";

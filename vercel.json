@@ -8,12 +8,17 @@
     "src/app/api/posts/[id]/publish/route.ts":      { "maxDuration": 60 },
     "src/app/api/webhooks/stripe/route.ts":         { "maxDuration": 10 },
     "src/app/api/style/analyze/route.ts":           { "maxDuration": 60 },
-    "src/app/api/linkedin/scrape-posts/route.ts":   { "maxDuration": 60 }
+    "src/app/api/linkedin/scrape-posts/route.ts":   { "maxDuration": 60 },
+    "src/app/api/cron/fetch-trends/route.ts":       { "maxDuration": 60 }
   },
   "crons": [
     {
       "path": "/api/cron/reset-weekly-limits",
       "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron/fetch-trends",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
