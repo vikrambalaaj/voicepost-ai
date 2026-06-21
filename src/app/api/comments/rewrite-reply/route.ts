@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { transcript, post_content, comment_text } = body;
+    const { transcript, post_content, comment_text, thread_history } = body;
 
     if (!transcript || !post_content || !comment_text) {
       return NextResponse.json({ error: "transcript, post_content, and comment_text are required" }, { status: 400 });
@@ -32,15 +32,21 @@ export async function POST(req: NextRequest) {
       avoided_corporate_words: ["delve", "leverage", "cutting-edge"]
     };
 
+    let chatHistoryPrompt = "";
+    if (thread_history && Array.isArray(thread_history) && thread_history.length > 0) {
+      chatHistoryPrompt = "CHAT HISTORY SO FAR:\n" + thread_history.map((r: any) => `- ${r.commenter_name}: "${r.comment_text}"`).join("\n");
+    }
+
     // 3. Construct System Instructions for voice comment rewriting
     const systemPrompt = `You are a professional ghostwriter. Your job is to rewrite a raw, spoken comment reply transcript into a highly polished, natural-sounding LinkedIn reply.
 
 POST CONTEXT:
 "${post_content}"
 
-COMMENT RECEIVED:
+PARENT COMMENT:
 "${comment_text}"
 
+${chatHistoryPrompt ? `${chatHistoryPrompt}\n` : ""}
 RAW SPOKEN TRANSCRIPT (TO REWRITE):
 "${transcript}"
 

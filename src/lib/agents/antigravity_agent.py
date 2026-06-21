@@ -33,7 +33,11 @@ def generate_flux_image(visual_theme: str) -> str:
         visual_theme: Clear description of the visual theme (e.g. 'office desk setup with a laptop').
     """
     replicate_token = os.environ.get("REPLICATE_API_TOKEN")
-    flux_prompt = f"Professional LinkedIn photo: {visual_theme}. Clean modern aesthetic, natural lighting, no text, photorealistic."
+    flux_prompt = (
+        f"Professional LinkedIn photo: {visual_theme}. Clean modern aesthetic, natural lighting, no text, photorealistic. "
+        "Strictly no humans, no people, no hands, no fingers, no limbs, no arms, and no body parts are visible. "
+        "The composition is entirely inanimate and conceptual."
+    )
     
     if replicate_token:
         try:
@@ -55,11 +59,11 @@ def generate_flux_image(visual_theme: str) -> str:
             if res.ok:
                 pred = res.json()
                 poll_url = pred["urls"]["get"]
-                # Poll for up to 10 seconds
-                for _ in range(5):
+                # Poll for up to 12 seconds (8 attempts * 1.5s)
+                for _ in range(8):
                     # We are in sync function, use time.sleep
                     import time
-                    time.sleep(2)
+                    time.sleep(1.5)
                     poll_res = requests.get(poll_url, headers=headers, timeout=5)
                     if poll_res.ok:
                         poll_data = poll_res.json()
@@ -67,6 +71,7 @@ def generate_flux_image(visual_theme: str) -> str:
                             return poll_data["output"][0]
                         elif poll_data["status"] in ["failed", "canceled"]:
                             break
+        except Exception as e:
             sys.stderr.write(f"Replicate FLUX error: {e}\n")
             
     # Try Hugging Face Inference API if token is configured

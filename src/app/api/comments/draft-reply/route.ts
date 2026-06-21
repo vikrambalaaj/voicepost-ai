@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const body = await req.json();
-    const { post_content, comment_text } = body;
+    const { post_content, comment_text, thread_history } = body;
 
     if (!post_content || !comment_text) {
       return NextResponse.json({ error: "post_content and comment_text are required" }, { status: 400 });
@@ -32,16 +32,22 @@ export async function POST(req: NextRequest) {
       avoided_corporate_words: ["delve", "leverage", "cutting-edge"]
     };
 
+    let chatHistoryPrompt = "";
+    if (thread_history && Array.isArray(thread_history) && thread_history.length > 0) {
+      chatHistoryPrompt = "CHAT HISTORY SO FAR:\n" + thread_history.map((r: any) => `- ${r.commenter_name}: "${r.comment_text}"`).join("\n");
+    }
+
     // 3. Construct System Instructions
     const systemPrompt = `You are a professional LinkedIn ghostwriter and engagement strategist.
-Draft exactly three distinct, high-impact reply options to a comment left on your client's LinkedIn post.
+Draft exactly three distinct, high-impact reply options to a comment thread left on your client's LinkedIn post.
 
 POST CONTEXT:
 "${post_content}"
 
-COMMENT RECEIVED:
+PARENT COMMENT:
 "${comment_text}"
 
+${chatHistoryPrompt ? `${chatHistoryPrompt}\n` : ""}
 CLIENT'S WRITING TONE & STYLE (STYLE DNA):
 - Tone: ${styleJson.tone_descriptor || "professional"}
 - Avoid these corporate words: ${(styleJson.avoided_corporate_words || []).join(", ") || "none"}

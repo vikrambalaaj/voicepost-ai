@@ -42,7 +42,7 @@ export async function POST(
       return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
 
-    const userId = post.user_id;
+
 
     // 2. Fetch user to check limits
     const { data: user, error: userErr } = await db

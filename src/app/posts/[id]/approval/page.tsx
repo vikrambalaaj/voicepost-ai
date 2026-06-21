@@ -770,7 +770,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           post_content: postContent,
-          comment_text: comment.comment_text
+          comment_text: comment.comment_text,
+          thread_history: comment.thread_history || []
         })
       });
       const data = await res.json();
@@ -810,6 +811,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           
           if (transcribeData.success && transcribeData.transcript) {
             const rawTranscript = transcribeData.transcript;
+            const targetComment = comments.find(c => c.id === cid);
             
             const rewriteRes = await fetch("/api/comments/rewrite-reply", {
               method: "POST",
@@ -817,7 +819,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               body: JSON.stringify({
                 transcript: rawTranscript,
                 post_content: postContent,
-                comment_text: comments.find(c => c.id === cid)?.comment_text
+                comment_text: targetComment?.comment_text,
+                thread_history: targetComment?.thread_history || []
               })
             });
             const rewriteData = await rewriteRes.json();
@@ -1671,17 +1674,53 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                       {comment.comment_text}
                     </div>
 
-                    {/* Existing Reply if already posted */}
-                    {comment.reply_text ? (
-                      <div className="ml-6 border-l-2 border-green-500 pl-3 py-0.5 space-y-1">
+                    {/* Thread History (Nested replies) */}
+                    {comment.thread_history && comment.thread_history.length > 0 && (
+                      <div className="ml-6 space-y-3 mb-3 border-l-2 border-zinc-200 dark:border-zinc-800 pl-3">
+                        {comment.thread_history.map((reply: any, rIdx: number) => (
+                          <div key={rIdx} className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">
+                                {reply.commenter_name}
+                              </span>
+                              <span className="text-[9px] text-zinc-500">
+                                {new Date(reply.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {reply.commenter_headline && (
+                              <p className="text-[9px] text-zinc-450 leading-none">{reply.commenter_headline}</p>
+                            )}
+                            <p className="text-xs text-zinc-800 dark:text-zinc-300 bg-zinc-100/50 dark:bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 leading-relaxed">
+                              {reply.comment_text}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Fallback to local reply_text if thread_history is empty */}
+                    {(!comment.thread_history || comment.thread_history.length === 0) && comment.reply_text && (
+                      <div className="ml-6 border-l-2 border-green-500 pl-3 py-0.5 space-y-1 mb-3">
                         <span className="text-[10px] font-bold text-green-500 uppercase tracking-wider block">Your Reply:</span>
                         <p className="text-xs text-zinc-800 dark:text-zinc-300 leading-relaxed bg-green-50/10 p-2.5 rounded-xl border border-green-500/10">
                           {comment.reply_text}
                         </p>
                       </div>
-                    ) : (
-                      /* Drafting and Action Panel */
-                      <div className="space-y-3">
+                    )}
+
+                    {/* Drafting and Action Panel if not replied yet */}
+                    {(() => {
+                      const activeProfileUrn = linkedAccount?.linkedin_profile_id || "";
+                      const hasReplied = !!comment.reply_text || 
+                        (comment.thread_history && comment.thread_history.some((reply: any) => 
+                          reply.actor === activeProfileUrn || 
+                          (activeProfileUrn && reply.actor?.endsWith(activeProfileUrn.split(":").pop() || "___"))
+                        ));
+
+                      if (hasReplied) return null;
+
+                      return (
+                        <div className="space-y-3">
                         {/* 3 Auto Draft options */}
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -1768,7 +1807,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                           </button>
                         </div>
                       </div>
-                    )}
+                    );
+                  })()}
                   </div>
                 );
               })}

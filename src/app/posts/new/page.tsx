@@ -472,6 +472,9 @@ export default function CreatePostPage() {
           style_id: selectedStyleId,
           backend: aiBackend,
           web_search: webSearch,
+          image_url: includeImage ? (imageTab === "upload" ? uploadedImageUrl : (imageTab === "ai" ? aiGeneratedImage?.url : (imageTab === "search" ? selectedImage?.url : null))) : null,
+          image_source_type: includeImage ? imageTab : null,
+          image_prompt: includeImage ? (imageTab === "ai" ? (aiGeneratedImage?.prompt_used || aiGeneratedImage?.prompt) : (imageTab === "search" ? (selectedImage?.prompt_used || selectedImage?.prompt) : null)) : null,
         }),
       });
 

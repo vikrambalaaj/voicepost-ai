@@ -12,6 +12,7 @@ const mockUser = {
 
 const mockLinkedInAccount = {
   id: "acc_123",
+  user_id: "user_123",
   linkedin_profile_id: "urn:li:person:123",
   access_token: "mock_token_123",
   is_primary: true,
@@ -54,6 +55,7 @@ class MockQueryBuilder {
   insert = vi.fn().mockReturnThis();
   update = vi.fn().mockReturnThis();
   eq = vi.fn().mockReturnThis();
+  not = vi.fn().mockReturnThis();
   limit = vi.fn().mockReturnThis();
 
   single = vi.fn().mockImplementation(() => {

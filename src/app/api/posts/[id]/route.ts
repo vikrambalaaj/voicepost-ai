@@ -142,23 +142,47 @@ export async function PUT(
       return NextResponse.json({ error: "image_url, post_content, hashtags, or status is required" }, { status: 400 });
     }
 
-    const { data: newImage, error: imgErr } = await db
+    // Check if the image url is already attached to this post
+    const { data: existingImg } = await db
       .from("post_images")
-      .insert({
-        post_id: id,
-        source_type: source_type || "search",
-        url: image_url,
-        prompt_used: prompt_used || null,
-        is_selected: true,
-      })
-      .select()
-      .single();
+      .select("id")
+      .eq("post_id", id)
+      .eq("url", image_url)
+      .limit(1);
 
-    if (imgErr) {
-      return NextResponse.json({ error: imgErr.message }, { status: 500 });
+    let imageResult;
+    if (existingImg && existingImg.length > 0) {
+      // Just update it to be selected
+      const { data: updatedImg, error: imgErr } = await db
+        .from("post_images")
+        .update({ is_selected: true })
+        .eq("id", existingImg[0].id)
+        .select()
+        .single();
+      if (imgErr) {
+        return NextResponse.json({ error: imgErr.message }, { status: 500 });
+      }
+      imageResult = updatedImg;
+    } else {
+      // Insert new image
+      const { data: newImage, error: imgErr } = await db
+        .from("post_images")
+        .insert({
+          post_id: id,
+          source_type: source_type || "search",
+          url: image_url,
+          prompt_used: prompt_used || null,
+          is_selected: true,
+        })
+        .select()
+        .single();
+      if (imgErr) {
+        return NextResponse.json({ error: imgErr.message }, { status: 500 });
+      }
+      imageResult = newImage;
     }
 
-    return NextResponse.json({ success: true, image: newImage });
+    return NextResponse.json({ success: true, image: imageResult });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

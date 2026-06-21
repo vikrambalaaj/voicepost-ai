@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { transcript, style_type, style_id, blend_config, backend, web_search } = body;
+    const { transcript, style_type, style_id, blend_config, backend, web_search, image_url, image_source_type, image_prompt } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: "Transcript is required" }, { status: 400 });
@@ -447,6 +447,17 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
       style_match_score: newPost.style_match_score,
       latency_ms: llmRes.latencyMs,
     });
+
+    // Save selected image directly to the database if passed
+    if (image_url) {
+      await db.from("post_images").insert({
+        post_id: newPost.id,
+        source_type: image_source_type || "search",
+        url: image_url,
+        prompt_used: image_prompt || null,
+        is_selected: true,
+      });
+    }
 
     // 6. Fire draft email notification — send synchronously BEFORE returning response.
     //    setImmediate is killed by Vercel after the HTTP response is sent.
