@@ -1617,16 +1617,41 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Agent Chain of Thought */}
-        {post?.agent_thoughts && (
-          <div className="ios-card bg-purple-500/5 border border-purple-500/20 p-4 mb-4 select-text">
-            <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 select-none">
-              <Sparkles className="w-3.5 h-3.5" /> Agent Chain-of-Thought Logs
-            </h4>
-            <div className="text-xs text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-36 overflow-y-auto">
-              {post.agent_thoughts}
+        {(() => {
+          let originalThoughts = "";
+          if (post?.agent_thoughts) {
+            try {
+              const parsed = JSON.parse(post.agent_thoughts);
+              originalThoughts = parsed.original_thoughts || parsed.text || "";
+            } catch (e) {
+              originalThoughts = post.agent_thoughts;
+            }
+          }
+          
+          if (!originalThoughts || originalThoughts.trim() === "") return null;
+
+          return (
+            <div className="ios-card bg-purple-500/5 border border-purple-500/20 p-4 mb-4 select-text">
+              <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 select-none">
+                <Sparkles className="w-3.5 h-3.5 animate-pulse text-purple-400" /> Content Strategy & Reasoning
+              </h4>
+              <div className="text-xs text-zinc-300 dark:text-zinc-300 leading-relaxed space-y-2 select-text font-normal">
+                {originalThoughts.split("\n").map((line, idx) => {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith("-") || trimmed.startsWith("•")) {
+                    return (
+                      <div key={idx} className="flex gap-2 pl-2">
+                        <span className="text-purple-400">•</span>
+                        <span>{trimmed.substring(1).trim()}</span>
+                      </div>
+                    );
+                  }
+                  return <p key={idx}>{line}</p>;
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Connected Account & Profile Switcher */}
         {linkedAccount && (

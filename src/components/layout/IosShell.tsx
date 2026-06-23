@@ -92,7 +92,7 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
         {/* Footer info in sidebar */}
         <div className="px-2 py-4 border-t border-zinc-800/60 text-[10px] text-zinc-500 font-medium">
           <p>© 2026 VoicePost AI</p>
-          <p className="mt-1 text-[9px] text-zinc-600">v1.3.0 (Standalone PWA)</p>
+          <p className="mt-1 text-[9px] text-zinc-600">v1.3.1 (Standalone PWA)</p>
         </div>
       </aside>
 
