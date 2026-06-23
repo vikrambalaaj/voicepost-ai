@@ -74,6 +74,16 @@ export default function CreatePostPage() {
       setAiBackend("waterfall");
     }
     setIsAdmin(localStorage.getItem("voicepost_is_admin") === "true");
+
+    // Pre-fill idea from URL query parameter if present
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ideaParam = params.get("idea");
+      if (ideaParam) {
+        setTypedIdea(ideaParam);
+        setActiveInputMode("type");
+      }
+    }
   }, []);
 
   // Refs for Recording

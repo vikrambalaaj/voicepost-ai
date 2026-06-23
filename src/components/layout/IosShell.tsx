@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, FileText, Plus, CreditCard, User, ChevronRight, LogOut } from "lucide-react";
+import { Home, FileText, Plus, CreditCard, User, ChevronRight, LogOut, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TabBar } from "./TabBar";
 import { BeamsBackground } from "@/components/ui/beams-background";
@@ -18,6 +18,7 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
   const menuItems = [
     { label: "Home", icon: Home, path: "/dashboard" },
     { label: "Posts", icon: FileText, path: "/posts" },
+    { label: "Inspiration", icon: Lightbulb, path: "/inspiration" },
     { label: "Create Post", icon: Plus, path: "/posts/new", highlight: true },
     { label: "Plans", icon: CreditCard, path: "/pricing" },
     { label: "Profile", icon: User, path: "/settings" },
