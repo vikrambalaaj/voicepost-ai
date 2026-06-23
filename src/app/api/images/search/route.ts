@@ -42,11 +42,11 @@ export async function GET(req: NextRequest) {
   const tavilyKey = process.env.TAVILY_API_KEY;
 
   let results: { id: string; url: string; thumbnail: string; attribution: string; source: string }[] = [];
-  const promises = [];
+  const keyBasedPromises = [];
 
   // 0. Tavily Image Search (Primary key-based search)
   if (tavilyKey) {
-    promises.push(
+    keyBasedPromises.push(
       fetch("https://api.tavily.com/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
           api_key: tavilyKey,
           query: query,
           include_images: true,
-          max_results: 6,
+          max_results: 12,
         }),
       })
         .then((res) => res.json())
@@ -80,14 +80,14 @@ export async function GET(req: NextRequest) {
 
   // 1. Google Images via Serper.dev (Free tier available)
   if (serperKey) {
-    promises.push(
+    keyBasedPromises.push(
       fetch("https://google.serper.dev/images", {
         method: "POST",
         headers: {
           "X-API-KEY": serperKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ q: query, num: 6 }),
+        body: JSON.stringify({ q: query, num: 12 }),
       })
         .then(res => res.json())
         .then(data => {
@@ -108,8 +108,8 @@ export async function GET(req: NextRequest) {
 
   // 2. Google Images via SerpApi (Free tier available)
   if (serpapiKey) {
-    promises.push(
-      fetch(`https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&api_key=${serpapiKey}&num=6`)
+    keyBasedPromises.push(
+      fetch(`https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&api_key=${serpapiKey}&num=12`)
         .then(res => res.json())
         .then(data => {
           if (data.images_results) {
@@ -129,8 +129,8 @@ export async function GET(req: NextRequest) {
 
   // 3. Unsplash search
   if (unsplashKey) {
-    promises.push(
-      fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${unsplashKey}&per_page=6`)
+    keyBasedPromises.push(
+      fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${unsplashKey}&per_page=12`)
         .then(res => res.json())
         .then(data => {
           if (data.results) {
@@ -150,8 +150,8 @@ export async function GET(req: NextRequest) {
 
   // 4. Pexels search
   if (pexelsKey) {
-    promises.push(
-      fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=6`, {
+    keyBasedPromises.push(
+      fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12`, {
         headers: { Authorization: pexelsKey }
       })
         .then(res => res.json())
@@ -171,62 +171,82 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 5. DuckDuckGo Image Search (Free, keyless) with Wiki fallback
-  promises.push(
-    fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9"
-      }
-    })
-      .then(res => res.text())
-      .then(async html => {
-        const vqdRegex = /vqd=['"]?([^'"]+)['"]?/;
-        const match = html.match(vqdRegex);
-        if (!match) return fetchWikiImages(query);
-        const vqd = match[1];
-
-        const imagesRes = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&vqd=${vqd}&o=json`, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`
-          }
-        });
-        const imagesText = await imagesRes.text();
-        if (imagesText.includes("anomalyDetectionBlock")) {
-          return fetchWikiImages(query);
-        }
-
-        const data = JSON.parse(imagesText);
-        if (data.results) {
-          return data.results.slice(0, 6).map((item: any, idx: number) => ({
-            id: `ddg_${idx}_${Date.now()}`,
-            url: item.image,
-            thumbnail: item.thumbnail || item.image,
-            attribution: `Photo from ${item.source || "DuckDuckGo"}`,
-            source: "duckduckgo"
-          }));
-        }
-        return fetchWikiImages(query);
-      })
-      .catch(() => fetchWikiImages(query))
-  );
-
-  try {
-    if (promises.length > 0) {
-      const settled = await Promise.allSettled(promises);
+  // First, run the key-based search APIs
+  if (keyBasedPromises.length > 0) {
+    try {
+      const settled = await Promise.allSettled(keyBasedPromises);
       settled.forEach((p) => {
         if (p.status === "fulfilled" && p.value) {
           results = [...results, ...p.value];
         }
       });
+    } catch (err) {
+      console.error("Key-based search fetch error:", err);
     }
-  } catch (err) {
-    console.error("Parallel search fetch error:", err);
   }
+
+  // If no key-based search APIs returned any results (or none were configured), fall back to DuckDuckGo/Wikipedia scraping
+  if (results.length === 0) {
+    try {
+      const ddgResults = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        }
+      })
+        .then(res => res.text())
+        .then(async html => {
+          const vqdRegex = /vqd=['"]?([^'"]+)['"]?/;
+          const match = html.match(vqdRegex);
+          if (!match) return fetchWikiImages(query);
+          const vqd = match[1];
+
+          const imagesRes = await fetch(`https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&vqd=${vqd}&o=json`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+              "Accept": "application/json, text/javascript, */*; q=0.01",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Referer": `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`
+            }
+          });
+          const imagesText = await imagesRes.text();
+          if (imagesText.includes("anomalyDetectionBlock")) {
+            return fetchWikiImages(query);
+          }
+
+          const data = JSON.parse(imagesText);
+          if (data.results) {
+            return data.results.slice(0, 12).map((item: any, idx: number) => ({
+              id: `ddg_${idx}_${Date.now()}`,
+              url: item.image,
+              thumbnail: item.thumbnail || item.image,
+              attribution: `Photo from ${item.source || "DuckDuckGo"}`,
+              source: "duckduckgo"
+            }));
+          }
+          return fetchWikiImages(query);
+        })
+        .catch(() => fetchWikiImages(query));
+
+      if (ddgResults && ddgResults.length > 0) {
+        results = [...results, ...ddgResults];
+      }
+    } catch (err) {
+      console.error("DDG fallback fetch error:", err);
+    }
+  }
+
+  // Deduplicate results by exact URL
+  const seenUrls = new Set<string>();
+  const uniqueResults: typeof results = [];
+  for (const item of results) {
+    if (item.url && !seenUrls.has(item.url)) {
+      seenUrls.add(item.url);
+      uniqueResults.push(item);
+    }
+  }
+  results = uniqueResults;
 
   // Check if search returned results — if empty, fallback to Lorem Picsum
   if (results.length === 0) {
