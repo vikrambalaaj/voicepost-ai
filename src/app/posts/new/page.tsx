@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
-import { Mic, Type, Search, ImageIcon, Sparkles, Upload, Check, Trash2, ArrowLeft, Plus, Minus } from "lucide-react";
+import { Mic, Type, Search, ImageIcon, Sparkles, Upload, Check, Trash2, ArrowLeft, Plus, Minus, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function CreatePostPage() {
   const router = useRouter();
-  const [activeInputMode, setActiveInputMode] = useState<"voice" | "type">("voice");
+  const [activeInputMode, setActiveInputMode] = useState<"voice" | "type" | "url">("voice");
   const [postType, setPostType] = useState<"standard" | "carousel">("standard");
   const [slideCount, setSlideCount] = useState(6);
   
@@ -24,6 +24,13 @@ export default function CreatePostPage() {
   // Type Input States
   const [typedIdea, setTypedIdea] = useState("");
 
+  // URL Input States
+  const [inputUrl, setInputUrl] = useState("");
+  const [fetchingUrl, setFetchingUrl] = useState(false);
+  const [scrapedText, setScrapedText] = useState("");
+  const [extractedImages, setExtractedImages] = useState<string[]>([]);
+  const [selectedExtractedImage, setSelectedExtractedImage] = useState<string | null>(null);
+
   // Step 2 Style States
   const [styleType, setStyleType] = useState<"own" | "expert" | "custom">("expert");
   const [selectedStyleId, setSelectedStyleId] = useState("fomo_style");
@@ -31,7 +38,7 @@ export default function CreatePostPage() {
   const [customStyles, setCustomStyles] = useState<any[]>([]);
   
   // Step 3 Image States
-  const [imageTab, setImageTab] = useState<"search" | "ai" | "upload">("search");
+  const [imageTab, setImageTab] = useState<"search" | "ai" | "upload" | "url">("search");
   const [searchQuery, setSearchQuery] = useState("business success");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedImage, setSelectedImage] = useState<any>(null);
@@ -51,7 +58,7 @@ export default function CreatePostPage() {
   const [generationStatus, setGenerationStatus] = useState("");
   const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("waterfall");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [webSearch, setWebSearch] = useState(false);
+  const [webSearch, setWebSearch] = useState(true);
   const [generationTime, setGenerationTime] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
@@ -397,11 +404,54 @@ export default function CreatePostPage() {
     }
   };
 
+  const handleScrapeUrl = async () => {
+    if (!inputUrl.trim()) {
+      alert("Please enter a URL first.");
+      return;
+    }
+    setFetchingUrl(true);
+    setScrapedText("");
+    setExtractedImages([]);
+    setSelectedExtractedImage(null);
+    try {
+      const res = await fetch("/api/content/scrape-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: inputUrl }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScrapedText(data.text || "");
+        if (data.images && data.images.length > 0) {
+          setExtractedImages(data.images);
+          setSelectedExtractedImage(data.images[0]); // default select first
+          setImageTab("url"); // switch image selection tab to url images
+          setIncludeImage(true); // make sure image attachment is enabled
+        }
+      } else {
+        alert(data.error || "Failed to fetch content from URL.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error fetching URL: " + err.message);
+    } finally {
+      setFetchingUrl(false);
+    }
+  };
+
   // Submit and Generate Post
   const handleGeneratePost = async () => {
-    const inputContent = activeInputMode === "voice" ? transcript : typedIdea;
+    const inputContent = activeInputMode === "voice" 
+      ? transcript 
+      : activeInputMode === "type" 
+      ? typedIdea 
+      : scrapedText;
     if (!inputContent) {
-      alert("Please record audio or type your idea before generating.");
+      alert(
+        activeInputMode === "url" 
+          ? "Please fetch content from a URL before generating." 
+          : "Please record audio or type your idea before generating."
+      );
       return;
     }
 
@@ -432,6 +482,12 @@ export default function CreatePostPage() {
           slides: data.carousel.slides,
           templateId: "bold_impact", // default template
           accentColor: "#3B82F6", // default color
+          backgroundImage: includeImage ? (
+            imageTab === "upload" ? uploadedImageUrl : 
+            imageTab === "ai" ? aiGeneratedImage?.url : 
+            imageTab === "search" ? selectedImage?.url : 
+            imageTab === "url" ? selectedExtractedImage : undefined
+          ) : undefined,
         });
 
         const saveRes = await fetch("/api/posts", {
@@ -472,9 +528,18 @@ export default function CreatePostPage() {
           style_id: selectedStyleId,
           backend: aiBackend,
           web_search: webSearch,
-          image_url: includeImage ? (imageTab === "upload" ? uploadedImageUrl : (imageTab === "ai" ? aiGeneratedImage?.url : (imageTab === "search" ? selectedImage?.url : null))) : null,
+          image_url: includeImage ? (
+            imageTab === "upload" ? uploadedImageUrl : 
+            imageTab === "ai" ? aiGeneratedImage?.url : 
+            imageTab === "search" ? selectedImage?.url : 
+            imageTab === "url" ? selectedExtractedImage : null
+          ) : null,
           image_source_type: includeImage ? imageTab : null,
-          image_prompt: includeImage ? (imageTab === "ai" ? (aiGeneratedImage?.prompt_used || aiGeneratedImage?.prompt) : (imageTab === "search" ? (selectedImage?.prompt_used || selectedImage?.prompt) : null)) : null,
+          image_prompt: includeImage ? (
+            imageTab === "ai" ? (aiGeneratedImage?.prompt_used || aiGeneratedImage?.prompt) : 
+            imageTab === "search" ? (selectedImage?.prompt_used || selectedImage?.prompt) : 
+            imageTab === "url" ? "Extracted from scraped URL" : null
+          ) : null,
         }),
       });
 
@@ -496,30 +561,9 @@ export default function CreatePostPage() {
           } else if (imageTab === "search" && selectedImage && selectedImage.source_type !== "upload") {
             imageToAttach = selectedImage;
             dbSourceType = selectedImage.source_type || "search";
-          } else {
-            // Auto-generate a related image
-            setGenerationStatus("Auto-generating related image...");
-            try {
-              const genRes = await fetch("/api/images/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  post_id: data.post_id,
-                  post_content: generatedPostContent,
-                  style: imageStyle,
-                  composition: imageComposition,
-                  aspect_ratio: imageAspectRatio,
-                  brand_colors: brandColors ? brandColors.split(",").map((c) => c.trim()) : undefined,
-                }),
-              });
-              const genData = await genRes.json();
-              if (genData.success && genData.image) {
-                imageToAttach = genData.image;
-                dbSourceType = "ai";
-              }
-            } catch (imgErr) {
-              console.error("Auto image generation failed:", imgErr);
-            }
+          } else if (imageTab === "url" && selectedExtractedImage) {
+            imageToAttach = { url: selectedExtractedImage };
+            dbSourceType = "url";
           }
 
           if (imageToAttach) {
@@ -599,6 +643,12 @@ export default function CreatePostPage() {
             >
               <Type className="w-3.5 h-3.5 inline mr-1" /> Type Idea
             </button>
+            <button
+              onClick={() => setActiveInputMode("url")}
+              className={`ios-segment-btn ${activeInputMode === "url" ? "active" : ""}`}
+            >
+              <Globe className="w-3.5 h-3.5 inline mr-1" /> Scrape URL
+            </button>
           </div>
 
           {activeInputMode === "voice" ? (
@@ -634,6 +684,10 @@ export default function CreatePostPage() {
                     Tap the button below and speak. Warmup starts automatically.
                   </p>
                   <button
+                    onClick={triggerWarmup}
+                    className="hidden"
+                  />
+                  <button
                     onClick={startRecording}
                     className="w-16 h-16 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform"
                   >
@@ -653,14 +707,53 @@ export default function CreatePostPage() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : activeInputMode === "type" ? (
             <div>
               <textarea
                 value={typedIdea}
                 onChange={(e) => setTypedIdea(e.target.value)}
                 placeholder="Type your idea, paste bullet points, or paste an article draft..."
-                className="w-full h-36 p-3 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 placeholder:text-zinc-400 border-zinc-800"
+                className="w-full h-36 p-3 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 placeholder:text-zinc-400 border-zinc-200 dark:border-zinc-800"
               />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={inputUrl}
+                  onChange={(e) => setInputUrl(e.target.value)}
+                  placeholder="Paste article or web page URL here..."
+                  className="flex-1 text-sm p-3 rounded-xl border bg-transparent focus:outline-none border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleScrapeUrl}
+                  disabled={fetchingUrl}
+                  className="rounded-xl px-5 bg-cyan-600 hover:bg-cyan-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-bold h-11 border-none cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                >
+                  {fetchingUrl ? (
+                    <>
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      Fetching...
+                    </>
+                  ) : (
+                    "Fetch"
+                  )}
+                </button>
+              </div>
+
+              {scrapedText && (
+                <div className="text-left">
+                  <label className="text-xs font-bold text-zinc-400 uppercase">Extracted Page Content (Tap to edit)</label>
+                  <textarea
+                    value={scrapedText}
+                    onChange={(e) => setScrapedText(e.target.value)}
+                    className="mt-1 w-full p-3 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 h-36 resize-y font-sans leading-relaxed"
+                    placeholder="Review or edit the scraped content here..."
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -721,7 +814,7 @@ export default function CreatePostPage() {
           </>
         )}
 
-        {postType === "standard" ? (
+        {postType === "standard" && (
           <>
             {/* STEP 2: Style Picker */}
             <div className="ios-section-label">Step 2 — Pick Writing Style</div>
@@ -775,223 +868,10 @@ export default function CreatePostPage() {
                 </div>
               )}
             </div>
-
-            {/* STEP 3: Image Picker */}
-            <div className="ios-section-label flex items-center justify-between select-none">
-              <span>Step 3 — Media (Optional)</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeImage}
-                  onChange={(e) => setIncludeImage(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-650 peer-checked:bg-cyan-500"></div>
-                <span className="ml-2 text-xs font-bold text-zinc-500">
-                  {includeImage ? "ON" : "OFF"}
-                </span>
-              </label>
-            </div>
-            
-            {includeImage ? (
-              <div className="ios-card p-4">
-                <div className="flex justify-around border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-4 select-none">
-                  <button
-                    onClick={() => setImageTab("search")}
-                    className={`text-sm font-bold pb-1 ${imageTab === "search" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-                  >
-                    <Search className="w-3.5 h-3.5 inline mr-1" /> Search
-                  </button>
-                  <button
-                    onClick={() => setImageTab("ai")}
-                    className={`text-sm font-bold pb-1 ${imageTab === "ai" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 inline mr-1" /> AI Generate
-                  </button>
-                  <button
-                    onClick={() => setImageTab("upload")}
-                    className={`text-sm font-bold pb-1 ${imageTab === "upload" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
-                  >
-                    <Upload className="w-3.5 h-3.5 inline mr-1" /> Upload
-                  </button>
-                </div>
-
-                {imageTab === "search" && (
-                  <div>
-                    <div className="flex gap-2 mb-3">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search visual ideas..."
-                        className="flex-1 text-sm p-2.5 rounded-xl border bg-transparent focus:outline-none border-zinc-850"
-                      />
-                      <button
-                        onClick={handleImageSearch}
-                        className="rounded-xl px-4 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-bold h-10 border border-zinc-800 cursor-pointer transition-colors"
-                      >
-                        Find
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {searchResults.map((img) => (
-                        <div
-                          key={img.id}
-                          onClick={() => setSelectedImage(img)}
-                          className={`relative aspect-video rounded-lg overflow-hidden border-2 cursor-pointer ${
-                            selectedImage?.id === img.id ? "border-cyan-500 scale-[0.98]" : "border-transparent"
-                          }`}
-                        >
-                          <img src={img.thumbnail} alt={img.attribution} className="w-full h-full object-cover" />
-                          {selectedImage?.id === img.id && (
-                            <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center text-white">
-                              <Check className="w-6 h-6 stroke-[3]" />
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {imageTab === "ai" && (
-                  <div className="text-left py-2 px-1 max-w-sm mx-auto">
-                    {isGeneratingAiImage ? (
-                      <div className="py-8 flex flex-col items-center justify-center text-center">
-                        <div className="w-8 h-8 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-3" />
-                        <span className="text-sm font-medium text-zinc-300">Generating Custom Visual Metaphor...</span>
-                        <span className="text-xs text-zinc-500 mt-1 animate-pulse">Running Flux model via Pollinations.ai</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col space-y-4">
-                        {aiGeneratedImage && (
-                          <div className="relative aspect-video w-full rounded-xl overflow-hidden border-2 border-cyan-500">
-                            <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        
-                        <div className="grid grid-cols-3 gap-2 text-[11px]">
-                          <div>
-                            <label className="block text-zinc-400 mb-1 font-semibold">Visual Style</label>
-                            <select
-                              value={imageStyle}
-                              onChange={(e) => setImageStyle(e.target.value as any)}
-                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
-                            >
-                              <option value="editorial">📸 Editorial</option>
-                              <option value="3d">🎨 3D Glass</option>
-                              <option value="vector">✒️ Vector</option>
-                              <option value="cyberpunk">🌃 Cyberpunk</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-zinc-400 mb-1 font-semibold">Composition</label>
-                            <select
-                              value={imageComposition}
-                              onChange={(e) => setImageComposition(e.target.value as any)}
-                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
-                            >
-                              <option value="contrast">⚖️ Contrast</option>
-                              <option value="hero">🏆 Hero Object</option>
-                              <option value="flatlay">📐 Flat-lay</option>
-                            </select>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-zinc-400 mb-1 font-semibold">Aspect Ratio</label>
-                            <select
-                              value={imageAspectRatio}
-                              onChange={(e) => setImageAspectRatio(e.target.value as any)}
-                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
-                            >
-                              <option value="16:9">Wide 16:9</option>
-                              <option value="1:1">Sq 1:1</option>
-                              <option value="4:5">Vert 4:5</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-zinc-400 mb-1 text-xs font-semibold">
-                            Brand Colors <span className="text-[10px] text-zinc-600">(Optional, comma separated)</span>
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. navy, cool white, gold"
-                            value={brandColors}
-                            onChange={(e) => setBrandColors(e.target.value)}
-                            className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs h-9 focus:border-cyan-500 outline-none placeholder:text-zinc-700"
-                          />
-                        </div>
-
-                        <Button 
-                          onClick={handleAiImageGenerate} 
-                          className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl h-10 font-medium"
-                        >
-                          <Sparkles className="w-4 h-4 mr-2" /> 
-                          {aiGeneratedImage ? "Regenerate Image" : "Generate with Flux"}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {imageTab === "upload" && (
-                  <div className="text-center py-4">
-                    {uploadedImageUrl ? (
-                      <div className="flex flex-col items-center">
-                        <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950 flex items-center justify-center">
-                          {uploadedImageUrl.startsWith("data:video/") ? (
-                            <video src={uploadedImageUrl} controls className="w-full h-full object-cover" />
-                          ) : (
-                            <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
-                          )}
-                          <button
-                            onClick={() => {
-                              setUploadedImageUrl("");
-                              setSelectedImage(null);
-                            }}
-                            className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 p-1.5 rounded-full text-white"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <span className="text-xs text-cyan-400 font-semibold flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5 animate-pulse" /> Custom media selected
-                        </span>
-                      </div>
-                    ) : (
-                      <div>
-                        <input
-                          type="file"
-                          accept="image/*,video/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          id="image-file-upload"
-                        />
-                        <label
-                          htmlFor="image-file-upload"
-                          className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/40 text-center cursor-pointer hover:border-cyan-500/40 transition-colors max-w-xs mx-auto"
-                        >
-                          <Upload className="w-8 h-8 text-cyan-400 mb-2" />
-                          <span className="text-xs font-bold text-zinc-200">Upload custom media</span>
-                          <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, MP4, WEBM (Max 15MB)</span>
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="ios-card p-6 text-center">
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                  No image will be attached to this post.
-                </p>
-              </div>
-            )}
           </>
-        ) : (
+        )}
+
+        {postType === "carousel" && (
           <>
             {/* STEP 2: Slide Configuration */}
             <div className="ios-section-label">Step 2 — Slide Configuration</div>
@@ -1021,6 +901,259 @@ export default function CreatePostPage() {
               </div>
             </div>
           </>
+        )}
+
+        {/* STEP 3: Image Picker */}
+        <div className="ios-section-label flex items-center justify-between select-none">
+          <span>{postType === "standard" ? "Step 3 — Media (Optional)" : "Step 3 — Slide Background (Optional)"}</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeImage}
+              onChange={(e) => setIncludeImage(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-650 peer-checked:bg-cyan-500"></div>
+            <span className="ml-2 text-xs font-bold text-zinc-500">
+              {includeImage ? "ON" : "OFF"}
+            </span>
+          </label>
+        </div>
+        
+        {includeImage ? (
+          <div className="ios-card p-4">
+            <div className="flex justify-around border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-4 select-none">
+              <button
+                type="button"
+                onClick={() => setImageTab("search")}
+                className={`text-sm font-bold pb-1 bg-transparent border-none cursor-pointer ${imageTab === "search" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+              >
+                <Search className="w-3.5 h-3.5 inline mr-1" /> Search
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageTab("ai")}
+                className={`text-sm font-bold pb-1 bg-transparent border-none cursor-pointer ${imageTab === "ai" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+              >
+                <Sparkles className="w-3.5 h-3.5 inline mr-1" /> AI Generate
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageTab("upload")}
+                className={`text-sm font-bold pb-1 bg-transparent border-none cursor-pointer ${imageTab === "upload" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+              >
+                <Upload className="w-3.5 h-3.5 inline mr-1" /> Upload
+              </button>
+              {extractedImages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setImageTab("url")}
+                  className={`text-sm font-bold pb-1 bg-transparent border-none cursor-pointer ${imageTab === "url" ? "text-cyan-400 border-b-2 border-cyan-400" : "text-zinc-400"}`}
+                >
+                  <ImageIcon className="w-3.5 h-3.5 inline mr-1" /> URL Images
+                </button>
+              )}
+            </div>
+
+            {imageTab === "url" && (
+              <div>
+                <p className="text-xs text-zinc-500 mb-3 font-semibold text-left">Select an image scraped from the URL:</p>
+                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                  {extractedImages.map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedExtractedImage(imgUrl)}
+                      className={`relative aspect-video rounded-lg overflow-hidden border-2 cursor-pointer ${
+                        selectedExtractedImage === imgUrl ? "border-cyan-500 scale-[0.98]" : "border-transparent"
+                      }`}
+                    >
+                      <img src={imgUrl} alt="URL Extract" className="w-full h-full object-cover" />
+                      {selectedExtractedImage === imgUrl && (
+                        <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center text-white">
+                          <Check className="w-6 h-6 stroke-[3]" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {imageTab === "search" && (
+              <div>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search visual ideas..."
+                    className="flex-1 text-sm p-2.5 rounded-xl border bg-transparent focus:outline-none border-zinc-850"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleImageSearch}
+                    className="rounded-xl px-4 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-bold h-10 border border-zinc-800 cursor-pointer transition-colors"
+                  >
+                    Find
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {searchResults.map((img) => (
+                    <div
+                      key={img.id}
+                      onClick={() => setSelectedImage(img)}
+                      className={`relative aspect-video rounded-lg overflow-hidden border-2 cursor-pointer ${
+                        selectedImage?.id === img.id ? "border-cyan-500 scale-[0.98]" : "border-transparent"
+                      }`}
+                    >
+                      <img src={img.thumbnail} alt={img.attribution} className="w-full h-full object-cover" />
+                      {selectedImage?.id === img.id && (
+                        <div className="absolute inset-0 bg-cyan-500/20 flex items-center justify-center text-white">
+                          <Check className="w-6 h-6 stroke-[3]" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {imageTab === "ai" && (
+              <div className="text-left py-2 px-1 max-w-sm mx-auto">
+                {isGeneratingAiImage ? (
+                  <div className="py-8 flex flex-col items-center justify-center text-center">
+                    <div className="w-8 h-8 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin mb-3" />
+                    <span className="text-sm font-medium text-zinc-300">Generating Custom Visual Metaphor...</span>
+                    <span className="text-xs text-zinc-500 mt-1 animate-pulse">Running Flux model via Pollinations.ai</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col space-y-4">
+                    {aiGeneratedImage && (
+                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border-2 border-cyan-500">
+                        <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-semibold">Visual Style</label>
+                        <select
+                          value={imageStyle}
+                          onChange={(e) => setImageStyle(e.target.value as any)}
+                          className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                        >
+                          <option value="editorial">📸 Editorial</option>
+                          <option value="3d">🎨 3D Glass</option>
+                          <option value="vector">✒️ Vector</option>
+                          <option value="cyberpunk">🌃 Cyberpunk</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-semibold">Composition</label>
+                        <select
+                          value={imageComposition}
+                          onChange={(e) => setImageComposition(e.target.value as any)}
+                          className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                        >
+                          <option value="contrast">⚖️ Contrast</option>
+                          <option value="hero">🏆 Hero Object</option>
+                          <option value="flatlay">📐 Flat-lay</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-zinc-400 mb-1 font-semibold">Aspect Ratio</label>
+                        <select
+                          value={imageAspectRatio}
+                          onChange={(e) => setImageAspectRatio(e.target.value as any)}
+                          className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-1.5 py-1.5 h-9 focus:border-cyan-500 outline-none text-[11px]"
+                        >
+                          <option value="16:9">Wide 16:9</option>
+                          <option value="1:1">Sq 1:1</option>
+                          <option value="4:5">Vert 4:5</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-zinc-400 mb-1 text-xs font-semibold">
+                        Brand Colors <span className="text-[10px] text-zinc-600">(Optional, comma separated)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. navy, cool white, gold"
+                        value={brandColors}
+                        onChange={(e) => setBrandColors(e.target.value)}
+                        className="w-full bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs h-9 focus:border-cyan-500 outline-none placeholder:text-zinc-700"
+                      />
+                    </div>
+
+                    <Button 
+                      onClick={handleAiImageGenerate} 
+                      className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white rounded-xl h-10 font-medium"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" /> 
+                      {aiGeneratedImage ? "Regenerate Image" : "Generate with Flux"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {imageTab === "upload" && (
+              <div className="text-center py-4">
+                {uploadedImageUrl ? (
+                  <div className="flex flex-col items-center">
+                    <div className="relative aspect-video w-full max-w-sm rounded-xl overflow-hidden mb-3 border border-zinc-800 bg-zinc-950 flex items-center justify-center">
+                      {uploadedImageUrl.startsWith("data:video/") ? (
+                        <video src={uploadedImageUrl} controls className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={uploadedImageUrl} alt="Uploaded output" className="w-full h-full object-cover" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadedImageUrl("");
+                          setSelectedImage(null);
+                        }}
+                        className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 p-1.5 rounded-full text-white"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <span className="text-xs text-cyan-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5 animate-pulse" /> Custom media selected
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      id="image-file-upload"
+                    />
+                    <label
+                      htmlFor="image-file-upload"
+                      className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl p-6 bg-zinc-950/40 text-center cursor-pointer hover:border-cyan-500/40 transition-colors max-w-xs mx-auto"
+                    >
+                      <Upload className="w-8 h-8 text-cyan-400 mb-2" />
+                      <span className="text-xs font-bold text-zinc-200">Upload custom media</span>
+                      <span className="text-[10px] text-zinc-500 mt-1">PNG, JPG, MP4, WEBM (Max 15MB)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="ios-card p-6 text-center">
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              No media will be attached to this post.
+            </p>
+          </div>
         )}
 
         {/* Generate Post Button */}

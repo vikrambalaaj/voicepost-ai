@@ -307,7 +307,7 @@ export default function SettingsPage() {
 
         {/* App Version Info */}
         <p className="text-center text-xs text-zinc-400 mt-4 select-none">
-          VoicePost v1.0.0 · <span className="text-zinc-600">{user.email}</span>
+          VoicePost v1.3.0 · <span className="text-zinc-600">{user.email}</span>
         </p>
       </div>
     </IosShell>

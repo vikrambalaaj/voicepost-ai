@@ -132,15 +132,22 @@ function drawSlideToCanvas(
   slideIndex: number,
   totalSlides: number,
   templateId: string,
-  accentColor: string
+  accentColor: string,
+  bgImgElement?: HTMLImageElement
 ) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
 
   if (templateId === "bold_impact") {
     // Background
-    ctx.fillStyle = "#0F0F0F";
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      ctx.fillStyle = "#0F0F0F";
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Top Accent Bar
     ctx.fillStyle = accentColor;
@@ -150,10 +157,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = accentColor;
     ctx.font = "bold 24px system-ui, sans-serif";
     ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 100);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 900, 120);
 
     // Title
     ctx.fillStyle = "#FFFFFF";
@@ -191,8 +194,14 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "minimal_clean") {
     // Background
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Left Accent line
     ctx.fillStyle = accentColor;
@@ -202,10 +211,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#A1A1AA";
     ctx.font = "bold 28px Georgia, serif";
     ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
-
-    // Emoji
-    ctx.font = "80px Georgia, serif";
-    ctx.fillText(slide.emoji, 900, 130);
 
     // Title
     ctx.fillStyle = accentColor;
@@ -229,20 +234,28 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "gradient_flow") {
     // Gradient background
-    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
-    grad.addColorStop(0, accentColor);
-    grad.addColorStop(1, "#0F0F0F");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+      grad.addColorStop(0, accentColor);
+      grad.addColorStop(1, "#0F0F0F");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
-    // Glow circle top right
-    const glowGrad = ctx.createRadialGradient(980, 100, 0, 980, 100, 300);
-    glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
-    glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(980, 100, 300, 0, Math.PI * 2);
-    ctx.fill();
+    // Glow circle top right - only if no bg image
+    if (!bgImgElement) {
+      const glowGrad = ctx.createRadialGradient(980, 100, 0, 980, 100, 300);
+      glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+      glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(980, 100, 300, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Slide counter (rounded pill)
     ctx.fillStyle = "rgba(255,255,255,0.2)";
@@ -252,10 +265,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 900, 140);
 
     // Title
     ctx.fillStyle = "#FFFFFF";
@@ -279,20 +288,26 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "split_pro") {
     // Left panel (accent background)
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(0, 0, 432, 1080);
-
-    // Right panel (white background)
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(432, 0, 648, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = accentColor;
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(0, 0, 432, 1080);
+      ctx.globalAlpha = 1.0;
+      // Right panel overlay
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.fillRect(432, 0, 648, 1080);
+    } else {
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(0, 0, 432, 1080);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(432, 0, 648, 1080);
+    }
 
     // Left panel content
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "black 64px system-ui, sans-serif";
     ctx.fillText(isCover ? "💡" : `0${slideIndex + 1}`, 80, 150);
-
-    ctx.font = "120px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 80, 650);
 
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     ctx.font = "normal 28px system-ui, sans-serif";
@@ -325,27 +340,35 @@ function drawSlideToCanvas(
   } else {
     // frosted_card (default)
     // Background gradient
-    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
-    grad.addColorStop(0, "#1E1B4B");
-    grad.addColorStop(0.5, "#312E81");
-    grad.addColorStop(1, "#1E1B4B");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+      grad.addColorStop(0, "#1E1B4B");
+      grad.addColorStop(0.5, "#312E81");
+      grad.addColorStop(1, "#1E1B4B");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Stars
-    ctx.fillStyle = "#FFFFFF";
-    for (let s = 0; s < 25; s++) {
-      const starX = (100 + (s * 137) % 880);
-      const starY = (100 + (s * 253) % 880);
-      const opacity = 0.2 + (s % 4) * 0.2;
-      ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-      ctx.beginPath();
-      ctx.arc(starX, starY, 3, 0, Math.PI * 2);
-      ctx.fill();
+    if (!bgImgElement) {
+      ctx.fillStyle = "#FFFFFF";
+      for (let s = 0; s < 25; s++) {
+        const starX = (100 + (s * 137) % 880);
+        const starY = (100 + (s * 253) % 880);
+        const opacity = 0.2 + (s % 4) * 0.2;
+        ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+        ctx.beginPath();
+        ctx.arc(starX, starY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Card boundary
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillStyle = bgImgElement ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)";
     ctx.strokeStyle = `${accentColor}4D`;
     ctx.lineWidth = 3;
     drawRoundedRect(ctx, 80, 80, 920, 920, 32);
@@ -360,10 +383,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 860, 170);
 
     // Title
     ctx.fillStyle = accentColor;
@@ -387,6 +406,7 @@ function SlideCanvas({
   slideIndex,
   totalSlides,
   compact = false,
+  backgroundImage,
 }: {
   slide: Slide;
   templateId: string;
@@ -394,6 +414,7 @@ function SlideCanvas({
   slideIndex: number;
   totalSlides: number;
   compact?: boolean;
+  backgroundImage?: string;
 }) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
@@ -407,17 +428,19 @@ function SlideCanvas({
     return (
       <div
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
-        style={{ background: "#0F0F0F", fontFamily: "system-ui, sans-serif" }}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : "#0F0F0F",
+          fontFamily: "system-ui, sans-serif"
+        }}
       >
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: accentColor }} />
-        <div className="flex justify-between items-center mb-auto">
+        {backgroundImage && <div className="absolute inset-0 bg-black/45 z-0" />}
+        <div className="absolute top-0 left-0 right-0 h-1 z-10" style={{ background: accentColor }} />
+        <div className="relative z-10 flex justify-between items-center mb-auto">
           <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold uppercase tracking-widest`} style={{ color: accentColor }}>
             {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
           </div>
-          {!compact && <div className="text-2xl">{slide.emoji}</div>}
         </div>
-        <div className="mt-auto">
-          {compact && <div className="text-xl mb-1">{slide.emoji}</div>}
+        <div className="relative z-10 mt-auto">
           <h2
             className={`font-black leading-tight text-white ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}
             style={{ textShadow: `0 0 30px ${accentColor}40` }}
@@ -429,7 +452,7 @@ function SlideCanvas({
           </p>
         </div>
         {isCover && (
-          <div className={`mt-3 flex items-center gap-2 ${compact ? "pt-2" : "pt-4"} border-t border-zinc-800`}>
+          <div className={`relative z-10 mt-3 flex items-center gap-2 ${compact ? "pt-2" : "pt-4"} border-t border-zinc-800`}>
             <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: accentColor }}>
               <span className="text-white text-[8px] font-bold">V</span>
             </div>
@@ -443,16 +466,19 @@ function SlideCanvas({
   if (templateId === "minimal_clean") {
     return (
       <div
-        className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden bg-white`}
-        style={{ fontFamily: "Georgia, serif" }}
+        className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : "white",
+          fontFamily: "Georgia, serif"
+        }}
       >
-        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accentColor }} />
-        <div className={`${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
+        {backgroundImage && <div className="absolute inset-0 bg-white/85 z-0" />}
+        <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ background: accentColor }} />
+        <div className={`relative z-10 ${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
           <div className="flex justify-between items-start">
             <div className={`font-mono ${compact ? "text-[8px]" : "text-xs"} text-zinc-400 uppercase tracking-widest`}>
               {isCover ? "Swipe →" : `0${slideIndex + 1}`}
             </div>
-            <span className={compact ? "text-lg" : "text-3xl"}>{slide.emoji}</span>
           </div>
           <div className="mt-auto">
             <h2
@@ -480,12 +506,18 @@ function SlideCanvas({
     return (
       <div
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
-        style={{ background: getGradientStyle(), fontFamily: "system-ui, sans-serif" }}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : getGradientStyle(),
+          fontFamily: "system-ui, sans-serif"
+        }}
       >
-        <div
-          className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30 blur-2xl"
-          style={{ background: accentColor }}
-        />
+        {backgroundImage && <div className="absolute inset-0 bg-black/50 z-0" />}
+        {!backgroundImage && (
+          <div
+            className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30 blur-2xl"
+            style={{ background: accentColor }}
+          />
+        )}
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex justify-between items-start">
             <div
@@ -494,7 +526,6 @@ function SlideCanvas({
             >
               {isCover ? "New Post" : `${slideIndex + 1}/${totalSlides}`}
             </div>
-            <span className={compact ? "text-xl" : "text-3xl"}>{slide.emoji}</span>
           </div>
           <div className="mt-auto">
             <h2 className={`font-black text-white leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}>
@@ -519,24 +550,29 @@ function SlideCanvas({
   if (templateId === "split_pro") {
     return (
       <div className="relative w-full aspect-square flex overflow-hidden bg-white" style={{ fontFamily: "system-ui, sans-serif" }}>
+        {backgroundImage && (
+          <div
+            className="absolute inset-0 z-0"
+            style={{ background: `url(${backgroundImage}) center/cover no-repeat` }}
+          />
+        )}
         <div
-          className={`flex flex-col justify-between ${compact ? "w-1/3 p-3" : "w-2/5 p-6"}`}
-          style={{ background: accentColor }}
+          className={`relative z-10 flex flex-col justify-between ${compact ? "w-1/3 p-3" : "w-2/5 p-6"}`}
+          style={{ background: backgroundImage ? `${accentColor}CC` : accentColor }}
         >
           <div>
             <div className={`font-black text-white ${compact ? "text-base" : "text-2xl"}`}>
               {isCover ? "💡" : `0${slideIndex + 1}`}
             </div>
           </div>
-          <div>
-            {!compact && <div className="w-8 h-1 bg-white/50 mb-3 rounded-full" />}
-            <span className={compact ? "text-lg" : "text-3xl"}>{slide.emoji}</span>
-          </div>
           <div className={`text-white/60 ${compact ? "text-[8px]" : "text-xs"}`}>
             {totalSlides} slides
           </div>
         </div>
-        <div className={`flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}>
+        <div
+          className={`relative z-10 flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}
+          style={{ background: backgroundImage ? "rgba(255,255,255,0.85)" : undefined }}
+        >
           <div
             className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold w-fit`}
             style={{ background: `${accentColor}18`, color: accentColor }}
@@ -570,23 +606,25 @@ function SlideCanvas({
     <div
       className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
       style={{
-        background: `linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #1E1B4B 100%)`,
+        background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : `linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #1E1B4B 100%)`,
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      <div className="absolute inset-0 opacity-20">
-        {[...Array(compact ? 6 : 15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-white rounded-full"
-            style={{
-              top: `${10 + (i * 37) % 80}%`,
-              left: `${5 + (i * 53) % 90}%`,
-              opacity: 0.4 + (i % 3) * 0.2,
-            }}
-          />
-        ))}
-      </div>
+      {!backgroundImage && (
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(compact ? 6 : 15)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full"
+              style={{
+                top: `${10 + (i * 37) % 80}%`,
+                left: `${5 + (i * 53) % 90}%`,
+                opacity: 0.4 + (i % 3) * 0.2,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <div
         className={`relative z-10 flex-1 flex flex-col rounded-2xl ${compact ? "p-3" : "p-5"}`}
         style={{
@@ -602,7 +640,6 @@ function SlideCanvas({
           >
             {isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`}
           </div>
-          <span className={compact ? "text-xl" : "text-3xl"}>{slide.emoji}</span>
         </div>
         <div className="mt-auto">
           <h2
@@ -635,11 +672,13 @@ function CarouselBuilderContent() {
   const [accentColor, setAccentColor] = useState("#3B82F6");
   const [generating, setGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState("");
-  const [carouselData, setCarouselData] = useState<CarouselData | null>(null);
+  const [carouselData, setCarouselData] = useState<any>(null);
+  const [backgroundImage, setBackgroundImage] = useState<string | undefined>(undefined);
   const [previewSlide, setPreviewSlide] = useState(0);
   const [editingSlide, setEditingSlide] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [editSlideImage, setEditSlideImage] = useState("");
   const [hashtags, setHashtags] = useState<string[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
@@ -663,8 +702,12 @@ function CarouselBuilderContent() {
                 setCarouselData({
                   title: parsed.title,
                   slides: parsed.slides,
-                  suggestedHashtags: post.hashtags || []
+                  suggestedHashtags: post.hashtags || [],
+                  backgroundImage: parsed.backgroundImage || undefined,
                 });
+                if (parsed.backgroundImage) {
+                  setBackgroundImage(parsed.backgroundImage);
+                }
                 setSelectedTemplate(parsed.templateId || "bold_impact");
                 setAccentColor(parsed.accentColor || "#3B82F6");
                 setStep(4);
@@ -748,6 +791,7 @@ function CarouselBuilderContent() {
         slides: data.carousel.slides,
         templateId: selectedTemplate,
         accentColor: accentColor,
+        backgroundImage: backgroundImage,
       });
       await savePostToSupabase(serialized, tags, "pending_approval");
 
@@ -766,6 +810,7 @@ function CarouselBuilderContent() {
     const s = carouselData.slides[idx];
     setEditTitle(s.title);
     setEditBody(s.body);
+    setEditSlideImage(s.image || "");
     setEditingSlide(idx);
   };
 
@@ -774,6 +819,7 @@ function CarouselBuilderContent() {
     const updated = { ...carouselData };
     updated.slides[editingSlide].title = editTitle;
     updated.slides[editingSlide].body = editBody;
+    updated.slides[editingSlide].image = editSlideImage || undefined;
     setCarouselData(updated);
     setEditingSlide(null);
 
@@ -784,6 +830,7 @@ function CarouselBuilderContent() {
       slides: updated.slides,
       templateId: selectedTemplate,
       accentColor: accentColor,
+      backgroundImage: updated.backgroundImage || backgroundImage,
     });
     await savePostToSupabase(serialized, hashtags, "pending_approval");
   };
@@ -797,6 +844,7 @@ function CarouselBuilderContent() {
         slides: carouselData.slides,
         templateId: tId,
         accentColor: accentColor,
+        backgroundImage: carouselData.backgroundImage || backgroundImage,
       });
       await savePostToSupabase(serialized, hashtags, "pending_approval");
     }
@@ -811,6 +859,7 @@ function CarouselBuilderContent() {
         slides: carouselData.slides,
         templateId: selectedTemplate,
         accentColor: color,
+        backgroundImage: carouselData.backgroundImage || backgroundImage,
       });
       await savePostToSupabase(serialized, hashtags, "pending_approval");
     }
@@ -839,7 +888,21 @@ function CarouselBuilderContent() {
       const slide = slides[i];
       
       ctx.clearRect(0, 0, 1080, 1080);
-      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
+
+      const slideBgImage = slide.image || carouselData.backgroundImage || backgroundImage;
+      let slideBgImgElement: HTMLImageElement | undefined = undefined;
+
+      if (slideBgImage) {
+        slideBgImgElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("Failed to load background image"));
+          img.src = slideBgImage;
+        });
+      }
+
+      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor, slideBgImgElement);
 
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
 
@@ -901,6 +964,7 @@ function CarouselBuilderContent() {
           slides: carouselData.slides,
           templateId: selectedTemplate,
           accentColor: accentColor,
+          backgroundImage: carouselData.backgroundImage || backgroundImage,
         });
         await savePostToSupabase(serialized, hashtags, "published");
 
@@ -965,6 +1029,49 @@ function CarouselBuilderContent() {
         </div>
       </div>
 
+      {/* Background Image Upload */}
+      <div className="ios-card p-4">
+        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mb-1">Slide Background Image (Optional)</p>
+        <p className="text-xs text-zinc-400 mb-3">Upload an image to overlay slides on top of it.</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            accept="image/*"
+            id="carousel-bg-upload-step1"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  setBackgroundImage(reader.result as string);
+                };
+                reader.readAsDataURL(file);
+              }
+            }}
+          />
+          <label
+            htmlFor="carousel-bg-upload-step1"
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-355 bg-zinc-105 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+          >
+            {backgroundImage ? "Change Background" : "Upload Image"}
+          </label>
+          {backgroundImage && (
+            <button
+              onClick={() => setBackgroundImage(undefined)}
+              className="text-xs text-red-500 font-bold hover:underline bg-transparent border-none cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        {backgroundImage && (
+          <div className="mt-3 relative w-full aspect-video rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+            <img src={backgroundImage} alt="Background Preview" className="w-full h-full object-cover" />
+          </div>
+        )}
+      </div>
+
       <button
         onClick={() => setStep(2)}
         disabled={topic.trim().length < 10}
@@ -1014,6 +1121,7 @@ function CarouselBuilderContent() {
                   slideIndex={0}
                   totalSlides={6}
                   compact={true}
+                  backgroundImage={backgroundImage}
                 />
               </div>
               <div className="flex-1 min-w-0">
@@ -1093,6 +1201,7 @@ function CarouselBuilderContent() {
             accentColor={accentColor}
             slideIndex={0}
             totalSlides={slideCount}
+            backgroundImage={backgroundImage}
           />
         </div>
       </div>
@@ -1181,6 +1290,7 @@ function CarouselBuilderContent() {
                   accentColor={accentColor}
                   slideIndex={previewSlide}
                   totalSlides={slides.length}
+                  backgroundImage={currentSlide.image || carouselData?.backgroundImage || backgroundImage}
                 />
               </div>
               <button
@@ -1240,6 +1350,7 @@ function CarouselBuilderContent() {
                     slideIndex={i}
                     totalSlides={slides.length}
                     compact={true}
+                    backgroundImage={slide.image || carouselData?.backgroundImage || backgroundImage}
                   />
                 </button>
               ))}
@@ -1276,6 +1387,7 @@ function CarouselBuilderContent() {
                           slideIndex={0}
                           totalSlides={6}
                           compact={true}
+                          backgroundImage={carouselData?.backgroundImage || backgroundImage}
                         />
                       </div>
                     </button>
@@ -1322,6 +1434,85 @@ function CarouselBuilderContent() {
                   </div>
                 </div>
               </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-1.5 select-none">
+                  <Layout className="w-3.5 h-3.5 text-cyan-400" />
+                  Slide Background Image (Optional)
+                </p>
+                <div className="ios-card p-3 flex items-center justify-between bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-850">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="carousel-bg-upload-step4"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = async () => {
+                            const base64Data = reader.result as string;
+                            setBackgroundImage(base64Data);
+                            if (carouselData) {
+                              const updated = { ...carouselData, backgroundImage: base64Data };
+                              setCarouselData(updated);
+                              
+                              // Save update to Supabase
+                              const serialized = JSON.stringify({
+                                type: "carousel",
+                                title: updated.title,
+                                slides: updated.slides,
+                                templateId: selectedTemplate,
+                                accentColor: accentColor,
+                                backgroundImage: base64Data,
+                              });
+                              await savePostToSupabase(serialized, hashtags, "pending_approval");
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="carousel-bg-upload-step4"
+                      className="px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-150 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                    >
+                      {carouselData?.backgroundImage || backgroundImage ? "Change Background" : "Upload Background"}
+                    </label>
+                    {(carouselData?.backgroundImage || backgroundImage) && (
+                      <button
+                        onClick={async () => {
+                          setBackgroundImage(undefined);
+                          if (carouselData) {
+                            const updated = { ...carouselData };
+                            delete updated.backgroundImage;
+                            setCarouselData(updated);
+                            
+                            // Save update to Supabase
+                            const serialized = JSON.stringify({
+                              type: "carousel",
+                              title: updated.title,
+                              slides: updated.slides,
+                              templateId: selectedTemplate,
+                              accentColor: accentColor,
+                            });
+                            await savePostToSupabase(serialized, hashtags, "pending_approval");
+                          }
+                        }}
+                        className="text-xs text-red-500 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {(carouselData?.backgroundImage || backgroundImage) && (
+                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 flex-shrink-0">
+                      <img src={carouselData?.backgroundImage || backgroundImage} alt="Thumbnail" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1349,6 +1540,47 @@ function CarouselBuilderContent() {
                     rows={3}
                     className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 outline-none resize-none leading-relaxed"
                   />
+                </div>
+                <div className="mb-4">
+                  <label className="text-xs text-zinc-500 font-semibold mb-1 block">Slide Background Image (Optional)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id={`slide-bg-upload-${editingSlide}`}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setEditSlideImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor={`slide-bg-upload-${editingSlide}`}
+                      className="px-3 py-2 rounded-xl text-xs font-bold text-zinc-705 dark:text-zinc-300 bg-zinc-150 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                    >
+                      {editSlideImage ? "Change Image" : "Upload Image"}
+                    </label>
+                    {editSlideImage && (
+                      <button
+                        type="button"
+                        onClick={() => setEditSlideImage("")}
+                        className="text-xs text-red-500 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editSlideImage && (
+                    <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-850">
+                      <img src={editSlideImage} alt="Slide Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1466,6 +1698,7 @@ function CarouselBuilderContent() {
                 slideIndex={i}
                 totalSlides={slides.length}
                 compact={true}
+                backgroundImage={slide.image || carouselData?.backgroundImage || backgroundImage}
               />
             </div>
           ))}

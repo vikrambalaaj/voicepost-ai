@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
-import { buildSystemPrompt } from "../generate/route";
+import { buildSystemPrompt, humanizePostContent, humanizeCarouselSlides } from "../generate/route";
 import { cleanJsonString } from "@/lib/utils";
 import { getAuthenticatedUserId } from "@/lib/auth";
 
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { post_id, feedback } = body;
+    const { post_id, feedback, document_text } = body;
 
     if (!post_id || !feedback) {
       return NextResponse.json({ error: "post_id and feedback are required" }, { status: 400 });
@@ -72,6 +72,10 @@ Changes made in response: ${rev.changes_made?.join(", ") || "None (Initial)"}`;
       // Not a carousel
     }
 
+    const documentContext = document_text
+      ? `\n\nADDITIONAL REFERENCE DOCUMENT CONTEXT (Use this to extract and incorporate the most up-to-date and accurate facts/content):\n"${document_text}"`
+      : "";
+
     let systemPrompt = buildSystemPrompt();
     let userPrompt = "";
 
@@ -84,7 +88,7 @@ PREVIOUS REVISION HISTORY AND FEEDBACK:
 ${revisionLogs}
 
 CURRENT DIRECT USER FEEDBACK FOR NEXT VERSION:
-"${feedback}"
+"${feedback}"${documentContext}
 
 USER CONTEXT:
 Industry: ${user?.industry || "Tech"}
@@ -108,23 +112,20 @@ Return your response ONLY in this JSON format:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline (4-8 words)",
-      "body": "1-2 sentence hook that makes them swipe",
-      "emoji": "emoji"
+      "body": "1-2 sentence hook that makes them swipe"
     },
     {
       "slideNumber": 2,
       "type": "content",
       "title": "slide title",
-      "body": "2-3 sentence insight",
-      "emoji": "emoji"
+      "body": "2-3 sentence insight"
     },
     ... (additional content slides),
     {
       "slideNumber": ${originalCarouselData?.slides?.length || 6},
       "type": "cta",
       "title": "cta headline",
-      "body": "follow for more + what they'll get",
-      "emoji": "🎯"
+      "body": "follow for more + what they'll get"
     }
   ],
   "suggestedHashtags": ["hashtag1", "hashtag2"],
@@ -191,7 +192,7 @@ PREVIOUS REVISION HISTORY AND FEEDBACK:
 ${revisionLogs}
 
 CURRENT DIRECT USER FEEDBACK FOR NEXT VERSION:
-"${feedback}"
+"${feedback}"${documentContext}
 
 TOPIC CONTEXT:
 - Industry: ${user?.industry || "SaaS & Tech"}
@@ -206,7 +207,7 @@ PREVIOUS REVISION HISTORY AND FEEDBACK:
 ${revisionLogs}
 
 CURRENT DIRECT USER FEEDBACK FOR NEXT VERSION:
-"${feedback}"
+"${feedback}"${documentContext}
 
 USER CONTEXT:
 Industry: ${user?.industry || "Tech"}
@@ -239,6 +240,7 @@ Return your response ONLY in this JSON format:
       userPlan: userPlan as any,
       sessionId: "post-regenerate-" + Date.now(),
       responseFormat: "json",
+      enableSearch: true,
     });
 
     let resultJson: any = {};
@@ -254,6 +256,14 @@ Return your response ONLY in this JSON format:
     }
 
     if (isCarousel) {
+      if (Array.isArray(resultJson.slides)) {
+        resultJson.slides = await humanizeCarouselSlides(
+          resultJson.slides,
+          post.user_id,
+          userPlan as any,
+          "regenerate-carousel-" + Date.now()
+        );
+      }
       // Map flat JSON structure back to Carousel schema format
       const slides = (resultJson.slides || []).map((slide: any) => {
         let cleanTitle = slide.title || "";
@@ -277,6 +287,12 @@ Return your response ONLY in this JSON format:
       resultJson.post_content = JSON.stringify(carouselObj);
       resultJson.hashtags = resultJson.suggestedHashtags || [];
     } else if (resultJson.post_content) {
+      resultJson.post_content = await humanizePostContent(
+        resultJson.post_content,
+        post.user_id,
+        userPlan as any,
+        "regenerate-" + Date.now()
+      );
       let cleanedPostContent = resultJson.post_content;
       cleanedPostContent = cleanedPostContent.replace(/\*\*/g, "");
       cleanedPostContent = cleanedPostContent.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");

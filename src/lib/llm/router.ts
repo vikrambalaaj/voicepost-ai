@@ -54,7 +54,8 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
   const dateStr = new Date().toISOString().split("T")[0];
 
   // 1. Get eligible providers (static list first)
-  let eligibleProviders = getEligibleProviders(request.userPlan);
+  const planToUse = request.useCase === "keyword_extraction" ? "pro" : request.userPlan;
+  let eligibleProviders = getEligibleProviders(planToUse);
 
   // Load database configurations if available
   const dailyLimitOverrides = new Map<string, number>();
@@ -74,11 +75,11 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
           dailyLimitOverrides.set(cfg.id, cfg.daily_limit_override);
         }
         const model =
-          request.userPlan === "free"
+          planToUse === "free"
             ? cfg.model_free
-            : request.userPlan === "starter"
+            : planToUse === "starter"
             ? cfg.model_starter
-            : request.userPlan === "pro"
+            : planToUse === "pro"
             ? cfg.model_pro
             : cfg.model_agency;
         if (model) {
@@ -101,6 +102,9 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
       // Filter based on plan routing rules
       eligibleProviders = merged.filter((p) => {
+        if (request.useCase === "keyword_extraction") {
+          return true;
+        }
         if (request.userPlan === "free") {
           return p.priority >= 3;
         }

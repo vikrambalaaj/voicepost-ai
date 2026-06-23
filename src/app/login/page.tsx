@@ -8,8 +8,24 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check search params for errors
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("error");
+      if (err === "oauth_failed") {
+        setErrorMsg("LinkedIn authentication failed. Please try again.");
+      } else if (err === "db_error") {
+        setErrorMsg("Database error: Failed to save your account details.");
+      } else if (err === "csrf_failed") {
+        setErrorMsg("Security validation failed. Please try logging in again.");
+      } else if (err) {
+        setErrorMsg(`Login error: ${err}`);
+      }
+    }
+
     // If already logged in, skip to dashboard
     fetch("/api/auth/session")
       .then((r) => r.json())
@@ -72,6 +88,13 @@ export default function LoginPage() {
             Sign in with LinkedIn to access your posts, writing styles, and publishing tools.
           </p>
 
+          {/* Error Banner */}
+          {errorMsg && (
+            <div className="mb-6 p-4 bg-red-950/50 border border-red-500/30 rounded-2xl text-xs text-red-400 leading-relaxed font-semibold text-center">
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
           {/* LinkedIn Login Button */}
           <button
             onClick={handleLinkedInLogin}
@@ -117,6 +140,7 @@ export default function LoginPage() {
           <span className="text-zinc-500 underline cursor-pointer">Terms</span> and{" "}
           <span className="text-zinc-500 underline cursor-pointer">Privacy Policy</span>.
           <br />We never post without your approval.
+          <br /><span className="text-[10px] text-zinc-700 mt-2 block font-mono">VoicePost App v1.3.0</span>
         </p>
       </div>
     </div>

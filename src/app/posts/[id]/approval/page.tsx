@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
 import {
   ArrowLeft, Check, AlertTriangle, Plus, X, Clock, HelpCircle,
-  History, Sparkles, Download, ChevronLeft, ChevronRight, Edit3, Loader2, Layout, Palette
+  History, Sparkles, Download, ChevronLeft, ChevronRight, Edit3, Loader2, Layout, Palette,
+  Mic, Paperclip, Square, CheckCircle2, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,15 +78,22 @@ function drawSlideToCanvas(
   slideIndex: number,
   totalSlides: number,
   templateId: string,
-  accentColor: string
+  accentColor: string,
+  bgImgElement?: HTMLImageElement
 ) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
 
   if (templateId === "bold_impact") {
     // Background
-    ctx.fillStyle = "#0F0F0F";
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      ctx.fillStyle = "#0F0F0F";
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Top Accent Bar
     ctx.fillStyle = accentColor;
@@ -95,10 +103,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = accentColor;
     ctx.font = "bold 24px system-ui, sans-serif";
     ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 100);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 900, 120);
 
     // Title
     ctx.fillStyle = "#FFFFFF";
@@ -136,8 +140,14 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "minimal_clean") {
     // Background
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Left Accent line
     ctx.fillStyle = accentColor;
@@ -147,10 +157,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#A1A1AA";
     ctx.font = "bold 28px Georgia, serif";
     ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
-
-    // Emoji
-    ctx.font = "80px Georgia, serif";
-    ctx.fillText(slide.emoji, 900, 130);
 
     // Title
     ctx.fillStyle = accentColor;
@@ -174,20 +180,28 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "gradient_flow") {
     // Gradient background
-    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
-    grad.addColorStop(0, accentColor);
-    grad.addColorStop(1, "#0F0F0F");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+      grad.addColorStop(0, accentColor);
+      grad.addColorStop(1, "#0F0F0F");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
-    // Glow circle top right
-    const glowGrad = ctx.createRadialGradient(980, 100, 0, 980, 100, 300);
-    glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
-    glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(980, 100, 300, 0, Math.PI * 2);
-    ctx.fill();
+    // Glow circle top right - only if no bg image
+    if (!bgImgElement) {
+      const glowGrad = ctx.createRadialGradient(980, 100, 0, 980, 100, 300);
+      glowGrad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+      glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(980, 100, 300, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Slide counter (rounded pill)
     ctx.fillStyle = "rgba(255,255,255,0.2)";
@@ -197,10 +211,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 900, 140);
 
     // Title
     ctx.fillStyle = "#FFFFFF";
@@ -224,20 +234,26 @@ function drawSlideToCanvas(
     }
   } else if (templateId === "split_pro") {
     // Left panel (accent background)
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(0, 0, 432, 1080);
-
-    // Right panel (white background)
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(432, 0, 648, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = accentColor;
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(0, 0, 432, 1080);
+      ctx.globalAlpha = 1.0;
+      // Right panel overlay
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.fillRect(432, 0, 648, 1080);
+    } else {
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(0, 0, 432, 1080);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(432, 0, 648, 1080);
+    }
 
     // Left panel content
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "black 64px system-ui, sans-serif";
     ctx.fillText(isCover ? "💡" : `0${slideIndex + 1}`, 80, 150);
-
-    ctx.font = "120px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 80, 650);
 
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     ctx.font = "normal 28px system-ui, sans-serif";
@@ -270,27 +286,35 @@ function drawSlideToCanvas(
   } else {
     // frosted_card (default)
     // Background gradient
-    const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
-    grad.addColorStop(0, "#1E1B4B");
-    grad.addColorStop(0.5, "#312E81");
-    grad.addColorStop(1, "#1E1B4B");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1080, 1080);
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+      grad.addColorStop(0, "#1E1B4B");
+      grad.addColorStop(0.5, "#312E81");
+      grad.addColorStop(1, "#1E1B4B");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
 
     // Stars
-    ctx.fillStyle = "#FFFFFF";
-    for (let s = 0; s < 25; s++) {
-      const starX = (100 + (s * 137) % 880);
-      const starY = (100 + (s * 253) % 880);
-      const opacity = 0.2 + (s % 4) * 0.2;
-      ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-      ctx.beginPath();
-      ctx.arc(starX, starY, 3, 0, Math.PI * 2);
-      ctx.fill();
+    if (!bgImgElement) {
+      ctx.fillStyle = "#FFFFFF";
+      for (let s = 0; s < 25; s++) {
+        const starX = (100 + (s * 137) % 880);
+        const starY = (100 + (s * 253) % 880);
+        const opacity = 0.2 + (s % 4) * 0.2;
+        ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+        ctx.beginPath();
+        ctx.arc(starX, starY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // Card boundary
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillStyle = bgImgElement ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)";
     ctx.strokeStyle = `${accentColor}4D`;
     ctx.lineWidth = 3;
     drawRoundedRect(ctx, 80, 80, 920, 920, 32);
@@ -305,10 +329,6 @@ function drawSlideToCanvas(
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
-
-    // Emoji
-    ctx.font = "80px system-ui, sans-serif";
-    ctx.fillText(slide.emoji, 860, 170);
 
     // Title
     ctx.fillStyle = accentColor;
@@ -405,6 +425,7 @@ function SlideCanvasComponent({
   authorName = "",
   authorPicture = "",
   authorLinkedinUrl = "",
+  backgroundImage,
 }: {
   slide: Slide;
   templateId: string;
@@ -416,6 +437,7 @@ function SlideCanvasComponent({
   authorName?: string;
   authorPicture?: string;
   authorLinkedinUrl?: string;
+  backgroundImage?: string;
 }) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
@@ -429,17 +451,19 @@ function SlideCanvasComponent({
     return (
       <div
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
-        style={{ background: "#0F0F0F", fontFamily: "system-ui, sans-serif" }}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : "#0F0F0F",
+          fontFamily: "system-ui, sans-serif"
+        }}
       >
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: accentColor }} />
-        <div className="flex justify-between items-center mb-auto">
+        {backgroundImage && <div className="absolute inset-0 bg-black/45 z-0" />}
+        <div className="absolute top-0 left-0 right-0 h-1 z-10" style={{ background: accentColor }} />
+        <div className="relative z-10 flex justify-between items-center mb-auto">
           <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold uppercase tracking-widest`} style={{ color: accentColor }}>
             {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
           </div>
-          {!compact && <div className="text-2xl">{slide.emoji}</div>}
         </div>
-        <div className="mt-auto">
-          {compact && <div className="text-xl mb-1">{slide.emoji}</div>}
+        <div className="relative z-10 mt-auto">
           <h2
             className={`font-black leading-tight text-white ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}
             style={{ textShadow: `0 0 30px ${accentColor}40` }}
@@ -449,10 +473,10 @@ function SlideCanvasComponent({
           <p className={`text-zinc-400 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`}>
             {slide.body}
           </p>
+          {showAuthor && (
+            <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
+          )}
         </div>
-        {showAuthor && (
-          <AuthorStrip name={authorName} picture={authorPicture} accentColor={accentColor} dark compact={compact} isCta={isCta} linkedinUrl={authorLinkedinUrl} />
-        )}
       </div>
     );
   }
@@ -460,16 +484,19 @@ function SlideCanvasComponent({
   if (templateId === "minimal_clean") {
     return (
       <div
-        className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden bg-white`}
-        style={{ fontFamily: "Georgia, serif" }}
+        className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : "white",
+          fontFamily: "Georgia, serif"
+        }}
       >
-        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accentColor }} />
-        <div className={`${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
+        {backgroundImage && <div className="absolute inset-0 bg-white/85 z-0" />}
+        <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ background: accentColor }} />
+        <div className={`relative z-10 ${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
           <div className="flex justify-between items-start">
             <div className={`font-mono ${compact ? "text-[8px]" : "text-xs"} text-zinc-400 uppercase tracking-widest`}>
               {isCover ? "Swipe →" : `0${slideIndex + 1}`}
             </div>
-            <span className={compact ? "text-lg" : "text-3xl"}>{slide.emoji}</span>
           </div>
           <div className="mt-auto">
             <h2
@@ -495,12 +522,18 @@ function SlideCanvasComponent({
     return (
       <div
         className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
-        style={{ background: getGradientStyle(), fontFamily: "system-ui, sans-serif" }}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : getGradientStyle(),
+          fontFamily: "system-ui, sans-serif"
+        }}
       >
-        <div
-          className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30 blur-2xl"
-          style={{ background: accentColor }}
-        />
+        {backgroundImage && <div className="absolute inset-0 bg-black/50 z-0" />}
+        {!backgroundImage && (
+          <div
+            className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-30 blur-2xl"
+            style={{ background: accentColor }}
+          />
+        )}
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex justify-between items-start">
             <div
@@ -509,7 +542,6 @@ function SlideCanvasComponent({
             >
               {isCover ? "New Post" : `${slideIndex + 1}/${totalSlides}`}
             </div>
-            <span className={compact ? "text-xl" : "text-3xl"}>{slide.emoji}</span>
           </div>
           <div className="mt-auto">
             <h2 className={`font-black text-white leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}>
@@ -530,24 +562,29 @@ function SlideCanvasComponent({
   if (templateId === "split_pro") {
     return (
       <div className="relative w-full aspect-square flex overflow-hidden bg-white" style={{ fontFamily: "system-ui, sans-serif" }}>
+        {backgroundImage && (
+          <div
+            className="absolute inset-0 z-0"
+            style={{ background: `url(${backgroundImage}) center/cover no-repeat` }}
+          />
+        )}
         <div
-          className={`flex flex-col justify-between ${compact ? "w-1/3 p-3" : "w-2/5 p-6"}`}
-          style={{ background: accentColor }}
+          className={`relative z-10 flex flex-col justify-between ${compact ? "w-1/3 p-3" : "w-2/5 p-6"}`}
+          style={{ background: backgroundImage ? `${accentColor}CC` : accentColor }}
         >
           <div>
             <div className={`font-black text-white ${compact ? "text-base" : "text-2xl"}`}>
               {isCover ? "💡" : `0${slideIndex + 1}`}
             </div>
           </div>
-          <div>
-            {!compact && <div className="w-8 h-1 bg-white/50 mb-3 rounded-full" />}
-            <span className={compact ? "text-lg" : "text-3xl"}>{slide.emoji}</span>
-          </div>
           <div className={`text-white/60 ${compact ? "text-[8px]" : "text-xs"}`}>
             {totalSlides} slides
           </div>
         </div>
-        <div className={`flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}>
+        <div
+          className={`relative z-10 flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}
+          style={{ background: backgroundImage ? "rgba(255,255,255,0.85)" : undefined }}
+        >
           <div
             className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold w-fit`}
             style={{ background: `${accentColor}18`, color: accentColor }}
@@ -585,23 +622,25 @@ function SlideCanvasComponent({
     <div
       className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
       style={{
-        background: `linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #1E1B4B 100%)`,
+        background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : `linear-gradient(135deg, #1E1B4B 0%, #312E81 50%, #1E1B4B 100%)`,
         fontFamily: "system-ui, sans-serif",
       }}
     >
-      <div className="absolute inset-0 opacity-20">
-        {[...Array(compact ? 6 : 15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-white rounded-full"
-            style={{
-              top: `${10 + (i * 37) % 80}%`,
-              left: `${5 + (i * 53) % 90}%`,
-              opacity: 0.4 + (i % 3) * 0.2,
-            }}
-          />
-        ))}
-      </div>
+      {!backgroundImage && (
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(compact ? 6 : 15)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full"
+              style={{
+                top: `${10 + (i * 37) % 80}%`,
+                left: `${5 + (i * 53) % 90}%`,
+                opacity: 0.4 + (i % 3) * 0.2,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <div
         className={`relative z-10 flex-1 flex flex-col rounded-2xl ${compact ? "p-3" : "p-5"}`}
         style={{
@@ -617,7 +656,6 @@ function SlideCanvasComponent({
           >
             {isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`}
           </div>
-          <span className={compact ? "text-xl" : "text-3xl"}>{slide.emoji}</span>
         </div>
         <div className="mt-auto">
           <h2
@@ -688,10 +726,157 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [editingSlide, setEditingSlide] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
+  const [editSlideImage, setEditSlideImage] = useState("");
+  const [accountsList, setAccountsList] = useState<any[]>([]);
+  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState("bold_impact");
   const [accentColor, setAccentColor] = useState("#3B82F6");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showAuthor, setShowAuthor] = useState(true); // Author branding toggle for carousel slides
+
+  // Voice Recording & Document Upload for Feedback
+  const [isRecordingFeedback, setIsRecordingFeedback] = useState(false);
+  const [isTranscribingFeedback, setIsTranscribingFeedback] = useState(false);
+  const [feedbackRecordingDuration, setFeedbackRecordingDuration] = useState(0);
+  const [feedbackMediaRecorder, setFeedbackMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [attachedDocText, setAttachedDocText] = useState("");
+  const [attachedDocName, setAttachedDocName] = useState("");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  // Timer for feedback voice recording
+  useEffect(() => {
+    let interval: any;
+    if (isRecordingFeedback) {
+      interval = setInterval(() => {
+        setFeedbackRecordingDuration((prev) => {
+          if (prev >= 180) { // Limit to 3 mins
+            stopFeedbackRecording();
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } else {
+      setFeedbackRecordingDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [isRecordingFeedback]);
+
+  const startFeedbackRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: "audio/webm" });
+        setIsTranscribingFeedback(true);
+
+        try {
+          const formData = new FormData();
+          formData.append("file", audioBlob, "feedback_audio.webm");
+          formData.append("duration", feedbackRecordingDuration.toString());
+
+          // Step 1: Submit audio (returns transcript_id)
+          const res = await fetch("/api/voice/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+          const submitData = await res.json();
+          if (!submitData.transcript_id) {
+            throw new Error(submitData.error || "Failed to submit transcription");
+          }
+
+          const { transcript_id, user_id, industry, keywords, duration_seconds } = submitData;
+          const keywordsStr = Array.isArray(keywords) ? keywords.join(",") : "";
+
+          // Step 2: Poll status
+          const pollUrl = `/api/voice/transcribe/status?id=${transcript_id}&user_id=${user_id}&duration=${duration_seconds}&industry=${encodeURIComponent(industry || "")}&keywords=${encodeURIComponent(keywordsStr)}`;
+          
+          const maxAttempts = 40; // 80s max
+          let completedTranscript = "";
+
+          for (let i = 0; i < maxAttempts; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const pollRes = await fetch(pollUrl);
+            const pollData = await pollRes.json();
+
+            if (pollData.status === "completed" && pollData.corrected_transcript) {
+              completedTranscript = pollData.corrected_transcript;
+              break;
+            } else if (pollData.status === "error") {
+              throw new Error(pollData.error || "Transcription failed");
+            }
+          }
+
+          if (completedTranscript) {
+            setFeedback((prev) => prev ? `${prev}\n${completedTranscript}` : completedTranscript);
+          } else {
+            throw new Error("Transcription timed out.");
+          }
+        } catch (err: any) {
+          console.error("Feedback voice processing failed:", err);
+          alert("Voice processing failed: " + (err.message || "Please try typing your feedback."));
+        } finally {
+          setIsTranscribingFeedback(false);
+        }
+      };
+
+      setFeedbackMediaRecorder(recorder);
+      setIsRecordingFeedback(true);
+      setFeedbackRecordingDuration(0);
+      recorder.start();
+    } catch (err) {
+      console.error("Failed to access microphone:", err);
+      alert("Microphone access denied or not supported.");
+    }
+  };
+
+  const stopFeedbackRecording = () => {
+    if (feedbackMediaRecorder && feedbackMediaRecorder.state !== "inactive") {
+      feedbackMediaRecorder.stop();
+      feedbackMediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    }
+    setIsRecordingFeedback(false);
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File is too large. Max 10MB allowed.");
+      return;
+    }
+
+    setUploadingDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/content/extract-text", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success && data.text) {
+        setAttachedDocText(data.text);
+        setAttachedDocName(file.name);
+      } else {
+        throw new Error(data.error || "Failed to extract text from document");
+      }
+    } catch (err: any) {
+      console.error("Document parsing error:", err);
+      alert("Failed to parse document: " + (err.message || "Please copy and paste the content manually."));
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
 
   // Load Data
   useEffect(() => {
@@ -726,10 +911,21 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         }
 
         // Load connected LinkedIn account
-        const accRes = await fetch("/api/linkedin/scraping-status");
-        const accData = await accRes.json();
-        if (accData.status && accData.status !== "disconnected") {
-          setLinkedAccount(accData);
+        const [accRes, listRes] = await Promise.all([
+          fetch("/api/linkedin/scraping-status"),
+          fetch("/api/linkedin/accounts")
+        ]);
+        if (accRes.ok) {
+          const accData = await accRes.json();
+          if (accData.status && accData.status !== "disconnected") {
+            setLinkedAccount(accData);
+          }
+        }
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          if (listData.success) {
+            setAccountsList(listData.accounts || []);
+          }
         }
       } catch (err) {
         console.error("Failed to load approval package:", err);
@@ -741,10 +937,10 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   }, [id]);
 
   useEffect(() => {
-    if (post?.id) {
+    if (post?.id && post?.status === "published") {
       fetchComments();
     }
-  }, [post?.id]);
+  }, [post?.id, post?.status]);
 
   const fetchComments = async () => {
     setLoadingComments(true);
@@ -905,13 +1101,93 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
 
   const saveChanges = async (content: string, tags: string[]) => {
     try {
-      await fetch(`/api/posts/${id}`, {
+      const res = await fetch(`/api/posts/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ post_content: content, hashtags: tags }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.post) {
+          setPost(data.post);
+          // Refresh revisions list
+          const revRes = await fetch(`/api/posts/${id}`);
+          if (revRes.ok) {
+            const revData = await revRes.json();
+            setRevisions(revData.revisions || []);
+          }
+        }
+      }
     } catch (e) {
       console.error("Failed to save changes:", e);
+    }
+  };
+
+  const handleConvertToCarousel = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/convert-to-carousel`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.post) {
+        setPost(data.post);
+        const rawContent = data.post.post_content || "";
+        setPostContent(rawContent);
+        
+        // Parse carousel data
+        try {
+          const parsed = JSON.parse(rawContent);
+          setIsCarousel(true);
+          setCarouselData(parsed);
+          setSelectedTemplate(parsed.templateId || "bold_impact");
+          setAccentColor(parsed.accentColor || "#3B82F6");
+        } catch (e) {
+          console.error("Failed to parse converted carousel JSON:", e);
+        }
+
+        // Fetch updated revisions list
+        const revRes = await fetch(`/api/posts/${id}`);
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          setRevisions(revData.revisions || []);
+        }
+      } else {
+        alert("Conversion failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Conversion failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBgImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      if (carouselData) {
+        const updated = { ...carouselData, backgroundImage: base64Data };
+        setCarouselData(updated);
+        const serialized = JSON.stringify(updated);
+        setPostContent(serialized);
+        await saveChanges(serialized, hashtags);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearBgImage = async () => {
+    if (carouselData) {
+      const updated = { ...carouselData };
+      delete updated.backgroundImage;
+      setCarouselData(updated);
+      const serialized = JSON.stringify(updated);
+      setPostContent(serialized);
+      await saveChanges(serialized, hashtags);
     }
   };
 
@@ -921,6 +1197,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     const s = carouselData.slides[idx];
     setEditTitle(s.title);
     setEditBody(s.body);
+    setEditSlideImage(s.image || "");
     setEditingSlide(idx);
   };
 
@@ -929,6 +1206,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     const updatedCarousel = { ...carouselData };
     updatedCarousel.slides[editingSlide].title = editTitle;
     updatedCarousel.slides[editingSlide].body = editBody;
+    updatedCarousel.slides[editingSlide].image = editSlideImage || undefined;
     
     setCarouselData(updatedCarousel);
     setEditingSlide(null);
@@ -936,6 +1214,43 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     const serialized = JSON.stringify(updatedCarousel);
     setPostContent(serialized);
     await saveChanges(serialized, hashtags);
+  };
+
+  const handleSelectAccount = async (accountId: string) => {
+    setSwitchingAccountId(accountId);
+    try {
+      const selectRes = await fetch("/api/linkedin/accounts/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId }),
+      });
+      if (selectRes.ok) {
+        const selectData = await selectRes.json();
+        if (selectData.success) {
+          // Re-fetch scraping status and accounts list
+          const [accRes, listRes] = await Promise.all([
+            fetch("/api/linkedin/scraping-status"),
+            fetch("/api/linkedin/accounts")
+          ]);
+          if (accRes.ok) {
+            const accData = await accRes.json();
+            if (accData.status && accData.status !== "disconnected") {
+              setLinkedAccount(accData);
+            }
+          }
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            if (listData.success) {
+              setAccountsList(listData.accounts || []);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to switch account:", err);
+    } finally {
+      setSwitchingAccountId(null);
+    }
   };
 
   const changeTemplate = async (templateId: string) => {
@@ -981,7 +1296,21 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       const slide = slides[i];
       
       ctx.clearRect(0, 0, 1080, 1080);
-      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor);
+
+      const slideBgImage = slide.image || carouselData.backgroundImage;
+      let slideBgImgElement: HTMLImageElement | undefined = undefined;
+
+      if (slideBgImage) {
+        slideBgImgElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("Failed to load background image"));
+          img.src = slideBgImage;
+        });
+      }
+
+      drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor, slideBgImgElement);
 
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
 
@@ -1057,10 +1386,10 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           alert(`${pubData.title}: ${pubData.body}`);
           router.push("/pricing");
         } else if (pubData.success) {
-          alert("Successfully published to LinkedIn!");
+          alert(`Successfully published to LinkedIn!`);
           router.push("/dashboard");
         } else if (pubData.pending_review) {
-          alert(pubData.message);
+          alert(`Successfully copied draft to clipboard! ${pubData.message}`);
           navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
           window.open("https://www.linkedin.com/", "_blank");
           router.push("/dashboard");
@@ -1102,8 +1431,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
 
   // Handle Request Changes / Regenerate
   const handleRegenerate = async () => {
-    if (!feedback.trim()) {
-      alert("Please enter what needs to change.");
+    if (!feedback.trim() && !attachedDocText.trim()) {
+      alert("Please enter what needs to change or attach a document.");
       return;
     }
     setRegenerating(true);
@@ -1111,23 +1440,52 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       const res = await fetch("/api/content/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: id, feedback }),
+        body: JSON.stringify({
+          post_id: id,
+          feedback: feedback || "Regenerate based on attached document.",
+          document_text: attachedDocText || undefined
+        }),
       });
       const data = await res.json();
       if (data.success) {
         setPostContent(data.approval_package.post_content);
         setHashtags(data.approval_package.hashtags);
         setFeedback("");
+        setAttachedDocText("");
+        setAttachedDocName("");
         setShowFeedbackInput(false);
         // Refresh revisions
         const revRes = await fetch(`/api/posts/${id}`);
         const revData = await revRes.json();
         if (revData.success) {
           setRevisions(revData.revisions);
+          setPost(revData.post);
+
+          // Update Carousel specific states if it is a carousel
+          const cleanContent = (revData.post.post_content || "").trim();
+          if (cleanContent.startsWith("{") && cleanContent.endsWith("}")) {
+            try {
+              const parsed = JSON.parse(cleanContent);
+              if (parsed.type === "carousel" || parsed.slides) {
+                setIsCarousel(true);
+                setCarouselData(parsed);
+                setSelectedTemplate(parsed.templateId || "bold_impact");
+                setAccentColor(parsed.accentColor || "#3B82F6");
+              }
+            } catch (e) {
+              console.error("Failed to parse regenerated carousel JSON:", e);
+            }
+          } else {
+            setIsCarousel(false);
+            setCarouselData(null);
+          }
         }
+      } else {
+        alert("Regeneration failed: " + (data.error || "Unknown error"));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert("Error regenerating post: " + e.message);
     } finally {
       setRegenerating(false);
     }
@@ -1159,12 +1517,16 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* AI Model Badge Info */}
-        {lastRevision.provider_used && (
-          <div className="ios-card bg-zinc-100 dark:bg-zinc-800/40 p-3 flex justify-between items-center text-xs text-zinc-500 font-medium mb-4">
-            <span>Powered by {lastRevision.provider_used} ({lastRevision.model_used})</span>
-            <span>Latency: {((lastRevision.latency_ms || 1000) / 1000).toFixed(1)}s</span>
+        <div className="ios-card bg-zinc-100 dark:bg-zinc-800/40 p-3 flex justify-between items-center text-xs text-zinc-500 font-medium mb-4">
+          <div className="flex items-center gap-2">
+            {lastRevision.provider_used && (
+              <span className="text-zinc-400 dark:text-zinc-500">Powered by {lastRevision.provider_used} ({lastRevision.model_used})</span>
+            )}
           </div>
-        )}
+          {lastRevision.latency_ms && (
+            <span>Latency: {((lastRevision.latency_ms || 1000) / 1000).toFixed(1)}s</span>
+          )}
+        </div>
 
         {/* Agent Chain of Thought */}
         {post?.agent_thoughts && (
@@ -1174,6 +1536,59 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
             </h4>
             <div className="text-xs text-zinc-300 leading-relaxed font-mono whitespace-pre-wrap max-h-36 overflow-y-auto">
               {post.agent_thoughts}
+            </div>
+          </div>
+        )}
+
+        {/* Connected Account & Profile Switcher */}
+        {linkedAccount && (
+          <div className="ios-card p-4 mb-4 select-none">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {linkedAccount.profile_picture_url ? (
+                  <img
+                    src={linkedAccount.profile_picture_url}
+                    alt={linkedAccount.profile_name || "Author"}
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-zinc-200 dark:border-zinc-800"
+                  />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm"
+                    style={{ background: accentColor }}
+                  >
+                    {(linkedAccount.profile_name || "A").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="font-bold text-sm text-zinc-900 dark:text-white leading-tight flex items-center gap-1.5">
+                    {linkedAccount.profile_name || "Linked Account"}
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500">
+                      Active Target
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-zinc-400 mt-1 max-w-[280px] truncate">
+                    {linkedAccount.profile_headline || "LinkedIn Account"}
+                  </p>
+                </div>
+              </div>
+
+              {accountsList.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest shrink-0">Publish Target:</label>
+                  <select
+                    value={accountsList.find((a) => a.is_primary)?.id || ""}
+                    onChange={(e) => handleSelectAccount(e.target.value)}
+                    disabled={switchingAccountId !== null}
+                    className="bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer"
+                  >
+                    {accountsList.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.profile_name} ({acc.account_type === "personal" ? "Personal" : "Company"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1196,16 +1611,19 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                   authorName={linkedAccount?.profile_name || ""}
                   authorPicture={linkedAccount?.profile_picture_url || ""}
                   authorLinkedinUrl={linkedAccount?.linkedin_profile_url || ""}
+                  backgroundImage={carouselData.slides[previewSlide].image || carouselData.backgroundImage}
                 />
               </div>
 
               {/* Edit overlay button */}
-              <button
-                onClick={() => startEditSlide(previewSlide)}
-                className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 bg-blue-600 hover:bg-blue-700 border-none cursor-pointer"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
+              {post?.status !== "published" && (
+                <button
+                  onClick={() => startEditSlide(previewSlide)}
+                  className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 bg-blue-600 hover:bg-blue-700 border-none cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+              )}
 
               {/* Nav arrows */}
               {previewSlide > 0 && (
@@ -1242,95 +1660,107 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               ))}
             </div>
 
-            {/* Template & Color Selector */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="ios-card p-4 space-y-2">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5"><Layout className="w-3.5 h-3.5" /> Template</label>
-                <select
-                  value={selectedTemplate}
-                  onChange={(e) => changeTemplate(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
-                >
-                  <option value="bold_impact">Bold Impact (Dark)</option>
-                  <option value="minimal_clean">Minimal Clean (Light)</option>
-                  <option value="gradient_flow">Gradient Flow (Colorful)</option>
-                  <option value="split_pro">Split Pro (Corporate)</option>
-                  <option value="frosted_card">Frosted Card (Glassmorphism)</option>
-                </select>
-              </div>
-
-              <div className="ios-card p-4 space-y-2">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5"><Palette className="w-3.5 h-3.5" /> Accent Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(e) => changeAccentColor(e.target.value)}
-                    className="w-10 h-10 rounded-xl cursor-pointer border-0 bg-transparent"
-                  />
-                  <code className="text-xs font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg">
-                    {accentColor.toUpperCase()}
-                  </code>
-                </div>
-              </div>
-            </div>
-
-            {/* Author Branding Toggle */}
-            <div className="ios-card p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {linkedAccount?.profile_picture_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={linkedAccount.profile_picture_url}
-                      alt={linkedAccount.profile_name || "Author"}
-                      className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-2"
-                      style={{ ringColor: accentColor } as any}
-                    />
-                  ) : (
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold text-sm"
-                      style={{ background: accentColor }}
+            {post?.status !== "published" && (
+              <>
+                {/* Template & Color Selector */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="ios-card p-4 space-y-2">
+                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5"><Layout className="w-3.5 h-3.5" /> Template</label>
+                    <select
+                      value={selectedTemplate}
+                      onChange={(e) => changeTemplate(e.target.value)}
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
                     >
-                      {(linkedAccount?.profile_name || "A").charAt(0).toUpperCase()}
+                      <option value="bold_impact">Bold Impact (Dark)</option>
+                      <option value="minimal_clean">Minimal Clean (Light)</option>
+                      <option value="gradient_flow">Gradient Flow (Colorful)</option>
+                      <option value="split_pro">Split Pro (Corporate)</option>
+                      <option value="frosted_card">Frosted Card (Glassmorphism)</option>
+                    </select>
+                  </div>
+
+                  <div className="ios-card p-4 space-y-2">
+                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5"><Palette className="w-3.5 h-3.5" /> Accent Color</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={accentColor}
+                        onChange={(e) => changeAccentColor(e.target.value)}
+                        className="w-10 h-10 rounded-xl cursor-pointer border-0 bg-transparent"
+                      />
+                      <code className="text-xs font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg">
+                        {accentColor.toUpperCase()}
+                      </code>
                     </div>
-                  )}
-                  <div>
-                    <p className="font-semibold text-sm text-zinc-900 dark:text-white">
-                      {linkedAccount?.profile_name || "Not connected"}
-                    </p>
-                    {linkedAccount?.linkedin_profile_url && (
-                      <a
-                        href={linkedAccount.linkedin_profile_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-500 hover:underline truncate block max-w-[180px]"
+                  </div>
+                </div>
+
+                {/* Slide Background Image Uploader */}
+                <div className="ios-card p-4 space-y-3">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Layout className="w-3.5 h-3.5" /> Slide Background Image (Optional)
+                  </label>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="carousel-bg-upload-approval"
+                        className="hidden"
+                        onChange={handleBgImageUpload}
+                      />
+                      <label
+                        htmlFor="carousel-bg-upload-approval"
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-350 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
                       >
-                        {linkedAccount.linkedin_profile_url.replace("https://www.linkedin.com/in/", "linkedin.com/in/")}
-                      </a>
+                        {carouselData?.backgroundImage ? "Change Background" : "Upload Image"}
+                      </label>
+                      {carouselData?.backgroundImage && (
+                        <button
+                          onClick={handleClearBgImage}
+                          className="text-xs text-red-500 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    {carouselData?.backgroundImage && (
+                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 flex-shrink-0">
+                        <img src={carouselData.backgroundImage} alt="Background Preview" className="w-full h-full object-cover" />
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Show on slides</label>
-                  <button
-                    onClick={() => setShowAuthor((v) => !v)}
-                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer ${showAuthor ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
-                    aria-label="Toggle author branding"
-                  >
-                    <span
-                      className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
-                      style={{ transform: showAuthor ? "translateX(24px)" : "translateX(0)" }}
-                    />
-                  </button>
+
+                {/* Author Branding Toggle */}
+                <div className="ios-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm text-zinc-900 dark:text-white">Author Branding</p>
+                      <p className="text-xs text-zinc-500">Show photo and name on slides</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Show on slides</label>
+                      <button
+                        onClick={() => setShowAuthor((v) => !v)}
+                        className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer ${showAuthor ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+                        aria-label="Toggle author branding"
+                      >
+                        <span
+                          className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+                          style={{ transform: showAuthor ? "translateX(24px)" : "translateX(0)" }}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                  {showAuthor && linkedAccount?.linkedin_profile_url && (
+                    <p className="text-[11px] text-zinc-400 mt-3 leading-relaxed">
+                      💡 Your LinkedIn URL will appear on the last (CTA) slide so readers can follow you.
+                    </p>
+                  )}
                 </div>
-              </div>
-              {linkedAccount?.linkedin_profile_url && (
-                <p className="text-[11px] text-zinc-400 mt-3 leading-relaxed">
-                  💡 Your LinkedIn URL will appear on the last (CTA) slide so readers can follow you.
-                </p>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Editor Box */}
             {editingSlide !== null && editingSlide === previewSlide && (
@@ -1347,7 +1777,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                     style={{ borderColor: accentColor } as any}
                   />
                 </div>
-                <div className="mb-4">
+                <div className="mb-3">
                   <label className="text-xs text-zinc-500 font-semibold mb-1 block">Body text</label>
                   <textarea
                     value={editBody}
@@ -1355,6 +1785,47 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                     rows={3}
                     className="w-full bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 outline-none resize-none leading-relaxed"
                   />
+                </div>
+                <div className="mb-4">
+                  <label className="text-xs text-zinc-500 font-semibold mb-1 block">Slide Background Image (Optional)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id={`slide-bg-upload-approval-${editingSlide}`}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setEditSlideImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor={`slide-bg-upload-approval-${editingSlide}`}
+                      className="px-3 py-2 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-350 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                    >
+                      {editSlideImage ? "Change Image" : "Upload Image"}
+                    </label>
+                    {editSlideImage && (
+                      <button
+                        type="button"
+                        onClick={() => setEditSlideImage("")}
+                        className="text-xs text-red-500 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {editSlideImage && (
+                    <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-850">
+                      <img src={editSlideImage} alt="Slide Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1392,13 +1863,22 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           <>
             <div className="ios-section-label flex justify-between items-center px-1 select-none">
               <span>LinkedIn Layout Preview</span>
-              {!isEditingText && (
-                <button
-                  onClick={() => setIsEditingText(true)}
-                  className="text-xs text-blue-500 font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Post
-                </button>
+              {!isEditingText && post?.status !== "published" && (
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={handleConvertToCarousel}
+                    className="text-xs text-purple-600 dark:text-purple-400 font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                  >
+                    ✨ Convert to Carousel
+                  </button>
+                  <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                  <button
+                    onClick={() => setIsEditingText(true)}
+                    className="text-xs text-blue-500 font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Post
+                  </button>
+                </div>
               )}
             </div>
             <div className="ios-card bg-white dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/50 p-4 shadow-sm select-text">
@@ -1499,17 +1979,21 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200/50 dark:border-zinc-800/50"
               >
                 #{tag}
-                <button onClick={() => handleRemoveHash(idx)} className="text-zinc-400 hover:text-zinc-650 bg-transparent border-none cursor-pointer">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                {post?.status !== "published" && (
+                  <button onClick={() => handleRemoveHash(idx)} className="text-zinc-400 hover:text-zinc-650 bg-transparent border-none cursor-pointer">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </span>
             ))}
-            <button
-              onClick={() => setShowAddHash(!showAddHash)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 text-xs font-semibold text-zinc-500 hover:text-zinc-700 bg-transparent cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add tag
-            </button>
+            {post?.status !== "published" && (
+              <button
+                onClick={() => setShowAddHash(!showAddHash)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 text-xs font-semibold text-zinc-500 hover:text-zinc-700 bg-transparent cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add tag
+              </button>
+            )}
           </div>
 
           {showAddHash && (
@@ -1529,39 +2013,76 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Scheduling Options */}
-        <div className="ios-section-label">Scheduling</div>
-        <div className="ios-card p-4">
-          <div className="ios-segment mb-4">
-            <button
-              onClick={() => setScheduleMode("now")}
-              className={`ios-segment-btn ${scheduleMode === "now" ? "active" : ""}`}
-            >
-              Post now
-            </button>
-            <button
-              onClick={() => setScheduleMode("schedule")}
-              className={`ios-segment-btn ${scheduleMode === "schedule" ? "active" : ""}`}
-            >
-              Schedule
-            </button>
-          </div>
+        {post?.status !== "published" && (
+          <>
+            <div className="ios-section-label">Scheduling</div>
+            <div className="ios-card p-4">
+              <div className="ios-segment mb-4">
+                <button
+                  onClick={() => setScheduleMode("now")}
+                  className={`ios-segment-btn ${scheduleMode === "now" ? "active" : ""}`}
+                >
+                  Post now
+                </button>
+                <button
+                  onClick={() => setScheduleMode("schedule")}
+                  className={`ios-segment-btn ${scheduleMode === "schedule" ? "active" : ""}`}
+                >
+                  Schedule
+                </button>
+              </div>
 
-          {scheduleMode === "schedule" && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-400 uppercase">Select Date & Time</label>
-              <input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                className="w-full p-3 rounded-xl border bg-transparent text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none"
-              />
+              {scheduleMode === "schedule" && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-400 uppercase">Select Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={(e) => setScheduledAt(e.target.value)}
+                    className="w-full p-3 rounded-xl border bg-transparent text-sm text-zinc-800 dark:text-zinc-200 focus:outline-none"
+                  />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {/* Action Controls */}
         <div className="py-4 px-4 md:px-0">
-          {showFeedbackInput ? (
+          {post?.status === "published" ? (
+            <div className="ios-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 !mx-0">
+              <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400 font-bold text-base select-none">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                <span>Published to LinkedIn</span>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+                {post?.linkedin_post_url && (
+                  <a
+                    href={post.linkedin_post_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto px-5 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold rounded-xl flex items-center justify-center gap-2 active:scale-98 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold cursor-pointer transition-all duration-200 no-underline"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    View Post
+                  </a>
+                )}
+                
+                <a
+                  href={getWhatsAppShareLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-5 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold rounded-xl flex items-center justify-center gap-2 active:scale-98 shadow-sm border-none text-xs font-semibold cursor-pointer transition-all duration-200 no-underline"
+                >
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.424 5.429 0 12.085 0c3.225.001 6.258 1.258 8.54 3.541 2.283 2.283 3.538 5.32 3.538 8.545 0 6.661-5.429 12.085-12.088 12.085-2.007-.001-3.98-.502-5.732-1.464L0 24zm6.076-3.488c1.65.981 3.267 1.498 4.908 1.499 5.568 0 10.101-4.53 10.105-10.103.002-2.701-1.047-5.241-2.956-7.151C16.281 2.847 13.743 1.797 11.047 1.797c-5.572 0-10.105 4.534-10.109 10.107-.002 1.812.479 3.582 1.393 5.161l-.92 3.364 3.447-.905.175.104zM16.59 13.9c-.3-.15-1.78-.88-2.03-1.025-.25-.09-.43-.15-.61.15-.18.3-.7.88-.86 1.05-.16.18-.32.2-.62.05-.3-.15-1.27-.47-2.42-1.5-1-.89-1.675-2-1.875-2.35-.2-.3-.02-.45.13-.6.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.02-.53-.07-.15-.6-1.46-.82-2-1.99-.215-.26-.15-.43-.15-.6 0-.18-.08-.3-.08-.43 0-.15-.05-.3-.05-.45c-.07-.15-.3-.23-.6-.08-2.61 1.31-2.82 4.82-2.82 5.09 0 .27.1 2.69 2.5 5.04 1.71 1.68 3.51 2.76 5.36 3.42.92.33 1.76.27 2.42.17.74-.11 2.27-.93 2.59-1.83.32-.9.32-1.67.23-1.83-.09-.15-.3-.25-.6-.4z"/>
+                  </svg>
+                  Share to WhatsApp
+                </a>
+              </div>
+            </div>
+          ) : showFeedbackInput ? (
             <div className="ios-card p-4 space-y-3 bg-red-50/20 dark:bg-red-950/10 border border-red-500/20 !mx-0">
               <label className="text-xs font-bold text-red-500 dark:text-red-400 uppercase">What needs to change?</label>
               <textarea
@@ -1570,13 +2091,72 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 placeholder="Example: Make it shorter. Make the opener more interesting. Add bullet points..."
                 className="w-full h-24 p-3 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
               />
+
+              <div className="flex items-center justify-between text-xs text-zinc-500 py-1 flex-wrap gap-2">
+                <div className="flex gap-2">
+                  {isRecordingFeedback ? (
+                    <button
+                      type="button"
+                      onClick={stopFeedbackRecording}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-650 hover:bg-red-700 text-white font-semibold animate-pulse border-none cursor-pointer text-xs"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" /> Stop ({feedbackRecordingDuration}s)
+                    </button>
+                  ) : isTranscribingFeedback ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-250 dark:bg-zinc-800 text-zinc-400 font-semibold border-none cursor-not-allowed text-xs"
+                    >
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Transcribing...
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startFeedbackRecording}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-350 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold border-none cursor-pointer text-xs"
+                    >
+                      <Mic className="w-3.5 h-3.5 text-red-500" /> Record voice
+                    </button>
+                  )}
+
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-350 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-semibold border-none cursor-pointer text-xs">
+                    <Paperclip className="w-3.5 h-3.5 text-blue-500" />
+                    {uploadingDoc ? "Parsing..." : "Upload Document"}
+                    <input
+                      type="file"
+                      accept=".txt,.md,.pdf"
+                      className="hidden"
+                      onChange={handleDocUpload}
+                      disabled={uploadingDoc}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {attachedDocName && (
+                <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl p-2.5 text-xs">
+                  <span className="truncate max-w-[80%] font-medium">📎 Attached: {attachedDocName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachedDocName("");
+                      setAttachedDocText("");
+                    }}
+                    className="text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer font-bold text-xs"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <button
                   onClick={handleRegenerate}
                   disabled={regenerating}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-3 font-bold border-none cursor-pointer text-xs"
                 >
-                  {regenerating ? "Regenerating..." : "Submit feedback"}
+                  {regenerating ? "Regenerating..." : "Regenerate content"}
                 </button>
                 <Button
                   onClick={() => setShowFeedbackInput(false)}
@@ -1602,7 +2182,9 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 ) : (
                   <>
                     <Check className="w-5 h-5" />
-                    {scheduleMode === "schedule" ? "Approve & Schedule" : "Approve & Publish"}
+                    {scheduleMode === "schedule"
+                      ? "Approve & Schedule"
+                      : "Approve & Publish"}
                   </>
                 )}
               </button>
@@ -1632,7 +2214,9 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         {/* Engagement Comments Console */}
         <div className="ios-section-label">LinkedIn Comments & Engagement</div>
         <div className="ios-card p-4 space-y-4 mb-6">
-          {loadingComments ? (
+          {post?.status !== "published" ? (
+            <p className="text-xs text-zinc-500 text-center py-4">Comments will become available once this post is published.</p>
+          ) : loadingComments ? (
             <div className="py-6 flex flex-col items-center">
               <Loader2 className="w-6 h-6 animate-spin text-cyan-500 mb-2" />
               <span className="text-xs text-zinc-500 font-medium">Checking LinkedIn comments...</span>

@@ -31,6 +31,80 @@ CRITICAL RULES:
 8. NEVER use asterisks (*) or double asterisks (**) anywhere in the post content (e.g., for bolding, emphasis, titles, headers, or bullet points). Since LinkedIn does not support Markdown, it displays them as raw asterisks which is highly unprofessional. If you need bullet points, use unicode bullet characters like '•' or '-' instead. If you want to emphasize a header or a key phrase, use CAPITAL LETTERS instead of bold markdown tags.`;
 }
 
+export async function humanizePostContent(
+  content: string,
+  userId: string,
+  userPlan: "free" | "starter" | "pro" | "agency",
+  sessionId: string
+): Promise<string> {
+  try {
+    const res = await routeLLMRequest({
+      useCase: "content_generation",
+      messages: [
+        {
+          role: "system",
+          content: "You are a professional LinkedIn content humanizer. Your sole job is to rewrite the provided post content so it sounds completely natural, authentic, and human-written. Do NOT change the core message or structural layout, but make the phrasing and flow sound like a real person wrote it. Avoid all corporate jargon, AI buzzwords, and repetitive opening structures. Do not output any markdown formatting, asterisks (*), double asterisks (**), bold tags, notes, or explanations. Return ONLY the rewritten post content."
+        },
+        {
+          role: "user",
+          content: `Here is the post content to humanize:\n\n${content}`
+        }
+      ],
+      userId,
+      userPlan,
+      sessionId: "humanizer-" + sessionId,
+    });
+    return res.content.trim();
+  } catch (err) {
+    console.error("Humanizer pass failed, returning original content:", err);
+    return content;
+  }
+}
+
+export async function humanizeCarouselSlides(
+  slides: any[],
+  userId: string,
+  userPlan: "free" | "starter" | "pro" | "agency",
+  sessionId: string
+): Promise<any[]> {
+  try {
+    const res = await routeLLMRequest({
+      useCase: "content_generation",
+      messages: [
+        {
+          role: "system",
+          content: "You are a professional LinkedIn content humanizer. Your task is to rewrite the text content of the slides (title and body) to sound completely human-written, engaging, and natural. Avoid corporate jargon and AI words. Maintain the exact same JSON array format. Return ONLY the valid JSON array of slides."
+        },
+        {
+          role: "user",
+          content: `Humanize the text inside this slides JSON array. Keep the slideNumber and type exactly the same, but humanize the title and body. Return only the JSON array:\n\n${JSON.stringify(slides, null, 2)}`
+        }
+      ],
+      userId,
+      userPlan,
+      sessionId: "humanizer-carousel-" + sessionId,
+      responseFormat: "json",
+    });
+    
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(cleanJsonString(res.content));
+    } catch (e) {
+      const match = res.content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (match) {
+        parsed = JSON.parse(cleanJsonString(match[0]));
+      } else {
+        throw new Error("Failed to parse AI humanized JSON response: " + res.content);
+      }
+    }
+    
+    return Array.isArray(parsed) ? parsed : slides;
+  } catch (err) {
+    console.error("Humanizer carousel pass failed, returning original slides:", err);
+    return slides;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
@@ -359,6 +433,13 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
     }
 
     if (resultJson.post_content) {
+      resultJson.post_content = await humanizePostContent(
+        resultJson.post_content,
+        user.id,
+        user.plan || "pro",
+        "generate-" + Date.now()
+      );
+
       let cleanedPostContent = resultJson.post_content;
       // Remove markdown bold asterisks
       cleanedPostContent = cleanedPostContent.replace(/\*\*/g, "");

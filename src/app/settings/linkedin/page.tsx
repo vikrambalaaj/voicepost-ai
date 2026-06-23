@@ -233,7 +233,7 @@ export default function LinkedInSettingsPage() {
                 </div>
 
                 {/* Switch posting target */}
-                {accountsList.length > 1 && (
+                {accountsList.length > 0 && (
                   <div className="space-y-2">
                     <div className="ios-section-label">Switch posting target</div>
                     <div className="space-y-2">

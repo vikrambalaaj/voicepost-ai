@@ -3,6 +3,7 @@ import { routeLLMRequest } from "@/lib/llm/router";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 import { cleanJsonString } from "@/lib/utils";
+import { humanizeCarouselSlides } from "../../content/generate/route";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,7 +40,7 @@ RULES:
     const userPrompt = `Create a LinkedIn carousel with exactly ${slideCount} slides about: "${topic}"
 Industry context: ${industry}
 Tone: ${tone}
-
+ 
 Return this exact JSON structure:
 {
   "title": "carousel title for reference",
@@ -48,23 +49,20 @@ Return this exact JSON structure:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline (4-8 words)",
-      "body": "1-2 sentence hook that makes them swipe",
-      "emoji": "single relevant emoji"
+      "body": "1-2 sentence hook that makes them swipe"
     },
     {
       "slideNumber": 2,
       "type": "content",
       "title": "slide title",
-      "body": "2-3 sentence insight",
-      "emoji": "single relevant emoji"
+      "body": "2-3 sentence insight"
     },
     ... (slides 3 to ${slideCount - 1} as content slides),
     {
       "slideNumber": ${slideCount},
       "type": "cta",
       "title": "cta headline",
-      "body": "follow for more + what they'll get",
-      "emoji": "🎯"
+      "body": "follow for more + what they'll get"
     }
   ],
   "suggestedHashtags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
@@ -106,6 +104,13 @@ Return this exact JSON structure:
         parsed.title = parsed.title.replace(/\*\*/g, "").replace(/\*/g, "");
       }
       if (Array.isArray(parsed.slides)) {
+        parsed.slides = await humanizeCarouselSlides(
+          parsed.slides,
+          userId,
+          userPlan as any,
+          "carousel-" + Date.now()
+        );
+
         parsed.slides = parsed.slides.map((slide: any) => {
           let cleanTitle = slide.title || "";
           let cleanBody = slide.body || "";

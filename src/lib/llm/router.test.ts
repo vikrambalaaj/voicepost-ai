@@ -155,4 +155,31 @@ describe("LLM Router", () => {
     expect(res.fallbackChain).toContain("Groq");
     expect(res.fallbackChain).not.toContain("Google AI Studio");
   });
+
+  it("should bypass plan constraints for keyword_extraction use case on free plan to use NVIDIA NIM", async () => {
+    process.env.NVIDIA_NIM_API_KEY = "mock_nvidia_key";
+    mockDb.from.mockImplementation(() => new MockQueryBuilder([]));
+
+    const mockFetchFn = global.fetch as any;
+    mockFetchFn.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: "extracted search query" } }],
+        usage: { prompt_tokens: 10, completion_tokens: 15 },
+      }),
+    });
+
+    const res = await routeLLMRequest({
+      useCase: "keyword_extraction",
+      messages: [{ role: "user", content: "Extract search query" }],
+      userId: "test_user_id",
+      userPlan: "free",
+      sessionId: "test_session_id",
+    });
+
+    expect(res.provider).toBe("NVIDIA NIM");
+    expect(res.content).toBe("extracted search query");
+    expect(res.fallbackChain).toContain("NVIDIA NIM");
+  });
 });

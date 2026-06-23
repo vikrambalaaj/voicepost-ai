@@ -94,18 +94,39 @@ export async function PUT(
 
     // If updating post columns
     if (post_content !== undefined || hashtags !== undefined || status !== undefined) {
-      // 1. Fetch current post status
+      // 1. Fetch current post
       const { data: existingPost } = await db
         .from("posts")
-        .select("status")
+        .select("status, current_revision, post_content, hashtags")
         .eq("id", id)
         .eq("user_id", userId)
         .single();
 
+      if (!existingPost) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      }
+
       const updateData: any = {};
-      if (post_content !== undefined) updateData.post_content = post_content;
-      if (hashtags !== undefined) updateData.hashtags = hashtags;
-      if (status !== undefined) updateData.status = status;
+      let isContentChanged = false;
+
+      if (post_content !== undefined && post_content !== existingPost.post_content) {
+        updateData.post_content = post_content;
+        isContentChanged = true;
+      }
+      if (hashtags !== undefined && JSON.stringify(hashtags) !== JSON.stringify(existingPost.hashtags)) {
+        updateData.hashtags = hashtags;
+        isContentChanged = true;
+      }
+      if (status !== undefined) {
+        updateData.status = status;
+      }
+
+      let nextRevisionNum = existingPost.current_revision || 1;
+
+      if (isContentChanged) {
+        nextRevisionNum = nextRevisionNum + 1;
+        updateData.current_revision = nextRevisionNum;
+      }
 
       const { data: updatedPost, error: updateErr } = await db
         .from("posts")
@@ -117,6 +138,18 @@ export async function PUT(
 
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      // If content changed, save a new revision row
+      if (isContentChanged) {
+        await db.from("post_revisions").insert({
+          post_id: id,
+          revision_number: nextRevisionNum,
+          post_content: updateData.post_content !== undefined ? updateData.post_content : existingPost.post_content,
+          hashtags: updateData.hashtags !== undefined ? updateData.hashtags : existingPost.hashtags,
+          feedback_given: "Manual edit",
+          changes_made: ["Manual edits"],
+        });
       }
 
       // If status is updated to pending_approval, and it wasn't before

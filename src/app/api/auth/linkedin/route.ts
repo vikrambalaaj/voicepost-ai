@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
-  const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  let redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  if (redirectUri) {
+    const origin = req.nextUrl.origin;
+    if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
+      redirectUri = `${origin}/api/auth/linkedin/callback`;
+    }
+  }
+
   const purpose = req.nextUrl.searchParams.get("purpose") || "connect"; // "login" | "connect"
   const demo = req.nextUrl.searchParams.get("demo") === "true";
 

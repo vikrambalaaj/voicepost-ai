@@ -6,6 +6,7 @@ import { SparklesCore } from "@/components/ui/sparkles-core";
 import { BackgroundPaths } from "@/components/ui/background-paths";
 import { HeroSection } from "@/components/ui/hero-section";
 import { PricingCard } from "@/components/ui/dark-gradient-pricing";
+import { Mic, FileText, RotateCcw, Layout, Users, ShieldCheck } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -138,6 +139,86 @@ export default function LandingPage() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Features & Capabilities Section */}
+      <div className="max-w-6xl mx-auto px-6 py-24 relative z-20 border-t border-zinc-900/60">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-6">
+            Engineered for elite content creation
+          </h2>
+          <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+            Everything you need to turn raw thoughts into polished, high-performing LinkedIn posts, documents, and carousels.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {/* Feature 1 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 text-blue-500">
+              <Mic className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">Voice-to-Post Engine</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Record or upload voice notes. We use AssemblyAI to generate flawless transcriptions and turn them into structured posts instantly.
+            </p>
+          </div>
+
+          {/* Feature 2 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-600/10 border border-cyan-500/20 flex items-center justify-center mb-6 group-hover:bg-cyan-600 group-hover:text-white transition-all duration-300 text-cyan-500">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">AI Humanizer Pass</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Our double-pass LLM router refines tone, word choices, and structure so your posts sound authentic, natural, and pass AI detectors.
+            </p>
+          </div>
+
+          {/* Feature 3 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center mb-6 group-hover:bg-purple-600 group-hover:text-white transition-all duration-300 text-purple-500">
+              <FileText className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">Context Document Upload</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Upload PDF, TXT, or Markdown reference documents. The AI parses the text and uses it as background context during regeneration.
+            </p>
+          </div>
+
+          {/* Feature 4 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300 text-emerald-500">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">Post Revision History</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Every edit, template switch, and regeneration logs a new revision in the history so you can easily revert or audit changes.
+            </p>
+          </div>
+
+          {/* Feature 5 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-amber-600/10 border border-amber-500/20 flex items-center justify-center mb-6 group-hover:bg-amber-600 group-hover:text-white transition-all duration-300 text-amber-500">
+              <Layout className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">Interactive Carousels</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Generate visual carousels with design templates. Customize slide contents dynamically, preview the design, and download them as PDFs.
+            </p>
+          </div>
+
+          {/* Feature 6 */}
+          <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 hover:border-zinc-700/80 rounded-3xl p-8 hover:scale-[1.02] transition-all duration-300 group">
+            <div className="w-12 h-12 rounded-2xl bg-rose-600/10 border border-rose-500/20 flex items-center justify-center mb-6 group-hover:bg-rose-600 group-hover:text-white transition-all duration-300 text-rose-500">
+              <Users className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">LinkedIn Pages Support</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Link your personal profiles and company organization pages to post to the right target channel directly from the app.
+            </p>
+          </div>
         </div>
       </div>
 
