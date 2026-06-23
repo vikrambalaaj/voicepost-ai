@@ -56,14 +56,22 @@ export async function GET(
 
   // Fetch series siblings if applicable
   let seriesPosts: any[] = [];
+  let fetchedViaColumns = false;
+
   if (post.series_id) {
-    const { data: siblingPosts } = await db
+    const { data: siblingPosts, error: siblingErr } = await db
       .from("posts")
       .select("id, status, series_index, scheduled_at, published_at")
       .eq("series_id", post.series_id)
       .order("series_index", { ascending: true });
-    seriesPosts = siblingPosts || [];
-  } else if (post.agent_thoughts) {
+    
+    if (!siblingErr && siblingPosts && siblingPosts.length > 0) {
+      seriesPosts = siblingPosts;
+      fetchedViaColumns = true;
+    }
+  }
+
+  if (!fetchedViaColumns && post.agent_thoughts) {
     try {
       const thoughts = JSON.parse(post.agent_thoughts);
       if (thoughts.series_id) {

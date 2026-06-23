@@ -537,13 +537,30 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
 
       try {
         const { data, error } = await db.from("posts").insert(postPayload).select().single();
-        newPost = data;
-        postErr = error;
+        if (error) {
+          // If error is due to missing columns (schema cache error), retry without those columns
+          if (error.message && (error.message.includes("series_id") || error.message.includes("series_index") || error.message.includes("column"))) {
+            console.warn("Inserting with series columns failed, retrying without them:", error.message);
+            const fallbackPayload = { ...postPayload };
+            delete fallbackPayload.series_id;
+            delete fallbackPayload.series_index;
+            const fallbackRes = await db.from("posts").insert(fallbackPayload).select().single();
+            newPost = fallbackRes.data;
+            postErr = fallbackRes.error;
+          } else {
+            newPost = data;
+            postErr = error;
+          }
+        } else {
+          newPost = data;
+          postErr = error;
+        }
       } catch (err) {
         // Fallback: Retry inserting without series_id/series_index columns if migration has not run yet
-        delete postPayload.series_id;
-        delete postPayload.series_index;
-        const { data, error } = await db.from("posts").insert(postPayload).select().single();
+        const fallbackPayload = { ...postPayload };
+        delete fallbackPayload.series_id;
+        delete fallbackPayload.series_index;
+        const { data, error } = await db.from("posts").insert(fallbackPayload).select().single();
         newPost = data;
         postErr = error;
       }
