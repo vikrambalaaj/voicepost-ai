@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { syncUserEngagement } from "@/lib/comments-sync";
 
 // Cache for commenter profile details to avoid redundant API requests during a single fetch execution
 const profileCache = new Map<string, { name: string; headline: string }>();
@@ -57,6 +58,7 @@ async function fetchActorProfile(actorUrn: string, accessToken: string): Promise
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const db = getServiceSupabase();
   const postId = params.id;
+  const refresh = req.nextUrl.searchParams.get("refresh") === "true";
 
   try {
     const userId = await getAuthenticatedUserId(req);
@@ -64,10 +66,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // If refresh requested, run engagement sync synchronously
+    if (refresh) {
+      console.log(`[comments] Synchronous refresh requested for post ${postId}`);
+      try {
+        await syncUserEngagement(userId);
+      } catch (syncErr) {
+        console.error("[comments] Synchronous sync failed:", syncErr);
+      }
+    }
+
     // Verify post ownership and select linkedin post/account IDs
     const { data: post, error: postErr } = await db
       .from("posts")
-      .select("id, linkedin_post_id, linkedin_account_id")
+      .select("id, linkedin_post_id, linkedin_account_id, agent_thoughts")
       .eq("id", postId)
       .eq("user_id", userId)
       .single();
@@ -76,143 +88,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
 
-    // Load active account credentials
-    let activeAccount = null;
-    if (post.linkedin_account_id) {
-      const { data: acc } = await db
-        .from("linkedin_accounts")
-        .select("access_token, linkedin_profile_id")
-        .eq("id", post.linkedin_account_id)
-        .eq("user_id", userId)
-        .single();
-      activeAccount = acc;
-    }
-    if (!activeAccount) {
-      const { data: accs } = await db
-        .from("linkedin_accounts")
-        .select("access_token, linkedin_profile_id")
-        .eq("user_id", userId)
-        .eq("is_primary", true)
-        .limit(1);
-      activeAccount = accs?.[0];
-    }
-
-    const isMock = !activeAccount || activeAccount.access_token.startsWith("mock_") || !process.env.LINKEDIN_CLIENT_ID;
-
-    // Clear local memory cache per request
-    profileCache.clear();
-
-    // 1. If not mock and has linkedin_post_id, fetch from LinkedIn
-    if (!isMock && post.linkedin_post_id) {
-      try {
-        console.log(`[comments] Fetching real comments from LinkedIn for post ${post.linkedin_post_id}...`);
-        const lnRes = await fetch(`https://api.linkedin.com/v2/socialActions/${encodeURIComponent(post.linkedin_post_id)}/comments?count=50`, {
-          headers: {
-            Authorization: `Bearer ${activeAccount.access_token}`,
-            "X-Restli-Protocol-Version": "2.0.0",
-          },
-        });
-
-        if (lnRes.ok) {
-          const lnData = await lnRes.json();
-          const elements = lnData.elements || [];
-
-          const processedComments = await Promise.all(
-            elements.map(async (comment: any) => {
-              const commenterProfile = await fetchActorProfile(comment.actor, activeAccount.access_token);
-              
-              // Fetch nested replies for this comment
-              let replies: any[] = [];
-              try {
-                const repRes = await fetch(`https://api.linkedin.com/v2/socialActions/${encodeURIComponent(comment.id)}/comments?count=50`, {
-                  headers: {
-                    Authorization: `Bearer ${activeAccount.access_token}`,
-                    "X-Restli-Protocol-Version": "2.0.0",
-                  },
-                });
-                if (repRes.ok) {
-                  const repData = await repRes.json();
-                  const repElements = repData.elements || [];
-                  replies = await Promise.all(
-                    repElements.map(async (rep: any) => {
-                      const repProfile = await fetchActorProfile(rep.actor, activeAccount.access_token);
-                      return {
-                        commenter_name: repProfile.name,
-                        commenter_headline: repProfile.headline,
-                        comment_text: rep.message.text,
-                        created_at: new Date(rep.created?.time || Date.now()).toISOString(),
-                        actor: rep.actor,
-                      };
-                    })
-                  );
-                  // Sort replies oldest first
-                  replies.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-                }
-              } catch (repErr) {
-                console.warn(`[comments] Failed to fetch replies for comment ${comment.id}:`, repErr);
-              }
-
-              const newCommentPayload = {
-                post_id: postId,
-                linkedin_comment_urn: comment.id,
-                commenter_name: commenterProfile.name,
-                commenter_headline: commenterProfile.headline,
-                comment_text: comment.message?.text || "",
-                created_at: new Date(comment.created?.time || Date.now()).toISOString(),
-              };
-
-              // Upsert the top-level comment to Postgres to keep it tracked
-              const { data: existing } = await db
-                .from("post_comments")
-                .select("id, reply_text, replied_at")
-                .eq("post_id", postId)
-                .eq("linkedin_comment_urn", comment.id)
-                .limit(1);
-
-              let dbCommentId;
-              let localReplyText = null;
-
-              if (existing && existing.length > 0) {
-                dbCommentId = existing[0].id;
-                localReplyText = existing[0].reply_text;
-                await db
-                  .from("post_comments")
-                  .update(newCommentPayload)
-                  .eq("id", dbCommentId);
-              } else {
-                const { data: inserted } = await db
-                  .from("post_comments")
-                  .insert(newCommentPayload)
-                  .select("id")
-                  .single();
-                dbCommentId = inserted?.id;
-              }
-
-              return {
-                id: dbCommentId,
-                post_id: postId,
-                linkedin_comment_urn: comment.id,
-                commenter_name: commenterProfile.name,
-                commenter_headline: commenterProfile.headline,
-                comment_text: comment.message?.text || "",
-                reply_text: localReplyText,
-                thread_history: replies,
-                created_at: newCommentPayload.created_at,
-              };
-            })
-          );
-
-          return NextResponse.json({ success: true, comments: processedComments }, { status: 200 });
-        } else {
-          const errText = await lnRes.text();
-          console.warn("[comments] LinkedIn SocialActions returned non-ok status:", lnRes.status, errText);
-        }
-      } catch (lnErr) {
-        console.error("[comments] Exception fetching comments from LinkedIn:", lnErr);
-      }
-    }
-
-    // 2. Fetch comments from db (fallback / mock seeding)
+    // Fetch comments from DB
     let { data: comments, error: fetchErr } = await db
       .from("post_comments")
       .select("*")
@@ -256,7 +132,45 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       }
     }
 
-    return NextResponse.json({ success: true, comments: comments || [] }, { status: 200 });
+    // Sort comments by created_at descending (newest first)
+    comments.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    // Capped to last 3 comments max
+    const last3Comments = comments.slice(0, 3);
+
+    // Read likes & comments count from agent_thoughts JSON
+    let likesCount = 15;
+    let commentsCount = comments.length;
+
+    if (post.agent_thoughts) {
+      try {
+        const thoughtsObj = JSON.parse(post.agent_thoughts);
+        if (typeof thoughtsObj === "object") {
+          likesCount = thoughtsObj.likes_count ?? likesCount;
+          commentsCount = thoughtsObj.comments_count ?? commentsCount;
+        }
+      } catch {}
+    } else if (post.linkedin_post_id) {
+      // Fallback to user_posts_raw
+      const { data: rawPost } = await db
+        .from("user_posts_raw")
+        .select("likes_count, comments_count")
+        .eq("user_id", userId)
+        .eq("linkedin_post_id", post.linkedin_post_id)
+        .limit(1)
+        .single();
+      if (rawPost) {
+        likesCount = rawPost.likes_count ?? likesCount;
+        commentsCount = rawPost.comments_count ?? commentsCount;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      comments: last3Comments,
+      likes_count: likesCount,
+      comments_count: commentsCount
+    }, { status: 200 });
 
   } catch (error: any) {
     console.error("Failed to fetch comments:", error);

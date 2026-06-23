@@ -36,10 +36,13 @@ export default function CreatePostPage() {
   const [selectedStyleId, setSelectedStyleId] = useState("fomo_style");
   const [expertStyles, setExpertStyles] = useState<any[]>([]);
   const [customStyles, setCustomStyles] = useState<any[]>([]);
+  const [personalProfile, setPersonalProfile] = useState<any>(null);
+  const [isSeries, setIsSeries] = useState(false);
+  const [seriesPostCount, setSeriesPostCount] = useState(3);
   
   // Step 3 Image States
   const [imageTab, setImageTab] = useState<"search" | "ai" | "upload" | "url">("search");
-  const [searchQuery, setSearchQuery] = useState("business success");
+  const [searchQuery, setSearchQuery] = useState("Success, leader , motivation");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const [isGeneratingAiImage, setIsGeneratingAiImage] = useState(false);
@@ -96,6 +99,18 @@ export default function CreatePostPage() {
         const custData = await custRes.json();
         if (custData.success) {
           setCustomStyles(custData.customStyles || []);
+        }
+
+        try {
+          const profRes = await fetch("/api/style/profile");
+          if (profRes.ok) {
+            const profData = await profRes.json();
+            if (profData.success) {
+              setPersonalProfile(profData.profile);
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to load personal style profile:", err);
         }
       } catch (err) {
         console.error("Failed to load styles:", err);
@@ -528,6 +543,7 @@ export default function CreatePostPage() {
           style_id: selectedStyleId,
           backend: aiBackend,
           web_search: webSearch,
+          series_count: isSeries ? seriesPostCount : 1,
           image_url: includeImage ? (
             imageTab === "upload" ? uploadedImageUrl : 
             imageTab === "ai" ? aiGeneratedImage?.url : 
@@ -821,13 +837,19 @@ export default function CreatePostPage() {
             <div className="ios-card p-4">
               <div className="flex gap-2 mb-3 select-none">
                 <Badge
-                  onClick={() => setStyleType("expert")}
+                  onClick={() => {
+                    setStyleType("expert");
+                    setSelectedStyleId(expertStyles[0]?.id || "fomo_style");
+                  }}
                   className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "expert" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
                 >
                   Expert Voices
                 </Badge>
                 <Badge
-                  onClick={() => setStyleType("own")}
+                  onClick={() => {
+                    setStyleType("own");
+                    setSelectedStyleId("own");
+                  }}
                   className={`cursor-pointer rounded-full font-bold px-3 py-1 ${styleType === "own" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"}`}
                 >
                   My Voice DNA
@@ -867,6 +889,79 @@ export default function CreatePostPage() {
                   </p>
                 </div>
               )}
+
+              {/* Selected Style Explainer Card */}
+              {(() => {
+                let styleName = "";
+                let description = "";
+                let traits: { label: string; value: string }[] = [];
+                let examplePost = "";
+
+                if (selectedStyleId === "own") {
+                  styleName = "My Voice DNA";
+                  description = "A custom model trained on your published LinkedIn history, capturing your exact pacing, vocabulary, formatting, and call-to-actions.";
+                  if (personalProfile?.style_json) {
+                    const s = personalProfile.style_json;
+                    traits = [
+                      { label: "Tone", value: s.tone_descriptor || "Conversational" },
+                      { label: "Length", value: s.avg_post_length_words ? `~${s.avg_post_length_words} words` : "Varied" },
+                      { label: "Structure", value: s.sentence_length_pattern || "Mixed sentence lengths" },
+                      { label: "CTA", value: s.cta_style || "Standard" }
+                    ];
+                  } else {
+                    traits = [
+                      { label: "Tone", value: "Trained on your history" },
+                      { label: "Structure", value: "Matches your post spacing" }
+                    ];
+                  }
+                  examplePost = personalProfile?.sample_post || "Your generated posts will match the formatting, spacing, and style of your analyzed posts.";
+                } else {
+                  const selectedStyle = expertStyles.find((s) => s.id === selectedStyleId);
+                  if (!selectedStyle) return null;
+                  styleName = selectedStyle.name;
+                  description = selectedStyle.description;
+                  if (selectedStyle.style_json) {
+                    const s = selectedStyle.style_json;
+                    traits = [
+                      { label: "Tone", value: s.tone_descriptor || "Professional" },
+                      { label: "Length", value: s.avg_post_length_words ? `~${s.avg_post_length_words} words` : "Varied" },
+                      { label: "Structure", value: s.sentence_length_pattern || "Custom spacing" },
+                      { label: "CTA", value: s.cta_style || "Direct" }
+                    ];
+                  }
+                  examplePost = selectedStyle.example_post || "";
+                }
+
+                return (
+                  <div className="mt-4 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/80 space-y-3">
+                    <div>
+                      <h5 className="text-[10px] font-bold text-cyan-500 dark:text-cyan-450 uppercase tracking-wider">Selected Style Profile</h5>
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">{styleName}</h4>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{description}</p>
+                    </div>
+
+                    {traits.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800/50">
+                        {traits.map((t, idx) => (
+                          <div key={idx} className="bg-white dark:bg-zinc-900 p-2 rounded-xl border border-zinc-200/40 dark:border-zinc-800/50">
+                            <span className="block text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">{t.label}</span>
+                            <span className="block text-[11px] text-zinc-700 dark:text-zinc-300 font-medium truncate mt-0.5" title={t.value}>{t.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {examplePost && (
+                      <div className="pt-2 border-t border-zinc-150 dark:border-zinc-800/50">
+                        <span className="block text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase mb-1.5">Style Preview / Layout</span>
+                        <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200/50 dark:border-zinc-800/60 font-mono text-[10px] text-zinc-650 dark:text-zinc-400 whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed scrollbar-thin">
+                          {examplePost}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}
@@ -1154,6 +1249,55 @@ export default function CreatePostPage() {
               No media will be attached to this post.
             </p>
           </div>
+        )}
+
+        {/* STEP 4: Series Configuration */}
+        {postType === "standard" && (
+          <>
+            <div className="ios-section-label flex items-center justify-between select-none mt-6">
+              <span>Step 4 — Make a Series (Optional)</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isSeries}
+                  onChange={(e) => setIsSeries(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-650 peer-checked:bg-cyan-500"></div>
+                <span className="ml-2 text-xs font-bold text-zinc-500">
+                  {isSeries ? "ON" : "OFF"}
+                </span>
+              </label>
+            </div>
+
+            {isSeries && (
+              <div className="ios-card p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 font-sans">Number of posts</p>
+                    <p className="text-xs text-zinc-400 mt-0.5 font-sans">Creates a chained series of posts</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSeriesPostCount(Math.max(2, seriesPostCount - 1))}
+                      className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                    >
+                      <Minus className="w-4 h-4 text-zinc-650 dark:text-zinc-400" />
+                    </button>
+                    <span className="text-xl font-black text-zinc-900 dark:text-white w-6 text-center">{seriesPostCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSeriesPostCount(Math.min(5, seriesPostCount + 1))}
+                      className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 text-zinc-650 dark:text-zinc-400" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Generate Post Button */}

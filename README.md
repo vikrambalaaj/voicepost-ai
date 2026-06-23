@@ -22,18 +22,16 @@ A full-stack AI-powered content creation tool built with Next.js 14, featuring v
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Cloud Deployment
 
-```bash
-git clone https://github.com/vikrambalaaj/voicepost-ai
-cd voicepost-ai
-npm install
-cp .env.example .env
-# Fill in your keys (see .env.example for guidance)
-npm run dev
-```
+VoicePost AI is fully cloud-native, deployed on Vercel, and backed by Supabase Cloud.
 
-Open [http://localhost:3000](http://localhost:3000) — the app works with mock data out of the box (no Supabase needed for basic testing).
+### Deployment on Vercel
+
+1. Push your repository to GitHub.
+2. Import the project into Vercel.
+3. Configure the environment variables listed below in your Vercel project settings.
+4. Deploy the application.
 
 ---
 

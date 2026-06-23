@@ -687,6 +687,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [images, setImages] = useState<any[]>([]);
   const [voice, setVoice] = useState<any>(null);
   const [linkedAccount, setLinkedAccount] = useState<any>(null);
+  const [seriesPosts, setSeriesPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit States
@@ -711,6 +712,9 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   // Comments & Engagement States
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [likesCount, setLikesCount] = useState<number | null>(null);
+  const [commentsCount, setCommentsCount] = useState<number | null>(null);
+  const [refreshingComments, setRefreshingComments] = useState(false);
   const [commentReplies, setCommentReplies] = useState<Record<string, string>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string[]>>({});
   const [loadingDrafts, setLoadingDrafts] = useState<Record<string, boolean>>({});
@@ -892,6 +896,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           setRevisions(data.revisions || []);
           setImages(data.images || []);
           setVoice(data.voice || null);
+          setSeriesPosts(data.series || []);
 
           // Check if post is a carousel
           const cleanContent = rawContent.trim();
@@ -942,18 +947,40 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
   }, [post?.id, post?.status]);
 
-  const fetchComments = async () => {
-    setLoadingComments(true);
+  const fetchComments = async (options?: { refresh?: boolean }) => {
+    const isRefresh = options?.refresh === true;
+    if (isRefresh) {
+      setRefreshingComments(true);
+    } else {
+      setLoadingComments(true);
+    }
     try {
-      const res = await fetch(`/api/posts/${id}/comments`);
+      const url = `/api/posts/${id}/comments${isRefresh ? "?refresh=true" : ""}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
         setComments(data.comments || []);
+        setLikesCount(data.likes_count ?? null);
+        setCommentsCount(data.comments_count ?? null);
+
+        // Auto-load pre-generated drafts
+        const draftsMap: Record<string, string[]> = {};
+        data.comments.forEach((c: any) => {
+          if (c.reply_draft) {
+            try {
+              draftsMap[c.id] = typeof c.reply_draft === "string" ? JSON.parse(c.reply_draft) : c.reply_draft;
+            } catch (e) {
+              console.warn("Failed to parse pre-generated draft:", e);
+            }
+          }
+        });
+        setCommentDrafts((prev) => ({ ...prev, ...draftsMap }));
       }
     } catch (err) {
       console.error("Failed to load comments:", err);
     } finally {
       setLoadingComments(false);
+      setRefreshingComments(false);
     }
   };
 
@@ -1515,6 +1542,67 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           <span className="font-semibold text-zinc-900 dark:text-white text-base">Approval Package</span>
           <div className="w-12" />
         </div>
+
+        {/* LinkedIn Series Navigation Panel */}
+        {seriesPosts && seriesPosts.length > 1 && (
+          <div className="ios-card p-4 mb-4 select-none">
+            <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Layout className="w-3.5 h-3.5" /> LinkedIn Post Series
+            </h4>
+            <div className="flex items-center justify-between relative gap-2 pt-2 pb-1 overflow-x-auto scrollbar-none">
+              {/* Timeline Connector Line */}
+              <div className="absolute top-[21px] left-8 right-8 h-0.5 bg-zinc-200 dark:bg-zinc-800 z-0" />
+              
+              {seriesPosts.map((p: any, idx: number) => {
+                const isActive = p.id === id;
+                const statusColors: Record<string, string> = {
+                  draft: "bg-zinc-500",
+                  pending_approval: "bg-orange-500",
+                  approved: "bg-blue-500",
+                  scheduled: "bg-cyan-500",
+                  published: "bg-emerald-500",
+                };
+                const statusDotColor = statusColors[p.status] || "bg-zinc-400";
+                
+                // Helper status label
+                const statusLabel = p.status === "pending_approval" || p.status === "draft" 
+                  ? "Draft" 
+                  : p.status === "scheduled" && p.scheduled_at 
+                  ? `Sched (${new Date(p.scheduled_at).toLocaleDateString()})` 
+                  : p.status.toUpperCase();
+
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => router.push(`/posts/${p.id}/approval`)}
+                    className={`flex flex-col items-center shrink-0 min-w-16 z-10 focus:outline-none border-none bg-transparent cursor-pointer group`}
+                  >
+                    {/* Ring wrapper for active/hover states */}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                      isActive 
+                        ? "bg-cyan-500/20 border-2 border-cyan-400 scale-110 shadow-lg shadow-cyan-500/10" 
+                        : "bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 group-hover:border-zinc-400 dark:group-hover:border-zinc-650"
+                    }`}>
+                      <span className={`text-[11px] font-extrabold ${isActive ? "text-cyan-400" : "text-zinc-500 group-hover:text-zinc-300"}`}>
+                        {idx + 1}
+                      </span>
+                    </div>
+                    {/* Status Dot */}
+                    <div className="flex items-center gap-1 mt-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${statusDotColor}`} />
+                      <span className={`text-[9px] font-bold tracking-tight ${isActive ? "text-cyan-400" : "text-zinc-400 group-hover:text-zinc-300"}`}>
+                        Part {idx + 1}
+                      </span>
+                    </div>
+                    <span className="text-[8px] text-zinc-500 font-medium max-w-[80px] truncate mt-0.5">
+                      {statusLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* AI Model Badge Info */}
         <div className="ios-card bg-zinc-100 dark:bg-zinc-800/40 p-3 flex justify-between items-center text-xs text-zinc-500 font-medium mb-4">
@@ -2212,8 +2300,42 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Engagement Comments Console */}
-        <div className="ios-section-label">LinkedIn Comments & Engagement</div>
+        <div className="flex items-center justify-between pr-4">
+          <div className="ios-section-label">LinkedIn Comments & Engagement</div>
+          {post?.status === "published" && (
+            <button
+              onClick={() => fetchComments({ refresh: true })}
+              disabled={loadingComments || refreshingComments}
+              className="text-xs font-semibold text-cyan-500 hover:text-cyan-400 disabled:text-zinc-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-6"
+            >
+              {refreshingComments ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-refresh-cw mr-0.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                  Refresh Now
+                </>
+              )}
+            </button>
+          )}
+        </div>
         <div className="ios-card p-4 space-y-4 mb-6">
+          {post?.status === "published" && likesCount !== null && (
+            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+              <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200/40 dark:border-zinc-800/40 flex flex-col items-center justify-center">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Likes</span>
+                <span className="text-lg font-black text-blue-500 mt-1">{likesCount}</span>
+              </div>
+              <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200/40 dark:border-zinc-800/40 flex flex-col items-center justify-center">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Comments</span>
+                <span className="text-lg font-black text-cyan-500 mt-1">{commentsCount ?? comments.length}</span>
+              </div>
+            </div>
+          )}
+
           {post?.status !== "published" ? (
             <p className="text-xs text-zinc-500 text-center py-4">Comments will become available once this post is published.</p>
           ) : loadingComments ? (

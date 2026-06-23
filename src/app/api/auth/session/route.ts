@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookie } from "@/lib/session";
 import { getServiceSupabase } from "@/lib/supabase";
+import { triggerBackgroundSync } from "@/lib/comments-sync";
 
 export async function GET(req: NextRequest) {
   const session = req.cookies.get("vp_session")?.value;
@@ -15,6 +16,11 @@ export async function GET(req: NextRequest) {
     res.cookies.delete("vp_session");
     return res;
   }
+
+  // Trigger non-blocking background sync for likes, comments, and drafts
+  triggerBackgroundSync(decoded.userId).catch((err) =>
+    console.error("[session] Background sync failed to fire:", err)
+  );
 
   const db = getServiceSupabase();
   const { data: userDb } = await db

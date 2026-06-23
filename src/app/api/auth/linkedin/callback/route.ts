@@ -152,6 +152,14 @@ export async function GET(req: NextRequest) {
       job_title: "Tech Founder",
       plan: "free",
     }).select();
+    
+    // Clean up any stray accounts for the demo user that are not the standard mock accounts
+    await db
+      .from("linkedin_accounts")
+      .delete()
+      .eq("user_id", demoId)
+      .not("linkedin_profile_id", "in", '("urn:li:person:mock_john_doe","urn:li:organization:mock_scaleup_solutions","urn:li:organization:mock_cloudnative_inc")');
+
     userId = demoId;
   } else {
     // Real user — upsert by linkedin_profile_id via email

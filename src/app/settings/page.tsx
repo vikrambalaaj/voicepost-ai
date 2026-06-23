@@ -85,9 +85,14 @@ export default function SettingsPage() {
           ? (sessionData.user?.posts_limit_weekly || 3) 
           : (sessionData.user?.posts_limit_monthly || 60);
 
+        const email = sessionData.user?.email || "demo@voicepost.com";
+        const ADMIN_EMAILS = ["vikram.bala@digitalfoundry.ai", "vikrambalauae.aj@gmail.com"];
+        const isRealAdmin = ADMIN_EMAILS.includes(email);
+        setIsAdmin(isRealAdmin);
+
         setUser({
           full_name: sessionData.user?.name || statusData.profile_name || "John Doe",
-          email: sessionData.user?.email || "demo@voicepost.com",
+          email: email,
           picture: sessionData.user?.picture || statusData.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120",
           plan: plan,
           posts_used_this_week: postsUsedCount,
@@ -259,17 +264,19 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="ios-section-label">Privacy & Admin</div>
+        <div className="ios-section-label">{isAdmin ? "Privacy & Admin" : "Privacy & Safety"}</div>
         <div className="ios-card">
-          <div onClick={() => router.push("/admin")} className="ios-row">
-            <div className="ios-icon bg-zinc-700">
-              <LayoutGrid className="w-4 h-4" />
+          {isAdmin && (
+            <div onClick={() => router.push("/admin")} className="ios-row">
+              <div className="ios-icon bg-zinc-700">
+                <LayoutGrid className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-semibold flex-1 text-zinc-800 dark:text-zinc-200">
+                Admin Console (Logs view)
+              </span>
+              <ChevronRight className="w-5 h-5 text-zinc-400" />
             </div>
-            <span className="text-sm font-semibold flex-1 text-zinc-800 dark:text-zinc-200">
-              Admin Console (Logs view)
-            </span>
-            <ChevronRight className="w-5 h-5 text-zinc-400" />
-          </div>
+          )}
 
           <div
             onClick={() =>

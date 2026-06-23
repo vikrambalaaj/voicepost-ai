@@ -12,6 +12,45 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  // Auto-sync raw scraped posts to the posts table as published posts
+  try {
+    const { data: rawPosts } = await db
+      .from("user_posts_raw")
+      .select("*")
+      .eq("user_id", userId)
+      .order("published_at", { ascending: false })
+      .limit(5);
+
+    if (rawPosts && rawPosts.length > 0) {
+      for (const rp of rawPosts) {
+        const { data: existing } = await db
+          .from("posts")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("linkedin_post_id", rp.linkedin_post_id)
+          .limit(1);
+
+        if (!existing || existing.length === 0) {
+          const postUrl = rp.linkedin_post_id.startsWith("mock_")
+            ? `https://www.linkedin.com/feed/update/${rp.linkedin_post_id}`
+            : `https://www.linkedin.com/feed/update/${rp.linkedin_post_id}`;
+
+          await db.from("posts").insert({
+            user_id: userId,
+            linkedin_account_id: rp.linkedin_account_id,
+            post_content: rp.content,
+            status: "published",
+            published_at: rp.published_at,
+            linkedin_post_id: rp.linkedin_post_id,
+            linkedin_post_url: postUrl,
+          });
+        }
+      }
+    }
+  } catch (syncErr) {
+    console.warn("[posts/route] Scraped posts backfill failed:", syncErr);
+  }
+
   const { data: posts, error } = await db
     .from("posts")
     .select("*")

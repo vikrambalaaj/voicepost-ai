@@ -56,10 +56,11 @@ export function middleware(req: NextRequest) {
   }
 
   // Validate session is not expired (simple base64 JSON check)
+  let decoded: any = null;
   try {
     const dotIndex = session.lastIndexOf(".");
     const encoded = dotIndex === -1 ? session : session.substring(0, dotIndex);
-    const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
+    decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
     if (decoded.exp && decoded.exp < Date.now()) {
       // Expired — clear cookie and redirect to login
       const loginUrl = new URL("/login", req.nextUrl.origin);
@@ -73,6 +74,22 @@ export function middleware(req: NextRequest) {
     const res = NextResponse.redirect(loginUrl);
     res.cookies.delete("vp_session");
     return res;
+  }
+
+  // Gate admin console and admin API routes
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    const ADMIN_EMAILS = ["vikram.bala@digitalfoundry.ai", "vikrambalauae.aj@gmail.com"];
+    const userEmail = decoded?.email;
+    if (!userEmail || !ADMIN_EMAILS.includes(userEmail)) {
+      if (pathname.startsWith("/api/admin")) {
+        return new NextResponse(
+          JSON.stringify({ error: "Forbidden: Admins only" }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+      } else {
+        return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
+      }
+    }
   }
 
   return NextResponse.next();

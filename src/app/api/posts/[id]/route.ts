@@ -54,12 +54,58 @@ export async function GET(
     .eq("post_id", id)
     .limit(1);
 
+  // Fetch series siblings if applicable
+  let seriesPosts: any[] = [];
+  if (post.series_id) {
+    const { data: siblingPosts } = await db
+      .from("posts")
+      .select("id, status, series_index, scheduled_at, published_at")
+      .eq("series_id", post.series_id)
+      .order("series_index", { ascending: true });
+    seriesPosts = siblingPosts || [];
+  } else if (post.agent_thoughts) {
+    try {
+      const thoughts = JSON.parse(post.agent_thoughts);
+      if (thoughts.series_id) {
+        // Fallback for metadata stored series
+        const { data: siblingPosts } = await db
+          .from("posts")
+          .select("id, status, agent_thoughts, scheduled_at, published_at")
+          .eq("user_id", userId)
+          .like("agent_thoughts", `%${thoughts.series_id}%`)
+          .limit(10);
+
+        const mappedSiblings = (siblingPosts || [])
+          .map((p: any) => {
+            try {
+              const pt = JSON.parse(p.agent_thoughts);
+              if (pt.series_id === thoughts.series_id) {
+                return {
+                  id: p.id,
+                  status: p.status,
+                  series_index: pt.series_index,
+                  scheduled_at: p.scheduled_at,
+                  published_at: p.published_at,
+                };
+              }
+            } catch {}
+            return null;
+          })
+          .filter(Boolean)
+          .sort((a: any, b: any) => (a.series_index || 0) - (b.series_index || 0));
+
+        seriesPosts = mappedSiblings;
+      }
+    } catch {}
+  }
+
   return NextResponse.json({
     success: true,
     post,
     revisions: revisions || [],
     images: images || [],
     voice: voiceRecordings?.[0] || null,
+    series: seriesPosts,
   });
 }
 

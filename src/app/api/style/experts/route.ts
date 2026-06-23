@@ -116,6 +116,75 @@ const STATIC_EXPERTS = [
     example_post: "Most people realize this too late: The golden rule of productivity is focus...",
     sort_order: 4,
     enabled: true
+  },
+  {
+    id: "jasmin_alic",
+    name: "Jasmin Alic",
+    handle: "@JasminAlic",
+    best_for: ["copywriting", "linkedin-growth", "formatting"],
+    description: "Extremely formatted, encouraging, and clear copy. Famous for writing hooks, simple explanations, and high-value community builders.",
+    style_json: {
+      avg_post_length_words: 140,
+      tone_descriptor: "encouraging, authoritative, warm",
+      uses_emojis: true,
+      emoji_frequency: "low",
+      uses_line_breaks_for_drama: true,
+      sentence_length_pattern: "short paragraphs, single-sentence takeaways",
+      opener_patterns: ["How to write a post that...", "Here is my secret to..."],
+      avoided_corporate_words: ["leverage", "utilize", "synergistic"],
+      cta_style: "warm question asking for their tips",
+      hashtag_style: "none",
+      storytelling_ratio: 0.4
+    },
+    example_post: "Here is my secret to building a loyal audience:\n\nMake it about them, not you.\n\nMost creators talk about their achievements.\n\nBut the best creators talk about how they can help you achieve yours.\n\nWhich creator do you learn the most from?",
+    sort_order: 5,
+    enabled: true
+  },
+  {
+    id: "luke_matthews",
+    name: "Luke Matthews",
+    handle: "@LukeMatthews",
+    best_for: ["content creation", "humor", "ai-strategy"],
+    description: "Quirky, self-deprecating, punchy humor with high-conviction insights about AI, writing, and creative freedom.",
+    style_json: {
+      avg_post_length_words: 120,
+      tone_descriptor: "humorous, quirky, confident",
+      uses_emojis: true,
+      emoji_frequency: "medium",
+      uses_line_breaks_for_drama: true,
+      sentence_length_pattern: "short punchlines, conversational banter",
+      opener_patterns: ["I'm going to let you in on a secret...", "AI isn't going to steal your job, but..."],
+      avoided_corporate_words: ["paradigm", "impactful", "deliverable"],
+      cta_style: "witty, prompt-style question",
+      hashtag_style: "none",
+      storytelling_ratio: 0.5
+    },
+    example_post: "AI isn't going to steal your job.\n\nBut a writer who knows how to prompt will.\n\nI spent 12 hours coding a simple workflow yesterday.\n\nAnd by 'coding', I mean chatting with a robot.\n\nWe live in a wild era. 🤖\n\nWhat did you automate this week?",
+    sort_order: 6,
+    enabled: true
+  },
+  {
+    id: "niharika_sodhi",
+    name: "Niharika Sodhi",
+    handle: "@NiharikaSodhi",
+    best_for: ["solopreneurship", "freelancing", "vulnerability"],
+    description: "Extremely honest, personal, and vulnerable storytelling about leaving the corporate world to build a creative side hustle.",
+    style_json: {
+      avg_post_length_words: 160,
+      tone_descriptor: "vulnerable, honest, inspirational",
+      uses_emojis: true,
+      emoji_frequency: "low",
+      uses_line_breaks_for_drama: true,
+      sentence_length_pattern: "vulnerable story, raw lessons",
+      opener_patterns: ["I quit my safe 9-to-5 job 3 years ago.", "Nobody talks about the dark side of freelancing:"],
+      avoided_corporate_words: ["strategic", "optimization", "value proposition"],
+      cta_style: "reflective question for aspiring builders",
+      hashtag_style: "none",
+      storytelling_ratio: 0.7
+    },
+    example_post: "I quit my safe 9-to-5 job 3 years ago.\n\nMy parents thought I was crazy.\n\nMy boss told me I'd be back in six months.\n\nBut today, I run a business doing what I love, working 4 hours a day.\n\nIt wasn't easy, and there was plenty of self-doubt.\n\nBut betting on yourself is the best bet you can ever make.\n\nHave you ever taken a leap of faith?",
+    sort_order: 7,
+    enabled: true
   }
 ];
 

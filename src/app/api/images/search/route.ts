@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const query = req.nextUrl.searchParams.get("query") || "business growth";
+  const query = req.nextUrl.searchParams.get("query") || "Success, leader , motivation";
 
   const serperKey = process.env.SERPER_API_KEY;
   const serpapiKey = process.env.SERPAPI_API_KEY || process.env.SERP_API_KEY;
