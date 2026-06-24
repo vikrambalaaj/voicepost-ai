@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
 import { 
   Search, Sparkles, TrendingUp, Cpu, Users, Briefcase, 
-  BrainCircuit, Target, Heart, ExternalLink, ArrowRight, Lightbulb 
+  BrainCircuit, Target, Heart, ExternalLink, ArrowRight, Lightbulb, GitBranch
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -28,6 +28,7 @@ export default function InspirationPage() {
 
   const presets = [
     { name: "AI", icon: Cpu, color: "from-purple-500 to-indigo-500" },
+    { name: "GitHub Trending", icon: GitBranch, color: "from-zinc-400 to-zinc-600" },
     { name: "Hacker News", icon: Lightbulb, color: "from-orange-500 to-amber-500" },
     { name: "Leadership", icon: Users, color: "from-blue-500 to-cyan-500" },
     { name: "SAP", icon: Briefcase, color: "from-amber-500 to-orange-500" },

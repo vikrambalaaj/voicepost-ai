@@ -67,6 +67,46 @@ async function fetchGdelt(query: string): Promise<SearchResultItem[]> {
   }
 }
 
+// Fetch from GitHub Trending Repositories (created in the last 30 days)
+async function fetchGithubTrending(query?: string): Promise<SearchResultItem[]> {
+  try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+    const dateStr = oneMonthAgo.toISOString().split("T")[0];
+    
+    let q = `created:>${dateStr}`;
+    if (query && query.toLowerCase() !== "github trending") {
+      q = `${query} created:>${dateStr}`;
+    }
+    
+    const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=25`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "VoicePostAI/1.0",
+        "Accept": "application/vnd.github.v3+json"
+      },
+      next: { revalidate: 3600 } // cache for 1 hour
+    });
+
+    if (!res.ok) {
+      console.warn(`[trends-search] GitHub search returned status ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    const items = data.items || [];
+    return items.map((repo: any) => ({
+      title: `Trending Repo: ${repo.name} (${repo.language || "Unknown"}) - ${repo.description || "No description"}`,
+      url: repo.html_url,
+      source: `GitHub (${repo.stargazers_count} ★)`,
+      published_at: repo.created_at,
+      score: repo.stargazers_count
+    }));
+  } catch (err) {
+    console.error("[trends-search] GitHub search failed:", err);
+    return [];
+  }
+}
+
 // Fetch Tavily (Using user's API key if available)
 async function fetchTavily(query: string, apiKey: string): Promise<SearchResultItem[]> {
   try {
@@ -75,8 +115,10 @@ async function fetchTavily(query: string, apiKey: string): Promise<SearchResultI
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         api_key: apiKey,
-        query: `latest trending discussions on X Twitter and Reddit about ${query}`,
-        max_results: 10,
+        query: `breaking news, recent announcements, software updates, or viral discussions about ${query} in the last 7 days`,
+        search_depth: "advanced",
+        time_range: "week",
+        max_results: 15,
       }),
     });
 
@@ -86,7 +128,7 @@ async function fetchTavily(query: string, apiKey: string): Promise<SearchResultI
     return results.map((r: any) => ({
       title: r.title || "",
       url: r.url || "",
-      source: "Tavily (Web Search)",
+      source: "Tavily (News)",
       published_at: new Date().toISOString()
     }));
   } catch (err) {
@@ -200,16 +242,29 @@ export async function GET(req: NextRequest) {
     // 3. Search in parallel
     const tavilyKey = process.env.TAVILY_API_KEY;
     const isTechFeed = topic.toLowerCase() === "hacker news";
-    const filterQuery = isTechFeed ? undefined : topic;
+    const isGithubTrending = topic.toLowerCase() === "github trending";
+    const filterQuery = (isTechFeed || isGithubTrending) ? undefined : topic;
 
-    const promises = [
-      fetchReddit(topic),
-      fetchGdelt(topic),
-      fetchHackerNews(filterQuery),
-      fetchV2ex(filterQuery),
-    ];
-    if (tavilyKey) {
-      promises.push(fetchTavily(topic, tavilyKey));
+    let promises: Promise<SearchResultItem[]>[] = [];
+
+    if (isGithubTrending) {
+      // For GitHub Trending: fetch trending repos and top HN tech news
+      promises = [
+        fetchGithubTrending(),
+        fetchHackerNews()
+      ];
+    } else {
+      // General topic search: fetch Reddit, GDELT, HN, V2EX, GitHub, and Tavily
+      promises = [
+        fetchReddit(topic),
+        fetchGdelt(topic),
+        fetchHackerNews(filterQuery),
+        fetchV2ex(filterQuery),
+        fetchGithubTrending(topic), // include relevant trending repos in topic search
+      ];
+      if (tavilyKey) {
+        promises.push(fetchTavily(topic, tavilyKey));
+      }
     }
 
     const settled = await Promise.allSettled(promises);
@@ -255,26 +310,27 @@ export async function GET(req: NextRequest) {
     }
 
     // 4. Distill using LLM
-    const systemPrompt = `You are a trend-analysis engine for a LinkedIn content creation tool.
-You will be provided with a raw list of news articles, social discussions, and web search results about the topic "${topic}".
-Your job is to analyze them and extract the TOP 5 distinct, hot trending topics that a professional could write a high-engagement LinkedIn post about today.
+    const systemPrompt = `You are a real-time trend-analysis engine for a LinkedIn professional content tool.
+You will be provided with a raw list of news articles, social discussions, viral posts, GitHub repositories, and web search results about the topic "${topic}".
+Your job is to extract the TOP 5 most significant, fresh, and actionable recent developments (news, launches, viral announcements, trending tools, or hot industry debates) from the last 7 days.
 
-RULES:
-1. DEDUPLICATE: Merge similar stories or discussions into a single topic theme.
-2. RANK: Order by relevance and momentum (1 is the hottest).
-3. ANGLE: For each topic, provide a highly specific suggested_angle — a contrarian, practical, or practitioner take a professional can write about. Make it actionable and interesting.
-4. FACTS: Rely strictly on the input. Do not invent companies, stats, or fake events. If details are not in the input, generalize them or keep it simple.
-5. FORMAT: Output ONLY raw JSON matching the following schema. DO NOT include any introductory or concluding text, explanations, or markdown backticks.
+CRITICAL RULES:
+1. FOCUS ON LATEST NEWS: Avoid evergreen or generic topics (e.g. general explanations of what a company does). Every topic must represent a SPECIFIC, RECENT EVENT, ANNOUNCEMENT, REPOSITORY LAUNCH, or VIRAL DISCUSSION happening right now.
+2. EXTRACT CONCRETE MESSAGES: State exactly what happened (e.g. "SAP launched new AI feature X", "A new repository Y gained 5k stars", "Controversy over pricing change Z").
+3. DO NOT GENERALIZE: Do not summarize into general themes like "SAP Criticism". Instead, identify the specific complaint or recent news item.
+4. ACTIONABLE ANGLE: Provide a highly specific, professional copywriting angle for LinkedIn. Make it practical, contrarian, or insight-driven.
+5. SOURCE TRUTHFULNESS: Rely strictly on the input data. Do not make up facts or URLs.
+6. OUTPUT SCHEMA: Output ONLY raw JSON matching the following schema. No markdown backticks.
 
 OUTPUT SCHEMA:
 {
   "topics": [
     {
       "rank": 1,
-      "topic": "Title (max 8 words)",
-      "summary": "1-2 sentence neutral summary of what is happening",
-      "suggested_angle": "One actionable, engaging LinkedIn post angle",
-      "momentum": 85,
+      "topic": "Specific Event/Launch (max 8 words)",
+      "summary": "1-2 sentences explaining the concrete recent development and its context.",
+      "suggested_angle": "One actionable LinkedIn post hook and angle.",
+      "momentum": 95,
       "sources": ["url1", "url2"]
     }
   ]
