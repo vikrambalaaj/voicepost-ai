@@ -56,6 +56,14 @@ export default function CreatePostPage() {
   const [imageAspectRatio, setImageAspectRatio] = useState<"16:9" | "1:1" | "4:5">("16:9");
   const [brandColors, setBrandColors] = useState("");
 
+  // Text Overlay States
+  const [overlayText, setOverlayText] = useState("");
+  const [overlaySize, setOverlaySize] = useState("medium");
+  const [overlayColor, setOverlayColor] = useState("#FFFFFF");
+  const [overlayFont, setOverlayFont] = useState("sans-serif");
+  const [overlayPosition, setOverlayPosition] = useState("bottom");
+  const [isApplyingOverlay, setIsApplyingOverlay] = useState(false);
+
   // Overall Generation State
   const [generatingPost, setGeneratingPost] = useState(false);
   const [generationStatus, setGenerationStatus] = useState("");
@@ -426,6 +434,109 @@ export default function CreatePostPage() {
       alert("AI image generation failed: " + (e.message || "Please check server logs."));
     } finally {
       setIsGeneratingAiImage(false);
+    }
+  };
+
+  // Apply text overlay using HTML5 canvas
+  const applyTextOverlay = () => {
+    if (!aiGeneratedImage?.url) return;
+    setIsApplyingOverlay(true);
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setIsApplyingOverlay(false);
+        return;
+      }
+      
+      // Draw background image
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      if (overlayText.trim()) {
+        // Map abstract sizes to pixel values based on canvas height
+        let fontSize = Math.round(canvas.height * 0.06);
+        if (overlaySize === "small") fontSize = Math.round(canvas.height * 0.04);
+        if (overlaySize === "large") fontSize = Math.round(canvas.height * 0.09);
+        if (overlaySize === "xl") fontSize = Math.round(canvas.height * 0.12);
+        
+        // Map font families
+        let fontFamily = "sans-serif";
+        if (overlayFont === "serif") fontFamily = "Georgia, serif";
+        if (overlayFont === "monospace") fontFamily = "monospace";
+        if (overlayFont === "impact") fontFamily = "Impact, sans-serif";
+        
+        ctx.font = `bold ${fontSize}px ${fontFamily}`;
+        ctx.fillStyle = overlayColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        // Add text shadow for legibility
+        ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+        ctx.shadowBlur = Math.round(fontSize * 0.15);
+        ctx.shadowOffsetX = Math.round(fontSize * 0.04);
+        ctx.shadowOffsetY = Math.round(fontSize * 0.04);
+        
+        // Split text by newlines
+        const lines = overlayText.split("\n");
+        const lineHeight = fontSize * 1.2;
+        
+        // Calculate starting Y position
+        let startY = canvas.height / 2;
+        if (overlayPosition === "top") {
+          startY = fontSize * 1.5;
+        } else if (overlayPosition === "bottom") {
+          startY = canvas.height - (lines.length * lineHeight) + (fontSize * 0.2);
+        } else {
+          // center
+          startY = (canvas.height / 2) - ((lines.length - 1) * lineHeight / 2);
+        }
+        
+        // Draw each line
+        lines.forEach((line, idx) => {
+          const y = startY + idx * lineHeight;
+          ctx.fillText(line, canvas.width / 2, y);
+        });
+      }
+      
+      try {
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        
+        const updatedImage = {
+          ...aiGeneratedImage,
+          url: dataUrl,
+          original_url: aiGeneratedImage.original_url || aiGeneratedImage.url,
+        };
+        
+        setAiGeneratedImage(updatedImage);
+        setSelectedImage(updatedImage);
+      } catch (err) {
+        console.error("Canvas export failed (CORS):", err);
+        alert("Failed to apply overlay due to security constraints on the image source. This can happen with certain external fallback image sources.");
+      } finally {
+        setIsApplyingOverlay(false);
+      }
+    };
+    
+    img.onerror = () => {
+      setIsApplyingOverlay(false);
+      alert("Failed to load generated image for rendering.");
+    };
+    
+    // Add t query parameter to bust cache and prevent CORS issues
+    try {
+      const urlObj = new URL(aiGeneratedImage.original_url || aiGeneratedImage.url);
+      urlObj.searchParams.set("t", Date.now().toString());
+      img.src = urlObj.toString();
+    } catch (_) {
+      // Fallback if URL parsing fails (e.g. data URL)
+      img.src = aiGeneratedImage.original_url || aiGeneratedImage.url;
     }
   };
 
@@ -1134,8 +1245,133 @@ export default function CreatePostPage() {
                 ) : (
                   <div className="flex flex-col space-y-4">
                     {aiGeneratedImage && (
-                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border-2 border-cyan-500">
-                        <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
+                      <div className="space-y-3">
+                        <div className="relative aspect-video w-full rounded-xl overflow-hidden border-2 border-cyan-500">
+                          <img src={aiGeneratedImage.url} alt="AI output" className="w-full h-full object-cover" />
+                        </div>
+                        
+                        {/* Overlay Controls */}
+                        <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 space-y-3 text-[11px]">
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5 mb-1">
+                            <span className="font-bold text-zinc-300">Add Text Overlay</span>
+                            {(overlayText.trim() || aiGeneratedImage.original_url) && (
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  if (aiGeneratedImage.original_url) {
+                                    setOverlayText("");
+                                    setAiGeneratedImage({
+                                      ...aiGeneratedImage,
+                                      url: aiGeneratedImage.original_url
+                                    });
+                                    setSelectedImage({
+                                      ...aiGeneratedImage,
+                                      url: aiGeneratedImage.original_url
+                                    });
+                                  }
+                                }}
+                                className="text-[10px] text-red-400 hover:text-red-300 font-bold bg-transparent border-none cursor-pointer"
+                              >
+                                Reset Overlay
+                              </button>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <label className="block text-zinc-400 mb-1 font-semibold">Overlay Text (supports multi-line)</label>
+                            <textarea
+                              rows={2}
+                              placeholder="e.g. 5 RULES OF SCALING&#10;YOUR SaaS IN 2026"
+                              value={overlayText}
+                              onChange={(e) => setOverlayText(e.target.value)}
+                              className="w-full bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-xl px-2.5 py-1.5 text-xs focus:border-cyan-500 outline-none placeholder:text-zinc-700 resize-none font-medium leading-normal"
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-zinc-400 mb-1 font-semibold">Font Style</label>
+                              <select
+                                value={overlayFont}
+                                onChange={(e) => setOverlayFont(e.target.value)}
+                                className="w-full bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-xl px-1.5 py-1.5 h-8 focus:border-cyan-500 outline-none text-[11px]"
+                              >
+                                <option value="sans-serif">Modern Sans-Serif</option>
+                                <option value="serif">Elegant Serif</option>
+                                <option value="monospace">Tech Monospace</option>
+                                <option value="impact">Meme / Impact</option>
+                              </select>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-zinc-400 mb-1 font-semibold">Position</label>
+                              <select
+                                value={overlayPosition}
+                                onChange={(e) => setOverlayPosition(e.target.value)}
+                                className="w-full bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-xl px-1.5 py-1.5 h-8 focus:border-cyan-500 outline-none text-[11px]"
+                              >
+                                <option value="bottom">Bottom Third</option>
+                                <option value="center">Centered</option>
+                                <option value="top">Top Third</option>
+                              </select>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-zinc-400 mb-1 font-semibold">Text Size</label>
+                              <select
+                                value={overlaySize}
+                                onChange={(e) => setOverlaySize(e.target.value)}
+                                className="w-full bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-xl px-1.5 py-1.5 h-8 focus:border-cyan-500 outline-none text-[11px]"
+                              >
+                                <option value="small">Small</option>
+                                <option value="medium">Medium</option>
+                                <option value="large">Large</option>
+                                <option value="xl">Extra Large</option>
+                              </select>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-zinc-400 mb-1 font-semibold">Text Color</label>
+                              <div className="flex gap-1.5 items-center">
+                                <input
+                                  type="color"
+                                  value={overlayColor}
+                                  onChange={(e) => setOverlayColor(e.target.value)}
+                                  className="w-8 h-8 rounded-lg bg-transparent border border-zinc-850 cursor-pointer p-0 overflow-hidden"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="#FFFFFF"
+                                  value={overlayColor.toUpperCase()}
+                                  onChange={(e) => {
+                                    let val = e.target.value;
+                                    if (!val.startsWith("#") && val.length > 0) val = "#" + val;
+                                    setOverlayColor(val);
+                                  }}
+                                  className="w-full bg-zinc-950 text-zinc-200 border border-zinc-850 rounded-xl px-2 py-1.5 h-8 focus:border-cyan-500 outline-none text-[10px] font-mono text-center"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={applyTextOverlay}
+                            disabled={isApplyingOverlay || !overlayText.trim()}
+                            className="w-full h-8 text-[11px] font-bold rounded-lg bg-zinc-800 hover:bg-zinc-750 text-white flex items-center justify-center border border-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 cursor-pointer active:scale-98 transition-all"
+                          >
+                            {isApplyingOverlay ? (
+                              <>
+                                <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin mr-1.5" />
+                                Applying Overlay...
+                              </>
+                            ) : (
+                              "Apply Text Overlay"
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
                     

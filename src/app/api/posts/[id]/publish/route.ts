@@ -327,9 +327,18 @@ export async function POST(
               mediaUrn = registerData.value.asset;
               mediaCategory = "IMAGE";
 
-              // Fetch and upload image blob
-              const imgBlobRes = await fetch(selectedImage.url);
-              const imgBlob = await imgBlobRes.blob();
+              // Fetch and upload image blob (decode manually if it is a base64 data URL)
+              let imgBlob;
+              if (selectedImage.url.startsWith("data:")) {
+                const parts = selectedImage.url.split(",");
+                const mime = parts[0].match(/:(.*?);/)?.[1] || "image/jpeg";
+                const base64 = parts[1];
+                const buf = Buffer.from(base64, "base64");
+                imgBlob = new Blob([buf], { type: mime });
+              } else {
+                const imgBlobRes = await fetch(selectedImage.url);
+                imgBlob = await imgBlobRes.blob();
+              }
 
               const uploadRes = await fetch(uploadUrl, {
                 method: "PUT",
