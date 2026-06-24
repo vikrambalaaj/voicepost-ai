@@ -141,13 +141,13 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
   // Determine timeout based on use case
   // Keep well under Vercel Hobby 10s limit on Vercel, but allow longer locally
-  let timeoutMs = 8000; // 8s default
+  let timeoutMs = 3500; // 3.5s default on Vercel to allow waterfall retries within 10s limit
   if (!process.env.VERCEL) {
     timeoutMs = 60000; // 60s locally to allow slower high-quality models to complete
   } else if (request.useCase === "transcript_correction") {
-    timeoutMs = 8000; // 8s on Vercel
+    timeoutMs = 4000; // 4s on Vercel
   } else if (request.useCase === "style_analysis") {
-    timeoutMs = 9000; // 9s on Vercel
+    timeoutMs = 4500; // 4.5s on Vercel
   }
 
   // Helper to check if a provider has its API key or configuration set
@@ -237,7 +237,11 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
         );
 
         if (!response.ok) {
-          throw new Error(`Cloudflare API error: ${response.status} ${response.statusText}`);
+          let errorText = "";
+          try {
+            errorText = await response.text();
+          } catch (_) {}
+          throw new Error(`Cloudflare API error: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
@@ -287,7 +291,11 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
         );
 
         if (!response.ok) {
-          throw new Error(`Gemini Native API returned status ${response.status} ${response.statusText}`);
+          let errorText = "";
+          try {
+            errorText = await response.text();
+          } catch (_) {}
+          throw new Error(`Gemini Native API returned status ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
@@ -323,12 +331,16 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
           timeoutMs
         );
 
-        if (response.status === 429) {
-          throw new Error("Rate limit exceeded (429)");
-        }
-
         if (!response.ok) {
-          throw new Error(`API returned status ${response.status}`);
+          let errorText = "";
+          try {
+            errorText = await response.text();
+          } catch (_) {}
+          
+          if (response.status === 429) {
+            throw new Error(`Rate limit exceeded (429) - ${errorText}`);
+          }
+          throw new Error(`API returned status ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
