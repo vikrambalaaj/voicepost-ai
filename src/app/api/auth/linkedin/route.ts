@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", "openid profile email w_member_social");
+  authUrl.searchParams.set("scope", "openid profile email w_member_social r_organization_admin w_organization_social");
   // Encode the purpose in the state so callback knows what to do
   authUrl.searchParams.set("state", `${csrfToken}:${purpose}`);
 

@@ -246,21 +246,49 @@ export async function GET(req: NextRequest) {
   } else {
     // Real LinkedIn Pages lookup
     try {
+      let orgs: string[] = [];
+
       const aclsRes = await fetch("https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", {
-        headers: { Authorization: `Bearer ${accountInfo.access_token}` },
+        headers: { 
+          Authorization: `Bearer ${accountInfo.access_token}`,
+          "X-Restli-Protocol-Version": "2.0.0"
+        },
       });
+
       if (aclsRes.ok) {
         const aclsData = await aclsRes.json();
         const orgIds = aclsData.elements?.map((el: any) => el.organizationalTarget) || [];
-        const orgs = orgIds.filter((urn: string) => urn.startsWith("urn:li:organization:"));
+        orgs = orgIds.filter((urn: string) => urn && urn.startsWith("urn:li:organization:"));
+      } else {
+        console.warn(`[linkedin-pages] organizationalEntityAcls failed with status ${aclsRes.status}. Trying organizationAcls...`);
+        const newAclsRes = await fetch("https://api.linkedin.com/v2/organizationAcls?q=roleAssignee", {
+          headers: { 
+            Authorization: `Bearer ${accountInfo.access_token}`,
+            "X-Restli-Protocol-Version": "2.0.0"
+          },
+        });
+        if (newAclsRes.ok) {
+          const aclsData = await newAclsRes.json();
+          const elements = aclsData.elements || [];
+          orgs = elements
+            .filter((el: any) => el.role === "ADMINISTRATOR" && el.state === "APPROVED" && el.organization)
+            .map((el: any) => el.organization);
+        } else {
+          console.error(`[linkedin-pages] Both organizationalEntityAcls and organizationAcls failed.`);
+        }
+      }
 
+      if (orgs.length > 0) {
         // Parallelize fetching details for all managed organization pages
         await Promise.allSettled(
           orgs.map(async (orgUrn: string) => {
             const orgId = orgUrn.split(":").pop();
             try {
               const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}?projection=(id,localizedName,logoV2(original~:playableStreams))`, {
-                headers: { Authorization: `Bearer ${accountInfo.access_token}` },
+                headers: { 
+                  Authorization: `Bearer ${accountInfo.access_token}`,
+                  "X-Restli-Protocol-Version": "2.0.0"
+                },
               });
               if (!orgRes.ok) return;
               const orgData = await orgRes.json();

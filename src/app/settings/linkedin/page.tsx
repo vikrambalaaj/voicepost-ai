@@ -636,8 +636,12 @@ export default function LinkedInSettingsPage() {
                       <span className="text-zinc-400">Read email for auth sync</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-zinc-700 dark:text-zinc-300">✅ w_member_social</span>
-                      <span className="text-zinc-400">Publish posts on your behalf</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">✅ w_member_social & w_organization_social</span>
+                      <span className="text-zinc-400">Publish to profile & company pages</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-700 dark:text-zinc-300">✅ r_organization_admin</span>
+                      <span className="text-zinc-400">List managed company pages</span>
                     </div>
                     <div className="flex justify-between text-red-500/80">
                       <span>❌ Connections</span>
