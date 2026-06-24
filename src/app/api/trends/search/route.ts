@@ -95,6 +95,82 @@ async function fetchTavily(query: string, apiKey: string): Promise<SearchResultI
   }
 }
 
+// Fetch from Hacker News (Free, Keyless API)
+async function fetchHackerNews(query?: string): Promise<SearchResultItem[]> {
+  try {
+    const res = await fetch("https://hacker-news.firebaseio.com/v0/topstories.json", {
+      next: { revalidate: 1800 } // cache for 30 mins
+    });
+    if (!res.ok) return [];
+    const storyIds = await res.json();
+    
+    // Fetch details for top 12 stories
+    const sliceIds = storyIds.slice(0, 12);
+    const promises = sliceIds.map((id: number) => 
+      fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`)
+        .then(r => r.json())
+        .catch(() => null)
+    );
+    const stories = await Promise.all(promises);
+    
+    const items: SearchResultItem[] = [];
+    stories.forEach((s) => {
+      if (s && s.title && s.url) {
+        if (query) {
+          const q = query.toLowerCase();
+          const t = s.title.toLowerCase();
+          if (!t.includes(q)) return;
+        }
+        items.push({
+          title: s.title,
+          url: s.url,
+          source: "Hacker News",
+          published_at: s.time ? new Date(s.time * 1000).toISOString() : new Date().toISOString(),
+          score: s.score || 0
+        });
+      }
+    });
+    return items;
+  } catch (err) {
+    console.error("[trends-search] HN search failed:", err);
+    return [];
+  }
+}
+
+// Fetch from V2EX Hot Topics (Free, Keyless API)
+async function fetchV2ex(query?: string): Promise<SearchResultItem[]> {
+  try {
+    const res = await fetch("https://www.v2ex.com/api/topics/hot.json", {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      next: { revalidate: 1800 }
+    });
+    if (!res.ok) return [];
+    const topics = await res.json();
+    const items: SearchResultItem[] = [];
+    topics.forEach((t: any) => {
+      if (t && t.title && t.url) {
+        if (query) {
+          const q = query.toLowerCase();
+          const title = t.title.toLowerCase();
+          const content = (t.content || "").toLowerCase();
+          if (!title.includes(q) && !content.includes(q)) return;
+        }
+        items.push({
+          title: t.title,
+          url: t.url,
+          source: "V2EX",
+          published_at: t.created ? new Date(t.created * 1000).toISOString() : new Date().toISOString(),
+          score: t.replies || 0
+        });
+      }
+    });
+    return items;
+  } catch (err) {
+    console.error("[trends-search] V2EX search failed:", err);
+    return [];
+  }
+}
+
 export async function GET(req: NextRequest) {
   const db = getServiceSupabase();
 
@@ -123,9 +199,14 @@ export async function GET(req: NextRequest) {
 
     // 3. Search in parallel
     const tavilyKey = process.env.TAVILY_API_KEY;
+    const isTechFeed = topic.toLowerCase() === "hacker news";
+    const filterQuery = isTechFeed ? undefined : topic;
+
     const promises = [
       fetchReddit(topic),
       fetchGdelt(topic),
+      fetchHackerNews(filterQuery),
+      fetchV2ex(filterQuery),
     ];
     if (tavilyKey) {
       promises.push(fetchTavily(topic, tavilyKey));

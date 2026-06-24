@@ -28,6 +28,7 @@ export default function InspirationPage() {
 
   const presets = [
     { name: "AI", icon: Cpu, color: "from-purple-500 to-indigo-500" },
+    { name: "Hacker News", icon: Lightbulb, color: "from-orange-500 to-amber-500" },
     { name: "Leadership", icon: Users, color: "from-blue-500 to-cyan-500" },
     { name: "SAP", icon: Briefcase, color: "from-amber-500 to-orange-500" },
     { name: "Data", icon: BrainCircuit, color: "from-teal-500 to-emerald-500" },
