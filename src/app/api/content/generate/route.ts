@@ -338,10 +338,9 @@ FORMAT RULES:
 - Short paragraphs: 1-2 sentences max, then a line break
 - Section headers: ALL CAPS only (no markdown headers)
 - Section dividers: use — — — between major sections
-- Numbered lists: plain numbers only (1. 2. 3.)
-- Sub-bullets: fold into short sentences, never use asterisks or dashes as bullets
+- Bulleted/Numbered lists: Use standard unicode bullets like '•' or '-' (never use asterisks '*' or '**') or numbers (1. 2. 3.) to break down key insights, lists, or steps to avoid long text paragraphs.
 - Tables: convert to plain-text stacked lists with em dashes
-- Spacing: always one blank line between numbered items
+- Spacing: always one blank line between list/bullet items for mobile readability.
 - NEVER use asterisks (*) or double asterisks (**) anywhere in the post. Do NOT use them for bolding, emphasis, titles, headers, or bullet lists. Keep the text strictly plain text without any markdown or asterisk symbols. Use CAPITAL LETTERS for emphasis or headers, and standard unicode bullets like '•' or '-' if list bullets are needed.
 
 HOOK RULES:
