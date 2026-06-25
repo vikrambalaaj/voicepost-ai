@@ -98,6 +98,8 @@ Rewrite instructions:
 - Incorporate the user feedback into the carousel title and slides. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
 - Maintain a highly polished, professional thought-leadership LinkedIn carousel structure.
 - Each slide must be punchy, scannable, and valuable. Max 2-3 lines per body.
+- For content slides (type "content"), if a list or multi-step takeaway is being presented, write exactly 3 bullet points using standard unicode bullet characters (•) instead of a text paragraph.
+- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT have any bullet points under any circumstances.
 - Title: 4-8 words, strong claim or hook.
 - NO corporate fluff, NO "leverage", NO "delve".
 - NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.
@@ -112,20 +114,20 @@ Return your response ONLY in this JSON format:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline (4-8 words)",
-      "body": "1-2 sentence hook that makes them swipe"
+      "body": "1-2 sentence hook that makes them swipe (Strictly NO bullet points here)"
     },
     {
       "slideNumber": 2,
       "type": "content",
       "title": "slide title",
-      "body": "2-3 sentence insight"
+      "body": "exactly 3 bullet points starting with '• ' (e.g. • Bullet 1\\n• Bullet 2\\n• Bullet 3) when presenting points or insights, otherwise a punchy 2-3 sentence insight"
     },
     ... (additional content slides),
     {
       "slideNumber": ${originalCarouselData?.slides?.length || 6},
       "type": "cta",
       "title": "cta headline",
-      "body": "follow for more + what they'll get"
+      "body": "follow for more + what they'll get (Strictly NO bullet points here)"
     }
   ],
   "suggestedHashtags": ["hashtag1", "hashtag2"],

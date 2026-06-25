@@ -73,11 +73,11 @@ export async function humanizeCarouselSlides(
       messages: [
         {
           role: "system",
-          content: "You are a professional LinkedIn content humanizer. Your task is to rewrite the text content of the slides (title and body) to sound completely human-written, engaging, and natural. Avoid corporate jargon and AI words. Maintain the exact same JSON array format. Return ONLY the valid JSON array of slides."
+          content: "You are a professional LinkedIn content humanizer. Your task is to rewrite the text content of the slides (title and body) to sound completely human-written, engaging, and natural. Avoid corporate jargon and AI words. Maintain the exact same JSON array format. If a slide (e.g. type 'content') has bullet points, keep exactly 3 bullet points starting with '• '. Under no circumstances should you add bullet points to the cover slide (type 'cover') or CTA slide (type 'cta'). Return ONLY the valid JSON array of slides."
         },
         {
           role: "user",
-          content: `Humanize the text inside this slides JSON array. Keep the slideNumber and type exactly the same, but humanize the title and body. Return only the JSON array:\n\n${JSON.stringify(slides, null, 2)}`
+          content: `Humanize the text inside this slides JSON array. Keep the slideNumber and type exactly the same, but humanize the title and body. Ensure formatting rules are followed: cover and cta slides must not have bullets, and content slides with lists must keep 3 unicode bullets (•). Return only the JSON array:\n\n${JSON.stringify(slides, null, 2)}`
         }
       ],
       userId,

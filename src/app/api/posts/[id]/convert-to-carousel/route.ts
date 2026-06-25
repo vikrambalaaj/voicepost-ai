@@ -42,9 +42,9 @@ export async function POST(
 
 RULES:
 - Restructure the input text into exactly 6 logical slides.
-- Slide 1: Hook cover slide.
-- Slides 2 to 5: Content slides with punchy takeaways.
-- Slide 6: Call to Action (CTA) slide.
+- Slide 1: Hook cover slide. It MUST NOT contain any bullet points.
+- Slides 2 to 5: Content slides with punchy takeaways. For these content slides, if a list or multi-step takeaway is being presented, write exactly 3 bullet points using standard unicode bullet characters (•) instead of a text paragraph.
+- Slide 6: Call to Action (CTA) slide. It MUST NOT contain any bullet points.
 - Use short sentences. Max 2-3 lines per body.
 - Return ONLY valid JSON, no markdown, no backticks.
 - NEVER use asterisks (*) or double asterisks (**) in slide titles or body.`;
@@ -60,9 +60,21 @@ Return this exact JSON structure:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline",
-      "body": "swipe hook"
+      "body": "swipe hook (Strictly NO bullet points here)"
     },
-    ...
+    {
+      "slideNumber": 2,
+      "type": "content",
+      "title": "slide title",
+      "body": "exactly 3 bullet points starting with '• ' (e.g. • Bullet 1\\n• Bullet 2\\n• Bullet 3) when presenting points or insights, otherwise a punchy 2-3 sentence insight"
+    },
+    ... (slides 3 to 5 as content slides),
+    {
+      "slideNumber": 6,
+      "type": "cta",
+      "title": "cta headline",
+      "body": "follow for more + what they'll get (Strictly NO bullet points here)"
+    }
   ],
   "suggestedHashtags": ["tag1", "tag2"]
 }`;
