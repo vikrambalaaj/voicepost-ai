@@ -42,12 +42,12 @@ export async function POST(
 
 RULES:
 - Restructure the input text into exactly 6 logical slides.
-- Slide 1: Hook cover slide. It MUST NOT contain any bullet points.
-- Slides 2 to 5: Content slides with punchy takeaways. For these content slides, if a list or multi-step takeaway is being presented, write exactly 3 bullet points using standard unicode bullet characters (•) instead of a text paragraph.
-- Slide 6: Call to Action (CTA) slide. It MUST NOT contain any bullet points.
+- Slide 1: Hook cover slide. It MUST NOT contain any structured points or footer.
+- Slides 2 to 5: Content slides with punchy takeaways. For these content slides, include an optional tagline/subtitle, exactly 3 structured points (each with a short bold title and clear description), and an optional footer highlight/shoutout.
+- Slide 6: Call to Action (CTA) slide. It MUST NOT contain any structured points or footer.
 - Use short sentences. Max 2-3 lines per body.
 - Return ONLY valid JSON, no markdown, no backticks.
-- NEVER use asterisks (*) or double asterisks (**) in slide titles or body.`;
+- NEVER use asterisks (*) or double asterisks (**) in slide titles, body, or points.`;
 
     const userPrompt = `Convert this LinkedIn post into a structured carousel with exactly 6 slides:
 "${post.post_content}"
@@ -60,20 +60,36 @@ Return this exact JSON structure:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline",
-      "body": "swipe hook (Strictly NO bullet points here)"
+      "body": "swipe hook"
     },
     {
       "slideNumber": 2,
       "type": "content",
-      "title": "slide title",
-      "body": "exactly 3 bullet points starting with '• ' (e.g. • Bullet 1\\n• Bullet 2\\n• Bullet 3) when presenting points or insights, otherwise a punchy 2-3 sentence insight"
+      "title": "slide title (e.g. Tricentis)",
+      "subtitle": "optional tagline summarizing the topic (e.g. Test Cycles are more frequent & short...)",
+      "points": [
+        {
+          "title": "Point Heading 1",
+          "text": "Point Description 1"
+        },
+        {
+          "title": "Point Heading 2",
+          "text": "Point Description 2"
+        },
+        {
+          "title": "Point Heading 3",
+          "text": "Point Description 3"
+        }
+      ],
+      "footer": "optional footer callout (e.g. 🙌 Mr. Mateen — simple, to-the-point delivery...)",
+      "body": "Summary fallback paragraph representing the slide content"
     },
-    ... (slides 3 to 5 as content slides),
+    ... (slides 3 to 5 as content slides with the same structured format),
     {
       "slideNumber": 6,
       "type": "cta",
       "title": "cta headline",
-      "body": "follow for more + what they'll get (Strictly NO bullet points here)"
+      "body": "follow for more + what they'll get"
     }
   ],
   "suggestedHashtags": ["tag1", "tag2"]
@@ -123,12 +139,26 @@ Return this exact JSON structure:
         parsed.slides = parsed.slides.map((slide: any) => {
           let cleanTitle = slide.title || "";
           let cleanBody = slide.body || "";
+          let cleanSubtitle = slide.subtitle ? slide.subtitle.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+          let cleanFooter = slide.footer ? slide.footer.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+          
+          let cleanPoints = undefined;
+          if (Array.isArray(slide.points)) {
+            cleanPoints = slide.points.map((pt: any) => ({
+              title: (pt.title || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+              text: (pt.text || "").replace(/\*\*/g, "").replace(/\*/g, "")
+            }));
+          }
+
           cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
           cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
           return {
             ...slide,
             title: cleanTitle,
             body: cleanBody,
+            subtitle: cleanSubtitle,
+            footer: cleanFooter,
+            points: cleanPoints,
           };
         });
       }

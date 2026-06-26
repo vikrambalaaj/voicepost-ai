@@ -98,11 +98,11 @@ Rewrite instructions:
 - Incorporate the user feedback into the carousel title and slides. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
 - Maintain a highly polished, professional thought-leadership LinkedIn carousel structure.
 - Each slide must be punchy, scannable, and valuable. Max 2-3 lines per body.
-- For content slides (type "content"), if a list or multi-step takeaway is being presented, write exactly 3 bullet points using standard unicode bullet characters (•) instead of a text paragraph.
-- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT have any bullet points under any circumstances.
+- Content Slides (type "content"): Include an optional tagline/subtitle, exactly 3 structured points (each with a short bold title and clear description), and an optional footer highlight/shoutout.
+- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT have structured points or footer.
 - Title: 4-8 words, strong claim or hook.
 - NO corporate fluff, NO "leverage", NO "delve".
-- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.
+- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, points, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.
 
 Return your response ONLY in this JSON format:
 {
@@ -114,20 +114,36 @@ Return your response ONLY in this JSON format:
       "slideNumber": 1,
       "type": "cover",
       "title": "hook headline (4-8 words)",
-      "body": "1-2 sentence hook that makes them swipe (Strictly NO bullet points here)"
+      "body": "1-2 sentence hook that makes them swipe"
     },
     {
       "slideNumber": 2,
       "type": "content",
-      "title": "slide title",
-      "body": "exactly 3 bullet points starting with '• ' (e.g. • Bullet 1\\n• Bullet 2\\n• Bullet 3) when presenting points or insights, otherwise a punchy 2-3 sentence insight"
+      "title": "slide title (e.g. LeanIX)",
+      "subtitle": "optional tagline summarizing the topic (e.g. Your Partner in Building Governance Framework)",
+      "points": [
+        {
+          "title": "Heading for Point 1",
+          "text": "Description of Point 1."
+        },
+        {
+          "title": "Heading for Point 2",
+          "text": "Description of Point 2."
+        },
+        {
+          "title": "Heading for Point 3",
+          "text": "Description of Point 3."
+        }
+      ],
+      "footer": "optional footer highlight (e.g. 🙌 Shout out to ... or key quote/takeaway)",
+      "body": "Summary fallback paragraph representing the slide content"
     },
-    ... (additional content slides),
+    ... (additional content slides with the same structured format),
     {
       "slideNumber": ${originalCarouselData?.slides?.length || 6},
       "type": "cta",
       "title": "cta headline",
-      "body": "follow for more + what they'll get (Strictly NO bullet points here)"
+      "body": "follow for more + what they'll get"
     }
   ],
   "suggestedHashtags": ["hashtag1", "hashtag2"],
@@ -270,12 +286,26 @@ Return your response ONLY in this JSON format:
       const slides = (resultJson.slides || []).map((slide: any) => {
         let cleanTitle = slide.title || "";
         let cleanBody = slide.body || "";
+        let cleanSubtitle = slide.subtitle ? slide.subtitle.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+        let cleanFooter = slide.footer ? slide.footer.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+        
+        let cleanPoints = undefined;
+        if (Array.isArray(slide.points)) {
+          cleanPoints = slide.points.map((pt: any) => ({
+            title: (pt.title || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+            text: (pt.text || "").replace(/\*\*/g, "").replace(/\*/g, "")
+          }));
+        }
+
         cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
         cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
         return {
           ...slide,
           title: cleanTitle,
           body: cleanBody,
+          subtitle: cleanSubtitle,
+          footer: cleanFooter,
+          points: cleanPoints,
         };
       });
 

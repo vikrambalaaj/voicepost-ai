@@ -16,6 +16,9 @@ interface Slide {
   title: string;
   body: string;
   emoji: string;
+  subtitle?: string;
+  points?: Array<{ title: string; text: string }>;
+  footer?: string;
 }
 
 interface CarouselData {
@@ -74,6 +77,147 @@ const COLOR_PALETTES = [
   { name: "Orange", accent: "#F97316", dark: "#EA580C" },
   { name: "Slate", accent: "#64748B", dark: "#475569" },
 ];
+
+function getSlidePoints(slide: Slide): SlidePoint[] {
+  if (slide.points && slide.points.length > 0) {
+    return slide.points;
+  }
+  if (!slide.body) return [];
+  
+  const lines = slide.body.split("\n").map(l => l.trim()).filter(Boolean);
+  const pts: SlidePoint[] = [];
+  for (const line of lines) {
+    const clean = line.replace(/^[•\-\d\.\s\*\u2022]+/g, "").trim();
+    if (!clean) continue;
+    
+    let title = "";
+    let text = clean;
+    
+    const boldMatch = clean.match(/^\*\*([^*]+)\*\*:(.*)$/) || clean.match(/^\*([^*]+)\*:(.*)$/);
+    if (boldMatch) {
+      title = boldMatch[1].trim();
+      text = boldMatch[2].trim();
+    } else {
+      const colonIndex = clean.indexOf(":");
+      const dashIndex = clean.indexOf(" - ");
+      if (colonIndex > 0 && colonIndex < 50) {
+        title = clean.substring(0, colonIndex).trim();
+        text = clean.substring(colonIndex + 1).trim();
+      } else if (dashIndex > 0 && dashIndex < 50) {
+        title = clean.substring(0, dashIndex).trim();
+        text = clean.substring(dashIndex + 3).trim();
+      }
+    }
+    pts.push({ title, text });
+  }
+  return pts;
+}
+
+function drawSlidePointsToCanvas(
+  ctx: CanvasRenderingContext2D,
+  points: SlidePoint[],
+  subtitle: string | undefined,
+  footer: string | undefined,
+  startY: number,
+  width: number,
+  accentColor: string,
+  templateId: string,
+  isDark: boolean
+) {
+  let currentY = startY;
+  
+  if (subtitle) {
+    ctx.save();
+    const paddingLeft = templateId === "minimal_clean" ? 100 : 130;
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(paddingLeft - 20, currentY - 20, 4, 32);
+    
+    ctx.fillStyle = isDark ? "#A1A1AA" : "#4B5563";
+    ctx.font = templateId === "minimal_clean" ? "italic 28px Georgia, serif" : "italic 28px system-ui, sans-serif";
+    currentY = wrapText(ctx, `"${subtitle}"`, paddingLeft, currentY, width - 40, 38) + 40;
+    ctx.restore();
+  } else {
+    currentY += 15;
+  }
+  
+  const maxPointsY = footer ? 920 : 980;
+  const availableSpace = maxPointsY - currentY;
+  const pointCount = Math.min(points.length, 3);
+  const pointSpacing = pointCount > 0 ? Math.min(210, availableSpace / pointCount) : 210;
+  
+  const leftPadding = templateId === "minimal_clean" ? 100 : 130;
+  const contentWidth = width - (leftPadding - 80) - 20;
+  
+  for (let i = 0; i < pointCount; i++) {
+    const pt = points[i];
+    const ptY = currentY + i * pointSpacing;
+    
+    ctx.save();
+    
+    if (templateId === "minimal_clean") {
+      ctx.strokeStyle = `${accentColor}40`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(leftPadding, ptY);
+      ctx.lineTo(leftPadding + contentWidth, ptY);
+      ctx.stroke();
+      
+      ctx.fillStyle = "#71717A";
+      ctx.font = "normal 22px Georgia, serif";
+      ctx.fillText(`0${i+1}`, leftPadding, ptY + 35);
+      
+      ctx.fillStyle = "#18181B";
+      ctx.font = "bold 32px Georgia, serif";
+      const headingNextY = wrapText(ctx, pt.title || "", leftPadding, ptY + 75, contentWidth, 42);
+      
+      ctx.fillStyle = "#3F3F46";
+      ctx.font = "normal 26px Georgia, serif";
+      wrapText(ctx, pt.text, leftPadding, headingNextY + 12, contentWidth, 36);
+    } else {
+      const cardBg = isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)";
+      
+      ctx.fillStyle = cardBg;
+      drawRoundedRect(ctx, leftPadding - 30, ptY, contentWidth + 30, pointSpacing - 20, 12);
+      ctx.fill();
+      
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(leftPadding - 30, ptY + 10, 6, pointSpacing - 40);
+      
+      ctx.fillStyle = isDark ? "#FFFFFF" : "#18181B";
+      ctx.font = "bold 30px system-ui, sans-serif";
+      const headingNextY = wrapText(ctx, pt.title || "", leftPadding, ptY + 38, contentWidth - 20, 38);
+      
+      ctx.fillStyle = isDark ? "#D1D5DB" : "#4B5563";
+      ctx.font = "normal 24px system-ui, sans-serif";
+      wrapText(ctx, pt.text, leftPadding, headingNextY + 10, contentWidth - 20, 32);
+    }
+    
+    ctx.restore();
+  }
+  
+  if (footer) {
+    ctx.save();
+    const footerY = 940;
+    const paddingX = templateId === "minimal_clean" ? 100 : 80;
+    const footerWidth = 1080 - paddingX * 2;
+    
+    ctx.fillStyle = "rgba(34, 197, 94, 0.12)";
+    drawRoundedRect(ctx, paddingX, footerY, footerWidth, 85, 12);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    
+    ctx.fillStyle = "#22C55E";
+    ctx.font = "bold 24px system-ui, sans-serif";
+    ctx.fillText("✓", paddingX + 25, footerY + 48);
+    
+    ctx.fillStyle = isDark ? "#E2E8F0" : "#1F2937";
+    ctx.font = "normal 22px system-ui, sans-serif";
+    wrapText(ctx, footer, paddingX + 65, footerY + 48, footerWidth - 90, 30);
+    ctx.restore();
+  }
+}
 
 // ─── Canvas Helper Drawing Functions ────────────────────────────────────────
 
@@ -137,6 +281,8 @@ function drawSlideToCanvas(
 ) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
+  const isContent = !isCover && !isCta;
+  const points = isContent ? getSlidePoints(slide) : [];
 
   if (templateId === "bold_impact") {
     // Background
@@ -158,16 +304,19 @@ function drawSlideToCanvas(
     ctx.font = "bold 24px system-ui, sans-serif";
     ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 100);
 
-    // Title
+    // Title & Body/Points
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "black 56px system-ui, sans-serif";
-    const titleY = 450;
-    const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
-
-    // Body
-    ctx.fillStyle = "#A1A1AA";
-    ctx.font = "normal 32px system-ui, sans-serif";
-    wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+    if (isContent && points.length > 0) {
+      const titleNextY = wrapText(ctx, slide.title, 80, 160, 920, 75);
+      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "bold_impact", true);
+    } else {
+      const titleY = isCover ? 450 : 350;
+      const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+      ctx.fillStyle = "#A1A1AA";
+      ctx.font = "normal 32px system-ui, sans-serif";
+      wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+    }
 
     // Brand bar (cover only)
     if (isCover) {
@@ -212,20 +361,21 @@ function drawSlideToCanvas(
     ctx.font = "bold 28px Georgia, serif";
     ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
 
-    // Title
+    // Title & Body/Points
     ctx.fillStyle = accentColor;
     ctx.font = "bold 56px Georgia, serif";
-    const titleY = 480;
-    const titleNextY = wrapText(ctx, slide.title, 100, titleY, 880, 75);
-
-    // Accent divider line
-    ctx.fillStyle = accentColor;
-    ctx.fillRect(100, titleNextY + 15, 120, 6);
-
-    // Body
-    ctx.fillStyle = "#3F3F46";
-    ctx.font = "normal 32px Georgia, serif";
-    wrapText(ctx, slide.body, 100, titleNextY + 70, 880, 50);
+    if (isContent && points.length > 0) {
+      const titleNextY = wrapText(ctx, slide.title, 100, 160, 880, 75);
+      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 880, accentColor, "minimal_clean", false);
+    } else {
+      const titleY = isCover ? 480 : 380;
+      const titleNextY = wrapText(ctx, slide.title, 100, titleY, 880, 75);
+      ctx.fillStyle = accentColor;
+      ctx.fillRect(100, titleNextY + 15, 120, 6);
+      ctx.fillStyle = "#3F3F46";
+      ctx.font = "normal 32px Georgia, serif";
+      wrapText(ctx, slide.body, 100, titleNextY + 70, 880, 50);
+    }
 
     if (isCover) {
       ctx.fillStyle = "#A1A1AA";
@@ -266,16 +416,19 @@ function drawSlideToCanvas(
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
 
-    // Title
+    // Title & Body/Points
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "black 56px system-ui, sans-serif";
-    const titleY = 480;
-    const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
-
-    // Body
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = "normal 32px system-ui, sans-serif";
-    wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+    if (isContent && points.length > 0) {
+      const titleNextY = wrapText(ctx, slide.title, 80, 160, 920, 75);
+      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "gradient_flow", true);
+    } else {
+      const titleY = isCover ? 480 : 380;
+      const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = "normal 32px system-ui, sans-serif";
+      wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+    }
 
     if (isCover) {
       // Draw page dots
@@ -324,12 +477,16 @@ function drawSlideToCanvas(
 
     ctx.fillStyle = "#18181B";
     ctx.font = "black 50px system-ui, sans-serif";
-    const titleY = 480;
-    const titleNextY = wrapText(ctx, slide.title, 500, titleY, 500, 70);
-
-    ctx.fillStyle = "#71717A";
-    ctx.font = "normal 30px system-ui, sans-serif";
-    wrapText(ctx, slide.body, 500, titleNextY + 30, 500, 46);
+    if (isContent && points.length > 0) {
+      const titleNextY = wrapText(ctx, slide.title, 500, 160, 500, 70);
+      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 500, accentColor, "split_pro", false);
+    } else {
+      const titleY = isCover ? 480 : 380;
+      const titleNextY = wrapText(ctx, slide.title, 500, titleY, 500, 70);
+      ctx.fillStyle = "#71717A";
+      ctx.font = "normal 30px system-ui, sans-serif";
+      wrapText(ctx, slide.body, 500, titleNextY + 30, 500, 46);
+    }
 
     // Page indicators bottom right
     const dotCount = Math.min(totalSlides, 5);
@@ -384,17 +541,132 @@ function drawSlideToCanvas(
     ctx.font = "bold 22px system-ui, sans-serif";
     ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
 
-    // Title
+    // Title & Body/Points
     ctx.fillStyle = accentColor;
     ctx.font = "black 56px system-ui, sans-serif";
-    const titleY = 480;
-    const titleNextY = wrapText(ctx, slide.title, 130, titleY, 820, 75);
-
-    // Body
-    ctx.fillStyle = "#E2E8F0";
-    ctx.font = "normal 32px system-ui, sans-serif";
-    wrapText(ctx, slide.body, 130, titleNextY + 30, 820, 48);
+    if (isContent && points.length > 0) {
+      const titleNextY = wrapText(ctx, slide.title, 130, 180, 820, 75);
+      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 820, accentColor, "frosted_card", true);
+    } else {
+      const titleY = isCover ? 480 : 380;
+      const titleNextY = wrapText(ctx, slide.title, 130, titleY, 820, 75);
+      ctx.fillStyle = "#E2E8F0";
+      ctx.font = "normal 32px system-ui, sans-serif";
+      wrapText(ctx, slide.body, 130, titleNextY + 30, 820, 48);
+    }
   }
+}
+
+// ─── Slide Canvas React Component ───────────────────────────────────────────
+
+// ─── SlidePointsRenderer Component ──────────────────────────────────────────
+
+function SlidePointsRenderer({
+  slide,
+  accentColor,
+  templateId,
+  compact = false,
+  isDark = true
+}: {
+  slide: Slide;
+  accentColor: string;
+  templateId: string;
+  compact?: boolean;
+  isDark?: boolean;
+}) {
+  const isContent = slide.type !== "cover" && slide.type !== "cta";
+  const points = isContent ? getSlidePoints(slide) : [];
+
+  if (points.length === 0) {
+    return (
+      <p className={`leading-relaxed ${
+        templateId === "minimal_clean" ? "text-zinc-600" :
+        templateId === "gradient_flow" ? "text-white/80" :
+        templateId === "split_pro" ? "text-zinc-500" :
+        templateId === "frosted_card" ? "text-slate-300" : "text-zinc-400"
+      } ${compact ? "text-[10px]" : "text-sm"}`}>
+        {slide.body}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col justify-between">
+      <div>
+        {/* Tagline / Subtitle */}
+        {slide.subtitle && (
+          <div className="flex items-stretch gap-2 mb-2 mt-1">
+            <div className="w-0.5 rounded-full flex-shrink-0" style={{ background: accentColor }} />
+            <p className={`italic font-medium ${compact ? "text-[9px]" : "text-xs"} ${
+              isDark ? "text-zinc-300" : "text-zinc-500"
+            }`}>
+              "{slide.subtitle}"
+            </p>
+          </div>
+        )}
+
+        {/* 3 Points */}
+        <div className={`flex flex-col ${compact ? "gap-1 my-1" : "gap-3 my-3"}`}>
+          {points.map((pt, i) => {
+            if (templateId === "minimal_clean") {
+              return (
+                <div key={i} className={`border-t border-stone-200 ${compact ? "pt-1" : "pt-2"} relative pl-7`}>
+                  <div className="absolute left-0 top-2 font-mono text-[9px] font-bold text-stone-400">
+                    0{i+1}
+                  </div>
+                  <h4 className={`font-bold text-stone-900 leading-snug ${compact ? "text-[9px]" : "text-xs"}`}>
+                    {pt.title}
+                  </h4>
+                  <p className={`text-stone-600 leading-normal ${compact ? "text-[8px]" : "text-[11px]"}`}>
+                    {pt.text}
+                  </p>
+                </div>
+              );
+            }
+            
+            return (
+              <div
+                key={i}
+                className={`flex items-start gap-3 rounded-lg p-2 relative pl-8 border ${
+                  isDark 
+                    ? "bg-white/[0.03] border-white/5" 
+                    : "bg-black/[0.02] border-black/5"
+                }`}
+              >
+                <div className="absolute left-2.5 top-2.5 font-mono text-[9px] font-semibold opacity-60" style={{ color: accentColor }}>
+                  0{i+1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className={`font-bold leading-snug ${compact ? "text-[9px]" : "text-xs"} ${
+                    isDark ? "text-white" : "text-zinc-900"
+                  }`}>
+                    {pt.title}
+                  </h4>
+                  <p className={`leading-normal ${compact ? "text-[8px]" : "text-[11px]"} ${
+                    isDark ? "text-zinc-400" : "text-zinc-500"
+                  }`}>
+                    {pt.text}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Footer Callout Banner */}
+      {slide.footer && (
+        <div className={`flex items-center gap-2 rounded-lg border p-2 mt-auto ${
+          isDark 
+            ? "border-green-500/20 bg-green-50/10 text-zinc-300" 
+            : "border-green-200 bg-green-50/50 text-stone-700"
+        } ${compact ? "text-[8px] py-1" : "text-xs"}`}>
+          <span className="text-green-500 font-bold flex-shrink-0">✓</span>
+          <p className="flex-1 truncate font-medium">{slide.footer}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Slide Canvas React Component ───────────────────────────────────────────
@@ -440,16 +712,14 @@ function SlideCanvas({
             {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
           </div>
         </div>
-        <div className="relative z-10 mt-auto">
+        <div className="relative z-10 mt-auto flex-1 flex flex-col justify-end">
           <h2
             className={`font-black leading-tight text-white ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}
             style={{ textShadow: `0 0 30px ${accentColor}40` }}
           >
             {slide.title}
           </h2>
-          <p className={`text-zinc-400 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`}>
-            {slide.body}
-          </p>
+          <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
         </div>
         {isCover && (
           <div className={`relative z-10 mt-3 flex items-center gap-2 ${compact ? "pt-2" : "pt-4"} border-t border-zinc-800`}>
@@ -480,17 +750,14 @@ function SlideCanvas({
               {isCover ? "Swipe →" : `0${slideIndex + 1}`}
             </div>
           </div>
-          <div className="mt-auto">
+          <div className="mt-auto flex-1 flex flex-col justify-end">
             <h2
               className={`font-bold leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-4"}`}
               style={{ color: accentColor, fontFamily: "Georgia, serif" }}
             >
               {slide.title}
             </h2>
-            <div className={`${compact ? "w-6 h-px mb-1" : "w-10 h-px mb-4"}`} style={{ background: accentColor }} />
-            <p className={`text-zinc-600 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`} style={{ fontFamily: "Georgia, serif" }}>
-              {slide.body}
-            </p>
+            <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={false} />
           </div>
           {isCover && (
             <div className={`${compact ? "mt-2 text-[8px]" : "mt-6 text-xs"} text-zinc-400`}>
@@ -527,13 +794,11 @@ function SlideCanvas({
               {isCover ? "New Post" : `${slideIndex + 1}/${totalSlides}`}
             </div>
           </div>
-          <div className="mt-auto">
+          <div className="mt-auto flex-1 flex flex-col justify-end">
             <h2 className={`font-black text-white leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}>
               {slide.title}
             </h2>
-            <p className={`text-white/80 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`}>
-              {slide.body}
-            </p>
+            <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
           </div>
           {!compact && isCover && (
             <div className="mt-4 flex items-center gap-2">
@@ -579,13 +844,11 @@ function SlideCanvas({
           >
             {isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`}
           </div>
-          <div>
+          <div className="flex-1 flex flex-col justify-center my-2">
             <h2 className={`font-black leading-tight text-zinc-900 ${compact ? "text-[11px] mb-1" : "text-xl mb-3"}`}>
               {slide.title}
             </h2>
-            <p className={`text-zinc-500 leading-relaxed ${compact ? "text-[9px]" : "text-xs"}`}>
-              {slide.body}
-            </p>
+            <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={false} />
           </div>
           <div className="flex gap-1">
             {[...Array(Math.min(totalSlides, compact ? 3 : 5))].map((_, i) => (
@@ -641,16 +904,14 @@ function SlideCanvas({
             {isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`}
           </div>
         </div>
-        <div className="mt-auto">
+        <div className="mt-auto flex-1 flex flex-col justify-end">
           <h2
             className={`font-black leading-tight ${compact ? "text-sm mb-1" : "text-xl mb-3"}`}
             style={{ color: accentColor }}
           >
             {slide.title}
           </h2>
-          <p className={`text-slate-300 leading-relaxed ${compact ? "text-[10px]" : "text-sm"}`}>
-            {slide.body}
-          </p>
+          <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
         </div>
       </div>
     </div>
