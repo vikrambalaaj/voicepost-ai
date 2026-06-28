@@ -28,61 +28,96 @@ export async function POST(req: NextRequest) {
 RULES:
 - Each slide must be punchy, scannable, and valuable on its own.
 - Use short sentences. Max 2-3 lines per body.
-- Title: 4-8 words, strong hook or claim.
-- Content Slides (non-cover, non-cta): Must contain an optional tagline/subtitle, exactly 3 structured points (each with a short bold title and clear description), and an optional footer highlight/shoutout.
-- First slide (cover): compelling hook that makes people want to swipe. It MUST NOT contain any structured points or footer.
-- Last slide (CTA): clear call to action. It MUST NOT contain any structured points or footer.
-- NO corporate fluff, NO "leverage", NO "delve".
+- Title: 4-8 words, strong hook or claim. Wrap exactly one key word in double asterisks ** (e.g. Focus on **Results** — Let The Numbers Speak) to highlight it in the selected accent color. Do not use asterisks in any other fields.
+- Content Slides (non-cover, non-cta): Must contain a "layout" property which is one of: "paragraph", "points", or "metrics".
+  - Choose "metrics" ONLY when the topic itself is inherently about statistics, benchmarks, or measurable data (e.g. "email open rate stats", "React performance benchmarks"). Do NOT use metrics just to fill space.
+  - Choose "points" when teaching a process, step-by-step guide, list of tactics, or concrete lessons about the topic.
+  - Choose "paragraph" when sharing a narrative, concept description, insight, or general context about the topic.
+- Category Badge: Content slides should include a "badge" property representing the category or step label, RELEVANT to the topic (e.g., "INSIGHT 1", "TACTIC 2", "MYTH", "FRAMEWORK").
+- Tagline/Subtitle: Content slides should include an optional "subtitle" summarizing the slide topic in one short sentence.
+- Structured Content:
+  - If layout is "metrics", include a "metrics" array of exactly 3 objects, each with "value" (stat or number directly about the topic), "label" (brief bold label about the topic), and "text" (one-sentence explanation tied to the topic).
+  - If layout is "points", include a "points" array of exactly 3 objects, each with "title" (short bold heading about the topic) and "text" (one-sentence explanation about the topic).
+  - If layout is "paragraph", include only a "body" field (2-3 short sentences). Omit points and metrics arrays.
+- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT contain structured points, metrics, badge, or footer.
 - Return ONLY valid JSON, no markdown, no backticks.
 - Every value in the JSON must be a simple plain text string.
-- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, points, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.`;
+
+CRITICAL GROUNDING RULES — VIOLATING THESE MAKES THE OUTPUT WRONG:
+- ALL slide content MUST be 100% derived from the user's EXACT topic. Do not deviate.
+- NEVER generate a "case study" or "client story" slide. Do not invent client names, company names, project names, or case studies. This is strictly forbidden.
+- NEVER use phrases like "Our client", "A client of ours", "Success Story", "A Client's Journey", "Real-World Example". These are banned.
+- The example JSON below is ONLY a FORMAT GUIDE. Its values are FAKE PLACEHOLDERS — replace every single value with content grounded in the user's actual topic.
+- If the topic is about "cold email outreach", every slide must be about cold email outreach. If it's about "React performance", every slide must be about React performance. NEVER drift to adjacent or generic topics.
+- Metrics and statistics must be directly relevant to the topic — do NOT fabricate unrelated generic business stats.
+- Badge labels, subtitles, body text, and footers must all reflect the specific topic, not generic corporate jargon.`;
 
     const userPrompt = `Create a LinkedIn carousel with exactly ${slideCount} slides about: "${topic}"
 Industry context: ${industry}
 Tone: ${tone}
- 
-Return this exact JSON structure:
+
+STRICT REQUIREMENTS:
+1. Every single slide must be 100% about "${topic}". All metrics, points, titles, badges, and subtitles must come directly from this topic.
+2. Do NOT generate any "case study", "client journey", or "success story" slide. Do NOT mention clients.
+3. Do NOT use generic corporate statistics unrelated to the topic.
+4. Prefer "points" or "paragraph" layouts over "metrics" unless the topic is specifically about measurable data.
+
+Use the JSON structure below as a FORMAT GUIDE ONLY — replace all placeholder values with real content about "${topic}":
 {
-  "title": "carousel title for reference",
+  "title": "[Short carousel title about ${topic}]",
   "slides": [
     {
       "slideNumber": 1,
       "type": "cover",
-      "title": "hook headline (4-8 words)",
-      "body": "1-2 sentence hook that makes them swipe"
+      "title": "[Strong hook headline about ${topic} with one **word** highlighted]",
+      "body": "[1-2 sentence hook about ${topic} that makes the reader want to swipe]"
     },
     {
       "slideNumber": 2,
       "type": "content",
-      "title": "slide title (e.g. LeanIX)",
-      "subtitle": "optional tagline summarizing the topic (e.g. Your Partner in Building Governance Framework)",
+      "layout": "points",
+      "badge": "[RELEVANT BADGE FOR ${topic.toUpperCase()}]",
+      "title": "[Actionable title about ${topic} with one **word** highlighted]",
+      "subtitle": "[One-sentence subtitle specific to this ${topic} slide]",
       "points": [
-        {
-          "title": "Heading for Point 1",
-          "text": "Description of Point 1."
-        },
-        {
-          "title": "Heading for Point 2",
-          "text": "Description of Point 2."
-        },
-        {
-          "title": "Heading for Point 3",
-          "text": "Description of Point 3."
-        }
-      ],
-      "footer": "optional footer highlight (e.g. 🙌 Shout out to ... or key quote/takeaway)",
-      "body": "Summary fallback paragraph representing the slide content"
+        { "title": "[First key point about ${topic}]", "text": "[One-sentence explanation about ${topic}]" },
+        { "title": "[Second key point about ${topic}]", "text": "[One-sentence explanation about ${topic}]" },
+        { "title": "[Third key point about ${topic}]", "text": "[One-sentence explanation about ${topic}]" }
+      ]
     },
-    ... (slides 3 to ${slideCount - 1} as content slides with the same structured format),
+    {
+      "slideNumber": 3,
+      "type": "content",
+      "layout": "paragraph",
+      "badge": "[RELEVANT BADGE FOR ${topic.toUpperCase()}]",
+      "title": "[Insight title about ${topic} with one **word** highlighted]",
+      "subtitle": "[Why this insight about ${topic} matters]",
+      "body": "[2-3 short sentences sharing a perspective or insight directly about ${topic}]",
+      "footer": "[Key takeaway about ${topic}]"
+    },
+    {
+      "slideNumber": 4,
+      "type": "content",
+      "layout": "points",
+      "badge": "[RELEVANT BADGE FOR ${topic.toUpperCase()}]",
+      "title": "[Another actionable title about ${topic} with one **word** highlighted]",
+      "points": [
+        { "title": "[First actionable point about ${topic}]", "text": "[One-sentence explanation]" },
+        { "title": "[Second actionable point about ${topic}]", "text": "[One-sentence explanation]" },
+        { "title": "[Third actionable point about ${topic}]", "text": "[One-sentence explanation]" }
+      ]
+    },
     {
       "slideNumber": ${slideCount},
       "type": "cta",
-      "title": "cta headline",
-      "body": "follow for more + what they'll get"
+      "title": "[CTA headline about ${topic} with one **word** highlighted]",
+      "body": "[Follow for more insights like this about ${topic}]"
     }
   ],
-  "suggestedHashtags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6"]
-}`;
+  "suggestedHashtags": ["[hashtag1 for ${topic}]", "[hashtag2]", "[hashtag3]", "[hashtag4]", "[hashtag5]", "[hashtag6]"]
+}
+
+Generate ${slideCount} slides total. All content must be entirely and specifically about "${topic}". Never copy placeholder text — replace every placeholder with real, valuable, topic-specific content.`;
 
     const result = await routeLLMRequest({
       useCase: "content_generation",
@@ -124,7 +159,8 @@ Return this exact JSON structure:
           parsed.slides,
           userId,
           userPlan as any,
-          "carousel-" + Date.now()
+          "carousel-" + Date.now(),
+          topic
         );
 
         parsed.slides = parsed.slides.map((slide: any) => {
@@ -132,6 +168,7 @@ Return this exact JSON structure:
           let cleanBody = slide.body || "";
           let cleanSubtitle = slide.subtitle ? slide.subtitle.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
           let cleanFooter = slide.footer ? slide.footer.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+          let cleanBadge = slide.badge ? slide.badge.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
           
           let cleanPoints = undefined;
           if (Array.isArray(slide.points)) {
@@ -141,7 +178,17 @@ Return this exact JSON structure:
             }));
           }
 
-          cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+          let cleanMetrics = undefined;
+          if (Array.isArray(slide.metrics)) {
+            cleanMetrics = slide.metrics.map((m: any) => ({
+              value: (m.value || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+              label: (m.label || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+              text: (m.text || "").replace(/\*\*/g, "").replace(/\*/g, "")
+            }));
+          }
+
+          // Clean single asterisks, keep double asterisks in title
+          cleanTitle = cleanTitle.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");
           cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
           
           return {
@@ -150,7 +197,9 @@ Return this exact JSON structure:
             body: cleanBody,
             subtitle: cleanSubtitle,
             footer: cleanFooter,
+            badge: cleanBadge,
             points: cleanPoints,
+            metrics: cleanMetrics,
           };
         });
       }

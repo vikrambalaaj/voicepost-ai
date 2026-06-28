@@ -65,19 +65,21 @@ export async function humanizeCarouselSlides(
   slides: any[],
   userId: string,
   userPlan: "free" | "starter" | "pro" | "agency",
-  sessionId: string
+  sessionId: string,
+  topic?: string
 ): Promise<any[]> {
   try {
+    const topicContext = topic ? `The carousel topic is: "${topic}". All slide content must remain 100% about this topic after humanization. Do NOT introduce client names, case studies, or generic business jargon unrelated to this topic. Banned phrases: "Our client", "A client of ours", "Success Story", "A Client's Journey", "Real-World Example".` : "";
     const res = await routeLLMRequest({
       useCase: "content_generation",
       messages: [
         {
           role: "system",
-          content: "You are a professional LinkedIn content humanizer. Your task is to rewrite the text content of the slides (title, body, subtitle, footer, and the title and text properties within the points array) to sound completely human-written, engaging, and natural. Avoid corporate jargon and AI words. Maintain the exact same JSON array format. If a slide has 'points' array, ensure it keeps exactly 3 points. Under no circumstances should you add points or bullet lists to the cover slide (type 'cover') or CTA slide (type 'cta'). Return ONLY the valid JSON array of slides."
+          content: `You are a professional LinkedIn content humanizer. Your task is to rewrite the text content of the slides (title, body, subtitle, footer, points, and metrics arrays if present) to sound completely human-written, engaging, and natural. Avoid corporate jargon and AI words. Maintain the exact same JSON array structure, preserving properties like 'layout', 'badge', 'slideNumber', and 'type'. If a slide has a 'points' array, ensure it keeps exactly 3 points. If a slide has a 'metrics' array, ensure it keeps exactly 3 metrics (each with 'value', 'label', and 'text'). Preserve double asterisks (**) inside slide titles (used for word highlighting) under all circumstances. Return ONLY the valid JSON array of slides. ${topicContext}`
         },
         {
           role: "user",
-          content: `Humanize the text inside this slides JSON array. Keep the slideNumber and type exactly the same, but humanize the title, body, subtitle, footer, and the title & text of each item in the points array if present. Return only the JSON array:\n\n${JSON.stringify(slides, null, 2)}`
+          content: `Humanize the text inside this slides JSON array. Keep the slideNumber, type, layout, and badge exactly the same. Humanize the title, body, subtitle, footer, the title & text of each item in the points array, and the value, label & text of each item in the metrics array if present. Return only the JSON array:\n\n${JSON.stringify(slides, null, 2)}`
         }
       ],
       userId,
@@ -110,7 +112,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { transcript, style_type, style_id, blend_config, backend, web_search, image_url, image_source_type, image_prompt, series_count } = body;
+    const { transcript, style_type, style_id, blend_config, backend, web_search, preserve_text, image_url, image_source_type, image_prompt, series_count, content_type } = body;
+    const targetContentType = content_type || "post";
 
     if (!transcript) {
       return NextResponse.json({ error: "Transcript is required" }, { status: 400 });
@@ -198,7 +201,7 @@ export async function POST(req: NextRequest) {
     let webSearchContext = "";
     const cleanTranscript = transcript.trim();
     const isShortInput = cleanTranscript.length < 80 || cleanTranscript.split(/\s+/).length < 12;
-    const shouldSearch = web_search || isShortInput;
+    const shouldSearch = !preserve_text && (web_search || isShortInput);
 
     if (shouldSearch && (process.env.TAVILY_API_KEY || (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX))) {
       if (isShortInput && !web_search) {
@@ -281,7 +284,7 @@ export async function POST(req: NextRequest) {
         .map((p, idx) => `PART ${idx + 1}:\n${p.post_content}`)
         .join("\n\n");
 
-      if (backend === "antigravity") {
+      if (backend === "antigravity" && targetContentType !== "article") {
         try {
           const agentResponse = await runAntigravityAgent({
             action: "generate",
@@ -293,6 +296,7 @@ export async function POST(req: NextRequest) {
             },
             recent_topics: recentTopics,
             web_search_context: webSearchContext || undefined,
+            preserve_text: preserve_text || undefined,
             series_context: seriesCount > 1 ? {
               index,
               count: seriesCount,
@@ -320,9 +324,57 @@ export async function POST(req: NextRequest) {
       if (!llmRes || !resultJson.post_content) {
         // Build AI Request
         let systemPrompt = buildSystemPrompt();
+        if (preserve_text) {
+          systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
+        }
         let userPrompt = "";
 
-        if (style_id === "fomo_style") {
+        if (targetContentType === "article") {
+          systemPrompt = `You are a professional LinkedIn newsletter and article strategist. Your job is to write a high-impact, long-form, thought-leadership LinkedIn Article based on the user's raw transcript/ideas.
+          
+          ARTICLE RULES:
+          1. Length: Write a comprehensive, detailed article (approx. 500 to 1000 words).
+          2. Structure:
+             - Start with a compelling H1 headline title (e.g. # The Future of SaaS Engineering).
+             - Use clear H2 and H3 markdown headers (e.g. ## The Problem, ### 1. Key Metrics) to section the article.
+             - Write a strong, hooky introduction that sets the stage.
+             - Dive deep into 3-4 structured body sections explaining the concepts, lessons, or framework details.
+             - Use bullet points (standard unicode bullets like '•' or '-') and blockquotes where appropriate to break up text and make it highly readable.
+             - Conclude with a strong, inspiring summary and a call-to-action (CTA) to subscribe/follow.
+          3. Formatting:
+             - You MUST use markdown formatting for headers (#, ##, ###) and bold text (**) for articles, since LinkedIn Articles support rich HTML/markdown styling.
+             - Use standard spacing (blank lines between sections).
+          4. NEVER use AI banned phrases: ${BANNED_WORDS.join(", ")}.
+          
+          Return your response ONLY in this JSON format:
+          {
+            "post_content": "The full article in markdown format starting with the H1 title...",
+            "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5", "hashtag6"],
+            "hook_type": "Article",
+            "post_structure": "Long-form article structure",
+            "style_match_score": 10,
+            "style_deviations": []
+          }`;
+          if (preserve_text) {
+            systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
+          }
+
+          userPrompt = `TRANSCRIPT/IDEAS FOR ARTICLE:
+"${transcript}"
+
+${webSearchContext ? `ADDITIONAL LATEST WEB SEARCH CONTEXT (Use this to include the most up-to-date and accurate facts):
+${webSearchContext}
+` : ""}
+STYLE PROFILE TARGET:
+${JSON.stringify(selectedStyleJson, null, 2)}
+
+USER CONTEXT:
+Industry: ${user.industry}
+Title: ${user.job_title}
+
+Rewrite instructions:
+${preserve_text ? `- PRESERVE ORIGINAL TEXT: Keep the text content, sentences, and wording exactly as provided. Focus ONLY on converting it into a clean, structured article format with headings and spacing.` : `- Expand the raw transcript into an elite, professional thought-leadership LinkedIn Article. Do not write a short post; write a full-length article.`}`;
+        } else if (style_id === "fomo_style") {
           systemPrompt = `You are a LinkedIn content strategist and formatting expert. Take the article I provide and reformat it into a high-engagement LinkedIn post using FOMO-driven writing and LinkedIn's native rendering constraints.
 
 FOMO WRITING RULES:
@@ -371,6 +423,9 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
   "style_match_score": 10,
   "style_deviations": []
 }`;
+          if (preserve_text) {
+            systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
+          }
 
           userPrompt = `ARTICLE/CONTENT TO CONVERT:
 "${transcript}"
@@ -389,6 +444,9 @@ TOPIC CONTEXT (optional but improves output):
 - Core message you want readers to take away: ${transcript.split(".")[0] || "One actionable insight."}`;
         } else {
           systemPrompt = buildSystemPrompt();
+          if (preserve_text) {
+            systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
+          }
           userPrompt = `TRANSCRIPT TO REWRITE:
 "${transcript}"
 
@@ -411,9 +469,9 @@ RECENT POST TOPICS (Avoid repeating these concepts/hooks):
 ${recentTopics.join("\n")}
 
 Rewrite instructions:
-- Turn the chaotic raw transcript into an elite, professional thought-leadership LinkedIn post.
+${preserve_text ? `- PRESERVE ORIGINAL TEXT: Keep the text content, sentences, and wording exactly as provided. Do not rewrite the hook, body, or CTA. Focus ONLY on spacing, formatting, and layout structure.` : `- Turn the chaotic raw transcript into an elite, professional thought-leadership LinkedIn post.
 - Synthesize raw spoken thoughts. DO NOT copy phrases or filler speech verbatim. Write it with high density of value, clean layout, and professional clarity.
-- Structure: Start with a scroll-stopping hook, flow into the core problem or situation, deliver a clear value-add/insight, provide a concrete actionable tip, and end with an engaging CTA/question matching the target style.
+- Structure: Start with a scroll-stopping hook, flow into the core problem or situation, deliver a clear value-add/insight, provide a concrete actionable tip, and end with an engaging CTA/question matching the target style.`}
 - NEVER use asterisks (*) or double asterisks (**) anywhere in the generated post content. Use unicode bullets (• or -) if bullets are needed, and CAPITAL LETTERS or line spacing for emphasis/headers.
 
 Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase strings without the # symbol, highly relevant to the post topic):
@@ -514,6 +572,7 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         current_revision: 1,
         series_id: seriesId,
         series_index: index,
+        content_type: targetContentType,
       };
 
       let finalThoughts = agentThoughts || "";
@@ -538,11 +597,12 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         const { data, error } = await db.from("posts").insert(postPayload).select().single();
         if (error) {
           // If error is due to missing columns (schema cache error), retry without those columns
-          if (error.message && (error.message.includes("series_id") || error.message.includes("series_index") || error.message.includes("column"))) {
-            console.warn("Inserting with series columns failed, retrying without them:", error.message);
+          if (error.message && (error.message.includes("series_id") || error.message.includes("series_index") || error.message.includes("content_type") || error.message.includes("column"))) {
+            console.warn("Inserting with new columns failed, retrying without them:", error.message);
             const fallbackPayload = { ...postPayload };
             delete fallbackPayload.series_id;
             delete fallbackPayload.series_index;
+            delete fallbackPayload.content_type;
             const fallbackRes = await db.from("posts").insert(fallbackPayload).select().single();
             newPost = fallbackRes.data;
             postErr = fallbackRes.error;
@@ -579,6 +639,8 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         style_match_score: newPost.style_match_score,
         latency_ms: llmRes.latencyMs,
       });
+
+
 
       createdPosts.push({
         id: newPost.id,
