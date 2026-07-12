@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { RemotionCarouselPlayer } from "@/components/ui/remotion-carousel";
+import { motion } from "framer-motion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -799,6 +801,62 @@ function drawSlideToCanvas(
       ctx.fillStyle = d === slideIndex ? accentColor : "#E4E4E7";
       ctx.fillRect(500 + d * 90, 960, 80, 8);
     }
+  } else if (templateId === "metric_spotlight") {
+    // Spotlight bg
+    if (bgImgElement) {
+      ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+      ctx.fillRect(0, 0, 1080, 1080);
+    } else {
+      ctx.fillStyle = "#09090B";
+      ctx.fillRect(0, 0, 1080, 1080);
+    }
+
+    // Top Accent Bar
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 1080, 20);
+
+    // Slide header
+    ctx.fillStyle = accentColor;
+    ctx.font = "bold 24px system-ui, sans-serif";
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 80, 110, accentColor);
+      ctx.save();
+      ctx.textAlign = "right";
+      ctx.fillText(`${slideIndex + 1} / ${totalSlides}`, 1000, 110);
+      ctx.restore();
+    } else {
+      ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 110);
+    }
+
+    // Spotlight Metric Value
+    const spotlightMetric = metrics?.[0] || { value: "10x", label: "Performance", text: slide.body || "" };
+    ctx.save();
+    ctx.textAlign = "center";
+    
+    ctx.fillStyle = accentColor;
+    ctx.font = "black 140px system-ui, sans-serif";
+    ctx.fillText(spotlightMetric.value || "10x", 540, 480);
+    
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 32px system-ui, sans-serif";
+    ctx.fillText((spotlightMetric.label || "Improvement").toUpperCase(), 540, 560);
+    
+    ctx.fillStyle = "#A1A1AA";
+    ctx.font = "normal 28px system-ui, sans-serif";
+    wrapText(ctx, slide.paragraph || spotlightMetric.text || slide.body || "", 240, 620, 600, 40);
+    ctx.restore();
+
+    // Footer
+    ctx.fillStyle = "#52525B";
+    ctx.font = "semibold 20px system-ui, sans-serif";
+    ctx.fillText("VoicePost Studio", 80, 1000);
+    
+    ctx.fillStyle = accentColor;
+    ctx.font = "bold 20px system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("Swipe Left →", 1000, 1000);
+
   } else {
     // frosted_card (default)
     // Background gradient
@@ -1350,6 +1408,61 @@ function SlideCanvasComponent({
     );
   }
 
+  if (templateId === "metric_spotlight") {
+    // Spotlight Metric
+    const spotlightMetric = (slide as any).metrics?.[0] || { value: "10x", label: "Performance", text: slide.body || "" };
+    return (
+      <div
+        className={`relative w-full aspect-square flex flex-col ${padding} overflow-hidden`}
+        style={{
+          background: backgroundImage ? `url(${backgroundImage}) center/cover no-repeat` : "#09090B",
+          fontFamily: "system-ui, sans-serif"
+        }}
+      >
+        {backgroundImage && <div className="absolute inset-0 bg-black/60 z-0" />}
+        <div className="absolute top-0 left-0 right-0 h-1 z-10" style={{ background: accentColor }} />
+        <div className="relative z-10 flex justify-between items-center mb-auto">
+          {isContent && slide.badge ? (
+            <div className="px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide" style={{ color: accentColor, borderColor: `${accentColor}50` }}>
+              {slide.badge}
+            </div>
+          ) : <div />}
+          <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold uppercase tracking-widest`} style={{ color: accentColor }}>
+            {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
+          </div>
+        </div>
+
+        <div className="relative z-10 my-auto flex flex-col items-center text-center">
+          <div 
+            className={`font-black tracking-tighter ${compact ? "text-4xl my-1" : "text-7xl my-3"}`}
+            style={{ 
+              color: accentColor,
+              textShadow: `0 0 40px ${accentColor}30`,
+              backgroundImage: `linear-gradient(to bottom, #FFFFFF, ${accentColor})`,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent"
+            }}
+          >
+            {spotlightMetric.value || "10x"}
+          </div>
+          <div className={`font-extrabold uppercase tracking-widest text-white/90 ${compact ? "text-[9px]" : "text-sm"}`}>
+            {spotlightMetric.label || "Improvement"}
+          </div>
+          <p className={`text-zinc-400 mt-2 max-w-xs ${compact ? "text-[8px] leading-snug" : "text-xs leading-relaxed"}`}>
+            {slide.body || spotlightMetric.text || ""}
+          </p>
+        </div>
+
+        <div className="relative z-10 mt-auto pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+          <span className="text-[10px] text-zinc-500 font-semibold">VoicePost Studio</span>
+          <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: accentColor }}>
+            Swipe Left <span className="animate-pulse">→</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // frosted_card (default)
   return (
     <div
@@ -1566,6 +1679,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [isCarousel, setIsCarousel] = useState(false);
   const [carouselData, setCarouselData] = useState<any>(null);
   const [previewSlide, setPreviewSlide] = useState(0);
+  const [carouselPreviewMode, setCarouselPreviewMode] = useState<"static" | "animated">("static");
   const [editingSlide, setEditingSlide] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
@@ -2984,67 +3098,93 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
               )}
             </div>
 
-            {/* Canvas Slide Preview */}
-            <div className="relative">
-              <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl">
-                <SlideCanvasComponent
-                  slide={carouselData.slides[previewSlide]}
-                  templateId={selectedTemplate}
-                  accentColor={accentColor}
-                  slideIndex={previewSlide}
-                  totalSlides={carouselData.slides.length}
-                  showAuthor={showAuthor}
-                  authorName={linkedAccount?.profile_name || ""}
-                  authorPicture={linkedAccount?.profile_picture_url || ""}
-                  authorLinkedinUrl={linkedAccount?.linkedin_profile_url || ""}
-                  backgroundImage={carouselData.slides[previewSlide].image || carouselData.backgroundImage}
-                />
-              </div>
-
-              {/* Edit overlay button */}
-              {post?.status !== "published" && (
-                <button
-                  onClick={() => startEditSlide(previewSlide)}
-                  className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 bg-blue-600 hover:bg-blue-700 border-none cursor-pointer"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-              )}
-
-              {/* Nav arrows */}
-              {previewSlide > 0 && (
-                <button
-                  onClick={() => setPreviewSlide(previewSlide - 1)}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
-                >
-                  <ChevronLeft className="w-5 h-5 text-zinc-700 dark:text-zinc-350" />
-                </button>
-              )}
-              {previewSlide < carouselData.slides.length - 1 && (
-                <button
-                  onClick={() => setPreviewSlide(previewSlide + 1)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
-                >
-                  <ChevronRight className="w-5 h-5 text-zinc-700 dark:text-zinc-350" />
-                </button>
-              )}
+            {/* View Mode Toggle */}
+            <div className="flex gap-2 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-xl border border-zinc-200/50 dark:border-zinc-800/80 max-w-xs mx-auto">
+              <button
+                onClick={() => setCarouselPreviewMode("static")}
+                className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border-none cursor-pointer transition-all ${carouselPreviewMode === "static" ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm" : "bg-transparent text-zinc-500"}`}
+              >
+                📄 PDF Canvas
+              </button>
+              <button
+                onClick={() => setCarouselPreviewMode("animated")}
+                className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border-none cursor-pointer transition-all ${carouselPreviewMode === "animated" ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm" : "bg-transparent text-zinc-500"}`}
+              >
+                🎬 Video Player
+              </button>
             </div>
 
-            {/* Dots */}
-            <div className="flex justify-center gap-1.5">
-              {carouselData.slides.map((_: any, i: number) => (
-                <button
-                  key={i}
-                  onClick={() => setPreviewSlide(i)}
-                  className="rounded-full transition-all border-none cursor-pointer"
-                  style={{
-                    width: i === previewSlide ? 20 : 6,
-                    height: 6,
-                    background: i === previewSlide ? accentColor : "#D1D5DB",
-                  }}
-                />
-              ))}
-            </div>
+            {carouselPreviewMode === "animated" ? (
+              <RemotionCarouselPlayer
+                slides={carouselData.slides}
+                accentColor={accentColor}
+                templateId={selectedTemplate}
+              />
+            ) : (
+              <>
+                {/* Canvas Slide Preview */}
+                <div className="relative">
+                  <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden shadow-2xl">
+                    <SlideCanvasComponent
+                      slide={carouselData.slides[previewSlide]}
+                      templateId={selectedTemplate}
+                      accentColor={accentColor}
+                      slideIndex={previewSlide}
+                      totalSlides={carouselData.slides.length}
+                      showAuthor={showAuthor}
+                      authorName={linkedAccount?.profile_name || ""}
+                      authorPicture={linkedAccount?.profile_picture_url || ""}
+                      authorLinkedinUrl={linkedAccount?.linkedin_profile_url || ""}
+                      backgroundImage={carouselData.slides[previewSlide].image || carouselData.backgroundImage}
+                    />
+                  </div>
+
+                  {/* Edit overlay button */}
+                  {post?.status !== "published" && (
+                    <button
+                      onClick={() => startEditSlide(previewSlide)}
+                      className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-95 bg-blue-600 hover:bg-blue-700 border-none cursor-pointer"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Nav arrows */}
+                  {previewSlide > 0 && (
+                    <button
+                      onClick={() => setPreviewSlide(previewSlide - 1)}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                    >
+                      <ChevronLeft className="w-5 h-5 text-zinc-700 dark:text-zinc-350" />
+                    </button>
+                  )}
+                  {previewSlide < carouselData.slides.length - 1 && (
+                    <button
+                      onClick={() => setPreviewSlide(previewSlide + 1)}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 w-9 h-9 rounded-full bg-white dark:bg-zinc-800 shadow-lg flex items-center justify-center active:scale-95 transition-transform border-none cursor-pointer"
+                    >
+                      <ChevronRight className="w-5 h-5 text-zinc-700 dark:text-zinc-350" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dots */}
+                <div className="flex justify-center gap-1.5">
+                  {carouselData.slides.map((_: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setPreviewSlide(i)}
+                      className="rounded-full transition-all border-none cursor-pointer"
+                      style={{
+                        width: i === previewSlide ? 20 : 6,
+                        height: 6,
+                        background: i === previewSlide ? accentColor : "#D1D5DB",
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
             {post?.status !== "published" && (
               <>
@@ -3062,6 +3202,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                       <option value="gradient_flow">Gradient Flow (Colorful)</option>
                       <option value="split_pro">Split Pro (Corporate)</option>
                       <option value="frosted_card">Frosted Card (Glassmorphism)</option>
+                      <option value="metric_spotlight">Metric Spotlight (Dark)</option>
                     </select>
                   </div>
 

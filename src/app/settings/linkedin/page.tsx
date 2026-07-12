@@ -27,6 +27,10 @@ export default function LinkedInSettingsPage() {
   const [editedHookExplanation, setEditedHookExplanation] = useState("");
   const [editedStyleExplanation, setEditedStyleExplanation] = useState("");
   const [savingStyle, setSavingStyle] = useState(false);
+  const [dnaProfessionalism, setDnaProfessionalism] = useState(50);
+  const [dnaEmojiDensity, setDnaEmojiDensity] = useState(30);
+  const [dnaAssertiveness, setDnaAssertiveness] = useState(50);
+  const [dnaFormattingLayout, setDnaFormattingLayout] = useState("mixed");
 
   useEffect(() => {
     async function checkStatus() {
@@ -65,6 +69,10 @@ export default function LinkedInSettingsPage() {
               setEditedSample(prof.sample_post || "");
               setEditedHookExplanation(sj.hook_style_explanation || "");
               setEditedStyleExplanation(sj.writing_style_explanation || "");
+              setDnaProfessionalism(sj.dna_professionalism !== undefined ? sj.dna_professionalism : 50);
+              setDnaEmojiDensity(sj.dna_emoji_density !== undefined ? sj.dna_emoji_density : 30);
+              setDnaAssertiveness(sj.dna_assertiveness !== undefined ? sj.dna_assertiveness : 50);
+              setDnaFormattingLayout(sj.dna_formatting_layout || "mixed");
             }
           }
         } else {
@@ -160,6 +168,10 @@ export default function LinkedInSettingsPage() {
         avoided_corporate_words: editedAvoided.split(",").map(s => s.trim()).filter(Boolean),
         hook_style_explanation: editedHookExplanation,
         writing_style_explanation: editedStyleExplanation,
+        dna_professionalism: dnaProfessionalism,
+        dna_emoji_density: dnaEmojiDensity,
+        dna_assertiveness: dnaAssertiveness,
+        dna_formatting_layout: dnaFormattingLayout,
       };
 
       const res = await fetch("/api/style/profile", {
@@ -337,6 +349,79 @@ export default function LinkedInSettingsPage() {
                     </div>
                   ) : isEditingStyle ? (
                     <div className="ios-card p-4 space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                      
+                      {/* Creator DNA Fine Tuning Sliders */}
+                      <div className="bg-zinc-50/50 dark:bg-zinc-950 p-3.5 rounded-xl border border-zinc-200/50 dark:border-zinc-800/80 space-y-4">
+                        <h4 className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-1.5">
+                          🧬 Creator DNA Sliders
+                        </h4>
+                        
+                        {/* Professionalism */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                            <span>Casual</span>
+                            <span className="text-zinc-300 dark:text-zinc-100 uppercase tracking-wider text-[9px]">Professionalism ({dnaProfessionalism}%)</span>
+                            <span>Corporate</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={dnaProfessionalism}
+                            onChange={(e) => setDnaProfessionalism(Number(e.target.value))}
+                            className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          />
+                        </div>
+
+                        {/* Emoji Density */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                            <span>None</span>
+                            <span className="text-zinc-300 dark:text-zinc-100 uppercase tracking-wider text-[9px]">Emoji Density ({dnaEmojiDensity}%)</span>
+                            <span>Rich</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={dnaEmojiDensity}
+                            onChange={(e) => setDnaEmojiDensity(Number(e.target.value))}
+                            className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          />
+                        </div>
+
+                        {/* Assertiveness */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                            <span>Diplomatic</span>
+                            <span className="text-zinc-300 dark:text-zinc-100 uppercase tracking-wider text-[9px]">Assertiveness ({dnaAssertiveness}%)</span>
+                            <span>Bold</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={dnaAssertiveness}
+                            onChange={(e) => setDnaAssertiveness(Number(e.target.value))}
+                            className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          />
+                        </div>
+
+                        {/* Layout Format */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase">Formatting Structure</label>
+                          <select
+                            value={dnaFormattingLayout}
+                            onChange={(e) => setDnaFormattingLayout(e.target.value)}
+                            className="w-full bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none cursor-pointer"
+                          >
+                            <option value="mixed">Mixed (Paragraphs & Bullet points)</option>
+                            <option value="paragraphs">Paragraphs Only</option>
+                            <option value="bullets">Bullet points Only</option>
+                          </select>
+                        </div>
+                      </div>
+
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-zinc-400 uppercase">Tone Descriptor</label>
                         <input
@@ -450,6 +535,10 @@ export default function LinkedInSettingsPage() {
                             setEditedSample(styleProfile.sample_post || "");
                             setEditedHookExplanation(sj.hook_style_explanation || "");
                             setEditedStyleExplanation(sj.writing_style_explanation || "");
+                            setDnaProfessionalism(sj.dna_professionalism !== undefined ? sj.dna_professionalism : 50);
+                            setDnaEmojiDensity(sj.dna_emoji_density !== undefined ? sj.dna_emoji_density : 30);
+                            setDnaAssertiveness(sj.dna_assertiveness !== undefined ? sj.dna_assertiveness : 50);
+                            setDnaFormattingLayout(sj.dna_formatting_layout || "mixed");
                             setIsEditingStyle(false);
                           }}
                           className="flex-1 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold py-2 rounded-xl text-xs bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors duration-150"
@@ -460,6 +549,47 @@ export default function LinkedInSettingsPage() {
                     </div>
                   ) : (
                     <div className="ios-card bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                      
+                      {/* Read-Only Creator DNA sliders */}
+                      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-3">
+                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">🧬 Creator DNA Settings</p>
+                        <div className="space-y-2 mt-1">
+                          <div>
+                            <div className="flex justify-between items-center text-[9px] text-zinc-400 font-semibold mb-0.5">
+                              <span>Professionalism</span>
+                              <span className="font-bold text-zinc-300">{dnaProfessionalism}% (Casual ⇄ Corporate)</span>
+                            </div>
+                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                              <div className="bg-blue-500 h-full rounded-full" style={{ width: `${dnaProfessionalism}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between items-center text-[9px] text-zinc-400 font-semibold mb-0.5">
+                              <span>Emoji Density</span>
+                              <span className="font-bold text-zinc-300">{dnaEmojiDensity}% (None ⇄ Rich)</span>
+                            </div>
+                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                              <div className="bg-blue-500 h-full rounded-full" style={{ width: `${dnaEmojiDensity}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between items-center text-[9px] text-zinc-400 font-semibold mb-0.5">
+                              <span>Assertiveness</span>
+                              <span className="font-bold text-zinc-300">{dnaAssertiveness}% (Diplomatic ⇄ Bold)</span>
+                            </div>
+                            <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1 rounded-full overflow-hidden">
+                              <div className="bg-blue-500 h-full rounded-full" style={{ width: `${dnaAssertiveness}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mt-1">Layout Format</p>
+                            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 capitalize mt-0.5">
+                              {dnaFormattingLayout === "mixed" ? "Mixed (Paragraphs & Bullet points)" : dnaFormattingLayout === "bullets" ? "Bullet points Only" : "Paragraphs Only"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/80 space-y-3">
                         <div className="grid grid-cols-2 gap-4">
                           <div>

@@ -39,6 +39,7 @@ export default function CreatePostPage() {
   const [personalProfile, setPersonalProfile] = useState<any>(null);
   const [isSeries, setIsSeries] = useState(false);
   const [seriesPostCount, setSeriesPostCount] = useState(3);
+  const [offlineRecordings, setOfflineRecordings] = useState<any[]>([]);
   
   // Step 3 Image States
   const [imageTab, setImageTab] = useState<"search" | "ai" | "upload" | "url">("search");
@@ -74,7 +75,18 @@ export default function CreatePostPage() {
   const [generationTime, setGenerationTime] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
+  const loadOfflineRecordings = async () => {
+    try {
+      const { getOfflineRecordings } = await import("@/lib/utils/offline-voice");
+      const list = await getOfflineRecordings();
+      setOfflineRecordings(list);
+    } catch (e) {
+      console.warn("IndexedDB load failed:", e);
+    }
+  };
+
   useEffect(() => {
+    loadOfflineRecordings();
     const saved = localStorage.getItem("voicepost_ai_backend");
     if (saved === "antigravity" || saved === "waterfall") {
       setAiBackend(saved);
@@ -299,11 +311,22 @@ export default function CreatePostPage() {
         }
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
         setAudioBlob(audioBlob);
         stream.getTracks().forEach((track) => track.stop());
-        handleTranscribe(audioBlob);
+
+        // Cache recording locally in case the network fails or is offline
+        const tempId = "voice_" + Date.now();
+        try {
+          const { saveOfflineRecording } = await import("@/lib/utils/offline-voice");
+          await saveOfflineRecording(tempId, audioBlob, `Recording at ${new Date().toLocaleTimeString()}`);
+          loadOfflineRecordings();
+        } catch (e) {
+          console.warn("Failed to save recording offline:", e);
+        }
+
+        handleTranscribe(audioBlob, tempId);
       };
 
       mediaRecorderRef.current = recorder;
@@ -329,7 +352,7 @@ export default function CreatePostPage() {
   };
 
   // Transcribe Audio — uses async polling pattern to avoid Vercel 10s timeout
-  const handleTranscribe = async (blob: Blob) => {
+  const handleTranscribe = async (blob: Blob, tempId?: string) => {
     setTranscribing(true);
     try {
       const formData = new FormData();
@@ -361,6 +384,17 @@ export default function CreatePostPage() {
 
         if (pollData.status === "completed" && pollData.corrected_transcript) {
           setTranscript(pollData.corrected_transcript);
+          
+          // Clear successful transcription from local IndexedDB cache
+          if (tempId) {
+            try {
+              const { deleteOfflineRecording } = await import("@/lib/utils/offline-voice");
+              await deleteOfflineRecording(tempId);
+              loadOfflineRecordings();
+            } catch (e) {
+              console.warn("Failed to delete offline recording from cache:", e);
+            }
+          }
           return;
         } else if (pollData.status === "error") {
           throw new Error(pollData.error || "Transcription failed");
@@ -855,6 +889,44 @@ export default function CreatePostPage() {
                   >
                     <Mic className="w-8 h-8" />
                   </button>
+                  {offlineRecordings.length > 0 && (
+                    <div className="mt-6 w-full text-left bg-zinc-900/50 border border-amber-500/20 rounded-xl p-3.5">
+                      <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        ⚠️ Recoverable Offline Recordings
+                      </h4>
+                      <div className="space-y-2">
+                        {offlineRecordings.map((rec) => (
+                          <div key={rec.id} className="flex items-center justify-between bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
+                            <div className="min-w-0 flex-1 mr-2">
+                              <p className="text-xs text-white font-medium truncate">{rec.title}</p>
+                              <p className="text-[10px] text-zinc-500">{(rec.blob.size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <button
+                                onClick={() => {
+                                  setAudioBlob(rec.blob);
+                                  handleTranscribe(rec.blob, rec.id);
+                                }}
+                                className="text-[10px] bg-amber-500 hover:bg-amber-600 text-black px-2 py-1 rounded border-none font-bold cursor-pointer transition-colors"
+                              >
+                                Transcribe
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const { deleteOfflineRecording } = await import("@/lib/utils/offline-voice");
+                                  await deleteOfflineRecording(rec.id);
+                                  loadOfflineRecordings();
+                                }}
+                                className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded border-none cursor-pointer transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {transcript && (
                     <div className="mt-6 w-full text-left">
                       <label className="text-xs font-bold text-zinc-400 uppercase">Corrected Transcript (Tap to edit)</label>

@@ -13,6 +13,8 @@
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@radix-ui/react-slot": "^1.2.5",
+    "@remotion/player": "^4.0.489",
+    "@remotion/transitions": "^4.0.489",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "@tsparticles/engine": "^4.1.3",
@@ -29,6 +31,7 @@
     "pdf-parse": "^2.4.5",
     "react": "^18",
     "react-dom": "^18",
+    "remotion": "^4.0.489",
     "resend": "^6.12.4",
     "shadcn": "^4.10.0",
     "stripe": "^22.2.0",
