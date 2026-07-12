@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     "provider_configs",
     "provider_usage_daily",
     "api_keys",
+    "audit_logs",
   ];
 
   const results: Record<string, { exists: boolean; row_count?: number; error?: string }> = {};

@@ -54,7 +54,9 @@ export async function syncUserEngagement(userId: string) {
       let commentsCount = 0;
       let commentsList: any[] = [];
 
-      if (!isMock && post.linkedin_post_id) {
+      const isPostMock = isMock || !post.linkedin_post_id || post.linkedin_post_id.startsWith("mock_");
+
+      if (!isPostMock) {
         // Real LinkedIn integration
         try {
           // Fetch Social Actions (Likes/Comments count)
@@ -146,7 +148,7 @@ export async function syncUserEngagement(userId: string) {
       if (commentsList.length > 0) {
         let processed: any[] = [];
         
-        if (!isMock && post.linkedin_post_id) {
+        if (!isPostMock) {
           // Map and upsert real comments
           processed = await Promise.all(
             commentsList.map(async (comment: any) => {

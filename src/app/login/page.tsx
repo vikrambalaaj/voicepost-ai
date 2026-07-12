@@ -140,7 +140,7 @@ export default function LoginPage() {
           <span className="text-zinc-500 underline cursor-pointer">Terms</span> and{" "}
           <span className="text-zinc-500 underline cursor-pointer">Privacy Policy</span>.
           <br />We never post without your approval.
-          <br /><span className="text-[10px] text-zinc-700 mt-2 block font-mono">VoicePost App v1.3.1</span>
+          <br /><span className="text-[10px] text-zinc-700 mt-2 block font-mono">VoicePost App v1.3.4</span>
         </p>
       </div>
     </div>

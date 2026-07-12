@@ -2,16 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
 
   try {
     const body = await req.json();
-    const { post_id, post_content, style, aspect_ratio, brand_colors, composition } = body;
+    const { post_id, post_content, style, aspect_ratio, brand_colors, composition, prompt } = body;
 
-    if (!post_id || !post_content) {
-      return NextResponse.json({ error: "post_id and post_content are required" }, { status: 400 });
+    const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+    const userAgent = req.headers.get("user-agent") || undefined;
+
+    if (!post_id || (!post_content && !prompt)) {
+      return NextResponse.json({ error: "post_id and either post_content or prompt are required" }, { status: 400 });
     }
 
     const userId = await getAuthenticatedUserId(req);
@@ -82,8 +86,11 @@ export async function POST(req: NextRequest) {
     }
 
     let fluxPrompt = "";
-    try {
-      const promptGeneratorInstruction = `You are a creative director who generates high-end visual prompts for AI image generation (Flux model).
+    if (prompt && prompt.trim()) {
+      fluxPrompt = prompt.trim();
+    } else {
+      try {
+        const promptGeneratorInstruction = `You are a creative director who generates high-end visual prompts for AI image generation (Flux model).
 Analyze the following LinkedIn post content and output a filled-out visual prompt based on the template below.
 
 CRITICAL INSTRUCTIONS:
@@ -111,9 +118,10 @@ ${templateText}`;
         sessionId: "image-prompt-generation-" + Date.now(),
       });
 
-      fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim().replace(/\*/g, "");
-    } catch (err) {
-      console.warn("Failed to generate custom visual metaphor prompt, falling back.", err);
+        fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim().replace(/\*/g, "");
+      } catch (err) {
+        console.warn("Failed to generate custom visual metaphor prompt, falling back.", err);
+      }
     }
 
     if (!fluxPrompt) {
@@ -402,6 +410,23 @@ Return ONLY the 2-3 words. No preamble, no quotes, no period.`;
         .update({ ai_images_used_this_week: user.ai_images_used_this_week + 1 })
         .eq("id", user.id);
     }
+
+    // Log AI image generation audit event
+    await logAuditEvent({
+      userId,
+      action: "IMAGE_GENERATED",
+      targetType: "post",
+      targetId: post_id === "00000000-0000-0000-0000-000000000000" ? null : post_id,
+      details: {
+        image_id: returnedImageId,
+        style,
+        aspect_ratio,
+        composition,
+        provider: providerUsed,
+      },
+      ipAddress,
+      userAgent,
+    });
 
     return NextResponse.json({
       success: true,

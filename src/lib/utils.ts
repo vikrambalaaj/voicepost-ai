@@ -28,6 +28,10 @@ export function cleanJsonString(str: string): string {
         clean += char;
       }
     } else {
+      if (char === '*') {
+        // Skip asterisks outside of strings (e.g. Markdown bolding of JSON elements like **"value"**)
+        continue;
+      }
       clean += char;
     }
 

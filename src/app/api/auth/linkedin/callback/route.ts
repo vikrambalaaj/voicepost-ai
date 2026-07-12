@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { randomUUID } from "crypto";
 import { createSessionCookie } from "@/lib/session";
+import { logAuditEvent } from "@/lib/audit";
 
 async function upsertLinkedinAccount(db: any, accountData: any) {
   const { data: existing } = await db
@@ -43,6 +44,9 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const stateParam = req.nextUrl.searchParams.get("state") || "";
   const storedStateRaw = req.cookies.get("linkedin_oauth_state")?.value || "";
+
+  const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+  const userAgent = req.headers.get("user-agent") || undefined;
 
   // Parse purpose from state (format: "csrfToken:purpose")
   const [stateToken, purpose] = stateParam.split(":");
@@ -141,7 +145,21 @@ export async function GET(req: NextRequest) {
   // --- Upsert User ---
   let userId: string;
 
-  if (isMock) {
+  let currentUserId: string | null = null;
+  try {
+    currentUserId = await getAuthenticatedUserId(req);
+  } catch (e) {
+    // Session token might be invalid or expired
+  }
+
+  if (currentUserId) {
+    userId = currentUserId;
+    // Update user info with LinkedIn profile details
+    await db.from("users").update({
+      full_name: accountInfo.profile_name,
+      job_title: accountInfo.profile_headline || "",
+    }).eq("id", userId);
+  } else if (isMock) {
     // Demo mode: use or create a fixed demo user
     const demoId = "00000000-0000-0000-0000-000000000000";
     await db.from("users").upsert({
@@ -342,6 +360,22 @@ export async function GET(req: NextRequest) {
     },
     body: JSON.stringify({ accountId: linkedinAccount.id }),
   }).catch((err) => console.error("Failed to scrape posts in callback:", err));
+
+  // Log authentication/connection audit event
+  await logAuditEvent({
+    userId,
+    action: loginPurpose ? "USER_LOGGED_IN" : "LINKEDIN_ACCOUNT_CONNECTED",
+    targetType: "linkedin_account",
+    targetId: linkedinAccount?.id,
+    details: {
+      profile_name: accountInfo.profile_name,
+      profile_email: accountInfo.profile_email,
+      linkedin_profile_id: accountInfo.linkedin_profile_id,
+      is_mock: isMock,
+    },
+    ipAddress,
+    userAgent,
+  });
 
   // --- Build redirect response ---
   const redirectDest = loginPurpose

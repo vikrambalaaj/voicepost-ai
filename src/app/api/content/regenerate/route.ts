@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { post_id, feedback, document_text } = body;
+    const { post_id, feedback, document_text, style_type, style_id } = body;
 
     if (!post_id || !feedback) {
       return NextResponse.json({ error: "post_id and feedback are required" }, { status: 400 });
@@ -33,6 +33,16 @@ export async function POST(req: NextRequest) {
 
     if (postErr || !post) {
       return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
+    }
+
+    // Update style profile in the DB if requested
+    if (style_type && style_id) {
+      await db
+        .from("posts")
+        .update({ style_type, style_id })
+        .eq("id", post_id);
+      post.style_type = style_type;
+      post.style_id = style_id;
     }
 
     // 2. Fetch past revisions
@@ -76,7 +86,22 @@ Changes made in response: ${rev.changes_made?.join(", ") || "None (Initial)"}`;
       ? `\n\nADDITIONAL REFERENCE DOCUMENT CONTEXT (Use this to extract and incorporate the most up-to-date and accurate facts/content):\n"${document_text}"`
       : "";
 
-    let systemPrompt = buildSystemPrompt();
+    // Fetch selected style profile JSON
+    let selectedStyleJson: any = null;
+    if (post.style_id) {
+      if (post.style_type === "expert") {
+        const { data: exp } = await db.from("expert_styles").select("style_json").eq("id", post.style_id).single();
+        selectedStyleJson = exp?.style_json || null;
+      } else {
+        const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", post.style_id).single();
+        selectedStyleJson = cust?.style_json || null;
+      }
+    }
+    const styleContext = selectedStyleJson 
+      ? `\n\nWRITING STYLE DNA INSTRUCTIONS (Strictly adhere to this formatting, tone, and sentence length style):\n${JSON.stringify(selectedStyleJson, null, 2)}`
+      : "";
+
+    let systemPrompt = buildSystemPrompt() + styleContext;
     let userPrompt = "";
 
     if (isCarousel) {
@@ -98,13 +123,19 @@ Rewrite instructions:
 - Incorporate the user feedback into the carousel title and slides. Avoid repeating any of the style deviations or issues highlighted in the feedback history.
 - Maintain a highly polished, professional thought-leadership LinkedIn carousel structure.
 - Each slide must be punchy, scannable, and valuable. Max 2-3 lines per body.
-- Content Slides (type "content"): Include an optional tagline/subtitle, exactly 3 structured points (each with a short bold title and clear description), and an optional footer highlight/shoutout.
-- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT have structured points or footer.
-- Title: 4-8 words, strong claim or hook.
-- NO corporate fluff, NO "leverage", NO "delve".
-- NEVER use asterisks (*) or double asterisks (**) anywhere in the title, body, points, or other text of the slides. LinkedIn and visual carousels do not support markdown formatting. Keep the text strictly plain text without any asterisk symbols.
-
-Return your response ONLY in this JSON format:
+- Title: 4-8 words, strong hook or claim. Wrap exactly one key word in double asterisks ** (e.g. Focus on **Success** — And Let the Results Speak) to highlight it in the selected accent color. Do not use asterisks in any other fields.
+- Content Slides (type "content"): Must contain a "layout" property which is one of: "paragraph", "points", or "metrics".
+  - Choose "metrics" when the content focuses on achievements, statistics, results, growth, years, or numbers.
+  - Choose "points" when teaching a process, step-by-step guide, list of tactics, or concrete lessons.
+  - Choose "paragraph" when sharing a narrative, concept description, or general context.
+- Category Badge: Content slides should include a "badge" property (e.g., "ACTION 4", "RESULTS", "CASE STUDY", "TACTIC 1") representing the category or step label.
+- Tagline/Subtitle: Content slides should include an optional "subtitle" summarizing the slide topic.
+- Structured Content:
+  - If layout is "metrics", include a "metrics" array of exactly 3 objects, each with "value", "label", and "text".
+  - If layout is "points", include a "points" array of exactly 3 objects, each with "title" and "text".
+  - If layout is "paragraph", omit points and metrics arrays.
+- Cover slide (type "cover") and CTA slide (type "cta") MUST NOT have structured points, metrics, badge, or footer.
+- Return your response ONLY in this JSON format:
 {
   "title": "carousel title for reference",
   "templateId": "${originalCarouselData?.templateId || "bold_impact"}",
@@ -113,36 +144,41 @@ Return your response ONLY in this JSON format:
     {
       "slideNumber": 1,
       "type": "cover",
-      "title": "hook headline (4-8 words)",
+      "title": "hook headline (with one word in **stars**)",
       "body": "1-2 sentence hook that makes them swipe"
     },
     {
       "slideNumber": 2,
       "type": "content",
-      "title": "slide title (e.g. LeanIX)",
-      "subtitle": "optional tagline summarizing the topic (e.g. Your Partner in Building Governance Framework)",
-      "points": [
+      "layout": "metrics",
+      "badge": "ACTION 4 + RESULTS",
+      "title": "Focus on **Success** — And Let the Results Speak",
+      "subtitle": "optional tagline summarizing the topic",
+      "body": "Paragraph description explaining the context of these metrics",
+      "metrics": [
         {
-          "title": "Heading for Point 1",
-          "text": "Description of Point 1."
+          "value": "2025",
+          "label": "Ended on a High",
+          "text": "Closed the year on a strong positive note after navigating the trough"
         },
         {
-          "title": "Heading for Point 2",
-          "text": "Description of Point 2."
+          "value": "1",
+          "label": "New Greenfield Win",
+          "text": "Successful Private Cloud S/4HANA Greenfield Implementation to begin 2026"
         },
         {
-          "title": "Heading for Point 3",
-          "text": "Description of Point 3."
+          "value": "2",
+          "label": "Recognitions",
+          "text": "Award for Excellence + acknowledgment from business users"
         }
       ],
-      "footer": "optional footer highlight (e.g. 🙌 Shout out to ... or key quote/takeaway)",
-      "body": "Summary fallback paragraph representing the slide content"
+      "footer": "optional green highlight banner checkmark text"
     },
-    ... (additional content slides with the same structured format),
+    ... (additional content slides with similar appropriate layout),
     {
       "slideNumber": ${originalCarouselData?.slides?.length || 6},
       "type": "cta",
-      "title": "cta headline",
+      "title": "cta headline (with one word in **stars**)",
       "body": "follow for more + what they'll get"
     }
   ],
@@ -288,6 +324,7 @@ Return your response ONLY in this JSON format:
         let cleanBody = slide.body || "";
         let cleanSubtitle = slide.subtitle ? slide.subtitle.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
         let cleanFooter = slide.footer ? slide.footer.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+        let cleanBadge = slide.badge ? slide.badge.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
         
         let cleanPoints = undefined;
         if (Array.isArray(slide.points)) {
@@ -297,7 +334,17 @@ Return your response ONLY in this JSON format:
           }));
         }
 
-        cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+        let cleanMetrics = undefined;
+        if (Array.isArray(slide.metrics)) {
+          cleanMetrics = slide.metrics.map((m: any) => ({
+            value: (m.value || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+            label: (m.label || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+            text: (m.text || "").replace(/\*\*/g, "").replace(/\*/g, "")
+          }));
+        }
+
+        // Clean single asterisks, keep double asterisks in title
+        cleanTitle = cleanTitle.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");
         cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
         return {
           ...slide,
@@ -305,7 +352,9 @@ Return your response ONLY in this JSON format:
           body: cleanBody,
           subtitle: cleanSubtitle,
           footer: cleanFooter,
+          badge: cleanBadge,
           points: cleanPoints,
+          metrics: cleanMetrics,
         };
       });
 

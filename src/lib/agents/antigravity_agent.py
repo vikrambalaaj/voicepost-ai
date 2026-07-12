@@ -259,6 +259,7 @@ async def run_agent(input_data):
     style_json = input_data.get("style_json", {})
     user_context = input_data.get("user_context", {})
     recent_topics = input_data.get("recent_topics", [])
+    preserve_text = input_data.get("preserve_text", False)
     
     system_instructions = (
         "You are an elite LinkedIn copywriter. Your goal is to write high-impact, human-like posts.\n"
@@ -271,6 +272,10 @@ async def run_agent(input_data):
         "6. Leverage your custom tools (generate_flux_image, search_unsplash_images) to fetch/generate visual attachments if requested.\n"
         "7. NEVER use asterisks (*) or double asterisks (**) anywhere in the post content (e.g., for bolding, emphasis, titles, headers, or bullet points). LinkedIn does not support markdown syntax, so it displays them as raw asterisks. Use CAPITAL LETTERS for emphasis or headers, and standard unicode bullets like '•' or '-' if bullet lists are needed."
     )
+    if preserve_text:
+        system_instructions += (
+            "\n8. CRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words."
+        )
     
     config = LocalAgentConfig(
         response_schema=LinkedInPostOutput,

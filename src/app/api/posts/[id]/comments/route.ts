@@ -133,7 +133,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     // Sort comments by created_at descending (newest first)
-    comments.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    comments.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
     // Capped to last 3 comments max
     const last3Comments = comments.slice(0, 3);

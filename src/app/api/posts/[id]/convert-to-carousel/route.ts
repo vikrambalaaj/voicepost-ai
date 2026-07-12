@@ -4,12 +4,16 @@ import { getAuthenticatedUserId } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 import { cleanJsonString } from "@/lib/utils";
 import { humanizeCarouselSlides } from "../../../content/generate/route";
+import { logAuditEvent } from "@/lib/audit";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+    const userAgent = req.headers.get("user-agent") || undefined;
+
     const { id } = params;
     if (!id) {
       return NextResponse.json({ error: "Post ID is required" }, { status: 400 });
@@ -42,12 +46,22 @@ export async function POST(
 
 RULES:
 - Restructure the input text into exactly 6 logical slides.
-- Slide 1: Hook cover slide. It MUST NOT contain any structured points or footer.
-- Slides 2 to 5: Content slides with punchy takeaways. For these content slides, include an optional tagline/subtitle, exactly 3 structured points (each with a short bold title and clear description), and an optional footer highlight/shoutout.
-- Slide 6: Call to Action (CTA) slide. It MUST NOT contain any structured points or footer.
+- Slide 1: Hook cover slide. It MUST NOT contain any structured points, metrics, badge, or footer.
+- Slides 2 to 5: Content slides with punchy takeaways. For these content slides, include:
+  - "layout": a layout style, one of: "paragraph", "points", or "metrics".
+    - Choose "metrics" when the content focuses on achievements, statistics, results, growth, years, or numbers.
+    - Choose "points" when teaching a process, step-by-step guide, list of tactics, or concrete lessons.
+    - Choose "paragraph" when sharing a narrative, concept description, or general context.
+  - "badge": a category badge (e.g. "ACTION 4", "RESULTS", "CASE STUDY", "TACTIC 1") representing the category or step label.
+  - "subtitle": optional tagline summarizing the slide topic.
+  - "title": slide title. Wrap exactly one key word in double asterisks ** (e.g. Focus on **Success** — And Let the Results Speak) to highlight it in the accent color. Do not use asterisks in any other fields.
+  - Structured content:
+    - If layout is "metrics", include a "metrics" array of exactly 3 objects, each with "value", "label", and "text".
+    - If layout is "points", include a "points" array of exactly 3 objects, each with "title" and "text".
+    - If layout is "paragraph", omit points and metrics arrays.
+- Slide 6: Call to Action (CTA) slide. It MUST NOT contain any structured points, metrics, badge, or footer.
 - Use short sentences. Max 2-3 lines per body.
-- Return ONLY valid JSON, no markdown, no backticks.
-- NEVER use asterisks (*) or double asterisks (**) in slide titles, body, or points.`;
+- Return ONLY valid JSON, no markdown, no backticks.`;
 
     const userPrompt = `Convert this LinkedIn post into a structured carousel with exactly 6 slides:
 "${post.post_content}"
@@ -59,32 +73,71 @@ Return this exact JSON structure:
     {
       "slideNumber": 1,
       "type": "cover",
-      "title": "hook headline",
+      "title": "compelling **headline** (with one word highlighted)",
       "body": "swipe hook"
     },
     {
       "slideNumber": 2,
       "type": "content",
-      "title": "slide title (e.g. Tricentis)",
-      "subtitle": "optional tagline summarizing the topic (e.g. Test Cycles are more frequent & short...)",
-      "points": [
+      "layout": "metrics",
+      "badge": "ACTION 4 + RESULTS",
+      "title": "Focus on **Success** — And Let the Results Speak",
+      "subtitle": "optional tagline summarizing the topic",
+      "body": "Paragraph description explaining the context of these metrics",
+      "metrics": [
         {
-          "title": "Point Heading 1",
-          "text": "Point Description 1"
+          "value": "2025",
+          "label": "Ended on a High",
+          "text": "Closed the year on a strong positive note after navigating the trough"
         },
         {
-          "title": "Point Heading 2",
-          "text": "Point Description 2"
+          "value": "1",
+          "label": "New Greenfield Win",
+          "text": "Successful Private Cloud S/4HANA Greenfield Implementation to begin 2026"
         },
         {
-          "title": "Point Heading 3",
-          "text": "Point Description 3"
+          "value": "2",
+          "label": "Recognitions",
+          "text": "Award for Excellence + acknowledgment from business users"
         }
       ],
-      "footer": "optional footer callout (e.g. 🙌 Mr. Mateen — simple, to-the-point delivery...)",
-      "body": "Summary fallback paragraph representing the slide content"
+      "footer": "optional green highlight banner checkmark text"
     },
-    ... (slides 3 to 5 as content slides with the same structured format),
+    {
+      "slideNumber": 3,
+      "type": "content",
+      "layout": "points",
+      "badge": "TACTICS",
+      "title": "How to **Build** Governance",
+      "subtitle": "Your Partner in Building Governance Framework",
+      "points": [
+        {
+          "title": "Establish Ownership",
+          "text": "Identify clear roles and responsibilities across the team."
+        },
+        {
+          "title": "Continuous Review",
+          "text": "Schedule recurring feedback loops to inspect and adapt."
+        },
+        {
+          "title": "Standardize Frameworks",
+          "text": "Define global templates and rules for all repositories."
+        }
+      ],
+      "footer": "optional green highlight banner checkmark text",
+      "body": "Fallback paragraph description summarizing the slide"
+    },
+    {
+      "slideNumber": 4,
+      "type": "content",
+      "layout": "paragraph",
+      "badge": "BACKGROUND",
+      "title": "The **Reality** of Engineering",
+      "subtitle": "Why building is hard",
+      "body": "When we started the project, we thought it would take two weeks. The truth is, building a solid backend governance system is a journey of continuous integration and scaling up standards.",
+      "footer": "optional green highlight banner checkmark text"
+    },
+    ... (slides 5 as content slide with similar appropriate layout),
     {
       "slideNumber": 6,
       "type": "cta",
@@ -141,6 +194,7 @@ Return this exact JSON structure:
           let cleanBody = slide.body || "";
           let cleanSubtitle = slide.subtitle ? slide.subtitle.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
           let cleanFooter = slide.footer ? slide.footer.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
+          let cleanBadge = slide.badge ? slide.badge.replace(/\*\*/g, "").replace(/\*/g, "") : undefined;
           
           let cleanPoints = undefined;
           if (Array.isArray(slide.points)) {
@@ -150,7 +204,17 @@ Return this exact JSON structure:
             }));
           }
 
-          cleanTitle = cleanTitle.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
+          let cleanMetrics = undefined;
+          if (Array.isArray(slide.metrics)) {
+            cleanMetrics = slide.metrics.map((m: any) => ({
+              value: (m.value || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+              label: (m.label || "").replace(/\*\*/g, "").replace(/\*/g, ""),
+              text: (m.text || "").replace(/\*\*/g, "").replace(/\*/g, "")
+            }));
+          }
+
+          // Clean single asterisks, keep double asterisks in title
+          cleanTitle = cleanTitle.replace(/^([ \t]*)\*[ \t]+/gm, "$1• ");
           cleanBody = cleanBody.replace(/\*\*/g, "").replace(/^([ \t]*)\*[ \t]+/gm, "$1• ").replace(/\*/g, "");
           return {
             ...slide,
@@ -158,7 +222,9 @@ Return this exact JSON structure:
             body: cleanBody,
             subtitle: cleanSubtitle,
             footer: cleanFooter,
+            badge: cleanBadge,
             points: cleanPoints,
+            metrics: cleanMetrics,
           };
         });
       }
@@ -196,6 +262,22 @@ Return this exact JSON structure:
       feedback_given: "Converted to carousel layout",
       changes_made: ["Converted text post to a visual carousel"],
       provider_used: result.provider,
+    });
+
+    // 4. Log audit event
+    await logAuditEvent({
+      userId,
+      action: "POST_CONVERTED_CAROUSEL",
+      targetType: "post",
+      targetId: id,
+      details: {
+        previous_type: "standard",
+        new_type: "carousel",
+        revision_number: nextRevisionNum,
+        provider: result.provider,
+      },
+      ipAddress,
+      userAgent,
     });
 
     return NextResponse.json({

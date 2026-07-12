@@ -104,6 +104,10 @@ class MockSupabaseQueryBuilder {
       ];
       updated = true;
     }
+    if (!data.audit_logs) {
+      data.audit_logs = [];
+      updated = true;
+    }
     if (updated) {
       fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
     }

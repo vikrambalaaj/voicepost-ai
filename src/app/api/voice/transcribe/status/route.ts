@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export async function GET(req: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+  const userAgent = req.headers.get("user-agent") || undefined;
 
   const durationSeconds = parseInt(req.nextUrl.searchParams.get("duration") || "30", 10);
   const industry = req.nextUrl.searchParams.get("industry") || "Professional";
@@ -99,6 +103,21 @@ TRANSCRIPT:
         transcript_corrected: correctedTranscript,
         transcription_provider: "AssemblyAI",
         latency_ms: 0,
+      });
+
+      // Log voice transcription audit event
+      await logAuditEvent({
+        userId,
+        action: "VOICE_TRANSCRIBED",
+        targetType: "voice_recording",
+        details: {
+          duration_seconds: durationSeconds,
+          provider: "AssemblyAI",
+          raw_transcript_length: rawTranscript.length,
+          corrected_transcript_length: correctedTranscript.length,
+        },
+        ipAddress,
+        userAgent,
       });
     } catch (dbErr) {
       console.warn("Failed to store voice recording:", dbErr);

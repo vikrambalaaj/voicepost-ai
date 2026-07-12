@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 export default function CreatePostPage() {
   const router = useRouter();
   const [activeInputMode, setActiveInputMode] = useState<"voice" | "type" | "url">("voice");
-  const [postType, setPostType] = useState<"standard" | "carousel">("standard");
+  const [postType, setPostType] = useState<"standard" | "carousel" | "article">("standard");
   const [slideCount, setSlideCount] = useState(6);
   
   // Voice Input States
@@ -70,18 +70,35 @@ export default function CreatePostPage() {
   const [aiBackend, setAiBackend] = useState<"antigravity" | "waterfall">("waterfall");
   const [isAdmin, setIsAdmin] = useState(false);
   const [webSearch, setWebSearch] = useState(true);
+  const [preserveText, setPreserveText] = useState(false);
   const [generationTime, setGenerationTime] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("voicepost_ai_backend");
-    // "antigravity" requires a local Python env — always force waterfall on Vercel
-    if (saved === "antigravity") {
-      localStorage.setItem("voicepost_ai_backend", "waterfall");
-    } else if (saved === "waterfall") {
-      setAiBackend("waterfall");
+    if (saved === "antigravity" || saved === "waterfall") {
+      setAiBackend(saved);
     }
-    setIsAdmin(localStorage.getItem("voicepost_is_admin") === "true");
+    
+    // Check real user session to determine admin privileges (works on both mobile and web)
+    async function checkAdminSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (res.ok) {
+          const sessionData = await res.json();
+          const email = sessionData.user?.email || "";
+          const ADMIN_EMAILS = ["vikram.bala@digitalfoundry.ai", "vikrambalauae.aj@gmail.com", "demo@voicepost.com"];
+          const isRealAdmin = ADMIN_EMAILS.includes(email);
+          if (isRealAdmin) {
+            setIsAdmin(true);
+            localStorage.setItem("voicepost_is_admin", "true");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load session info for admin check:", e);
+      }
+    }
+    checkAdminSession();
 
     // Pre-fill idea from URL query parameter if present
     if (typeof window !== "undefined") {
@@ -664,7 +681,9 @@ export default function CreatePostPage() {
           style_id: selectedStyleId,
           backend: aiBackend,
           web_search: webSearch,
+          preserve_text: preserveText,
           series_count: isSeries ? seriesPostCount : 1,
+          content_type: postType === "article" ? "article" : "post",
           image_url: includeImage ? (
             imageTab === "upload" ? uploadedImageUrl : 
             imageTab === "ai" ? aiGeneratedImage?.url : 
@@ -754,13 +773,19 @@ export default function CreatePostPage() {
             onClick={() => setPostType("standard")}
             className={`ios-segment-btn ${postType === "standard" ? "active" : ""}`}
           >
-            Text & Image Post
+            Text Post
           </button>
           <button
             onClick={() => setPostType("carousel")}
             className={`ios-segment-btn ${postType === "carousel" ? "active" : ""}`}
           >
-            LinkedIn Carousel (Slides)
+            Carousel
+          </button>
+          <button
+            onClick={() => setPostType("article")}
+            className={`ios-segment-btn ${postType === "article" ? "active" : ""}`}
+          >
+            Article
           </button>
         </div>
 
@@ -909,13 +934,50 @@ export default function CreatePostPage() {
           </div>
           <button
             type="button"
-            onClick={() => setWebSearch((v) => !v)}
+            onClick={() => {
+              const newValue = !webSearch;
+              setWebSearch(newValue);
+              if (newValue) {
+                setPreserveText(false);
+              }
+            }}
             className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer shrink-0 ${webSearch ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
             aria-label="Toggle Web Search Grounding"
           >
             <span
               className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
               style={{ transform: webSearch ? "translateX(24px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
+
+        {/* CONTENT PRESERVATION */}
+        <div className="ios-section-label">Content Preservation</div>
+        <div className="ios-card p-4 flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+          <div className="flex flex-col pr-4 text-left">
+            <span className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              Preserve Original Text
+            </span>
+            <span className="text-[11px] text-zinc-400 mt-0.5 leading-tight">
+              Instructs the AI to keep your text content exactly as is, focusing only on spacing, formatting, and stylistic polishing. Web search will be disabled.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const newValue = !preserveText;
+              setPreserveText(newValue);
+              if (newValue) {
+                setWebSearch(false);
+              }
+            }}
+            className={`relative w-12 h-6 rounded-full transition-colors duration-200 border-none cursor-pointer shrink-0 ${preserveText ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"}`}
+            aria-label="Toggle Preserve Original Text"
+          >
+            <span
+              className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+              style={{ transform: preserveText ? "translateX(24px)" : "translateX(0)" }}
             />
           </button>
         </div>
@@ -951,7 +1013,7 @@ export default function CreatePostPage() {
           </>
         )}
 
-        {postType === "standard" && (
+        {(postType === "standard" || postType === "article") && (
           <>
             {/* STEP 2: Style Picker */}
             <div className="ios-section-label">Step 2 — Pick Writing Style</div>
@@ -1121,7 +1183,7 @@ export default function CreatePostPage() {
 
         {/* STEP 3: Image Picker */}
         <div className="ios-section-label flex items-center justify-between select-none">
-          <span>{postType === "standard" ? "Step 3 — Media (Optional)" : "Step 3 — Slide Background (Optional)"}</span>
+          <span>{postType !== "carousel" ? "Step 3 — Media (Optional)" : "Step 3 — Slide Background (Optional)"}</span>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -1560,7 +1622,7 @@ export default function CreatePostPage() {
               </>
             ) : (
               <>
-                <Sparkles className="w-5 h-5" /> {postType === "standard" ? "Generate Post" : "Generate Carousel"}
+                <Sparkles className="w-5 h-5" /> {postType === "standard" ? "Generate Post" : postType === "article" ? "Generate Article" : "Generate Carousel"}
               </>
             )}
           </button>

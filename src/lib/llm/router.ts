@@ -141,7 +141,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
   // Determine timeout based on use case
   // Keep well under Vercel Hobby 10s limit on Vercel, but allow longer locally
-  let timeoutMs = 3500; // 3.5s default on Vercel to allow waterfall retries within 10s limit
+  let timeoutMs = 8000; // 8s default on Vercel to give content generation enough time to complete
   if (!process.env.VERCEL) {
     timeoutMs = 60000; // 60s locally to allow slower high-quality models to complete
   } else if (request.useCase === "transcript_correction") {

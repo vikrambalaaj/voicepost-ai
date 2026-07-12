@@ -70,6 +70,33 @@ function extractImages(html: string, baseUrl: string): string[] {
   return images;
 }
 
+function removeBoilerplateAndFooter(text: string): string {
+  if (!text) return "";
+  
+  const boilerplatePatterns = [
+    /enjoyed this\?/i,
+    /beyond vibe coding/i,
+    /o'reilly book/i,
+    /addy osmani/i,
+    /tweet\b/i,
+    /bluesky\b/i,
+    /mastodon\b/i,
+    /threads\b/i,
+    /subscribe to my free newsletter/i,
+    /disclaimer:\s*the views and opinions/i,
+    /do not necessarily reflect the views/i,
+    /positions, or strategies of google/i,
+  ];
+
+  return text
+    .split("\n")
+    .filter(line => {
+      const trimmed = line.trim();
+      return !boilerplatePatterns.some(pattern => pattern.test(trimmed));
+    })
+    .join("\n");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId(req);
@@ -108,13 +135,14 @@ export async function POST(req: NextRequest) {
 
     const html = await response.text();
     const cleanText = cleanHtmlToText(html);
+    const filteredText = removeBoilerplateAndFooter(cleanText);
     const extractedImages = extractImages(html, targetUrl.href);
 
     // Limit text length to avoid overflow issues
     const maxTextLength = 20000;
-    const truncatedText = cleanText.length > maxTextLength 
-      ? cleanText.substring(0, maxTextLength) + "\n\n... (truncated)"
-      : cleanText;
+    const truncatedText = filteredText.length > maxTextLength 
+      ? filteredText.substring(0, maxTextLength) + "\n\n... (truncated)"
+      : filteredText;
 
     return NextResponse.json({
       success: true,

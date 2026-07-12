@@ -6,7 +6,7 @@ import { IosShell } from "@/components/layout/IosShell";
 import {
   ArrowLeft, Check, AlertTriangle, Plus, X, Clock, HelpCircle,
   History, Sparkles, Download, ChevronLeft, ChevronRight, Edit3, Loader2, Layout, Palette,
-  Mic, Paperclip, Square, CheckCircle2, ExternalLink
+  Mic, Paperclip, Square, CheckCircle2, ExternalLink, ImageIcon, Trash2, Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,11 +22,79 @@ interface Slide {
   subtitle?: string;
   points?: Array<{ title: string; text: string }>;
   footer?: string;
+  layout?: "paragraph" | "points" | "metrics";
+  badge?: string;
+  metrics?: Array<{ value: string; label: string; text: string }>;
+  image?: string;
 }
 
 interface SlidePoint {
   title: string;
   text: string;
+}
+
+interface SlideMetric {
+  value: string;
+  label: string;
+  text: string;
+}
+
+function getSlideMetrics(slide: Slide): SlideMetric[] {
+  if (slide.metrics && slide.metrics.length > 0) {
+    return slide.metrics;
+  }
+  if (!slide.body) return [];
+  
+  const lines = slide.body.split("\n").map(l => l.trim()).filter(Boolean);
+  const metrics: SlideMetric[] = [];
+  
+  for (const line of lines) {
+    const clean = line.replace(/^[•\-\d\.\s\*\u2022]+/g, "").trim();
+    if (!clean) continue;
+    
+    let value = "";
+    let label = "";
+    let text = clean;
+    
+    const pipeParts = clean.split("|");
+    if (pipeParts.length >= 3) {
+      value = pipeParts[0].trim().replace(/\*\*/g, "");
+      label = pipeParts[1].trim();
+      text = pipeParts[2].trim();
+    } else {
+      const colonIndex = clean.indexOf(":");
+      const dashIndex = clean.indexOf(" - ");
+      if (colonIndex > 0 && dashIndex > colonIndex) {
+        value = clean.substring(0, colonIndex).trim().replace(/\*\*/g, "");
+        label = clean.substring(colonIndex + 1, dashIndex).trim();
+        text = clean.substring(dashIndex + 3).trim();
+      } else if (dashIndex > 0 && colonIndex > dashIndex) {
+        value = clean.substring(0, dashIndex).trim().replace(/\*\*/g, "");
+        label = clean.substring(dashIndex + 3, colonIndex).trim();
+        text = clean.substring(colonIndex + 1).trim();
+      } else if (colonIndex > 0) {
+        value = clean.substring(0, colonIndex).trim().replace(/\*\*/g, "");
+        label = "";
+        text = clean.substring(colonIndex + 1).trim();
+      }
+    }
+    
+    if (value) {
+      metrics.push({ value, label, text });
+    }
+  }
+  
+  if (metrics.length === 0 && lines.length >= 3) {
+    for (let i = 0; i + 2 < lines.length; i += 3) {
+      metrics.push({
+        value: lines[i].replace(/\*\*/g, "").trim(),
+        label: lines[i+1].trim(),
+        text: lines[i+2].trim()
+      });
+    }
+  }
+  
+  return metrics;
 }
 
 function getSlidePoints(slide: Slide): SlidePoint[] {
@@ -179,6 +247,185 @@ function drawSlidePointsToCanvas(
 
 // ─── Canvas Helper Drawing Functions ────────────────────────────────────────
 
+function renderHighlightedText(text: string, accentColor: string) {
+  if (!text) return "";
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      const clean = part.slice(2, -2);
+      return <span key={i} style={{ color: accentColor }}>{clean}</span>;
+    }
+    return part;
+  });
+}
+
+function drawTitleWithHighlights(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  baseColor: string,
+  accentColor: string
+) {
+  const words = text.split(/\s+/);
+  const lines: Array<Array<{ word: string; isAccent: boolean }>> = [];
+  let currentLine: Array<{ word: string; isAccent: boolean }> = [];
+  let currentLineWidth = 0;
+  
+  for (let i = 0; i < words.length; i++) {
+    const rawWord = words[i];
+    if (!rawWord) continue;
+    
+    const isAccent = rawWord.includes("**");
+    const cleanWord = rawWord.replace(/\*\*/g, "");
+    
+    const spaceWidth = currentLine.length > 0 ? ctx.measureText(" ").width : 0;
+    const wordWidth = ctx.measureText(cleanWord).width;
+    
+    if (currentLineWidth + spaceWidth + wordWidth > maxWidth && currentLine.length > 0) {
+      lines.push(currentLine);
+      currentLine = [{ word: cleanWord, isAccent }];
+      currentLineWidth = wordWidth;
+    } else {
+      currentLine.push({ word: cleanWord, isAccent });
+      currentLineWidth += spaceWidth + wordWidth;
+    }
+  }
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+  
+  let currentY = y;
+  for (const line of lines) {
+    let currentX = x;
+    for (let j = 0; j < line.length; j++) {
+      const item = line[j];
+      ctx.fillStyle = item.isAccent ? accentColor : baseColor;
+      ctx.fillText(item.word, currentX, currentY);
+      
+      const wordWidth = ctx.measureText(item.word).width;
+      const spaceWidth = ctx.measureText(" ").width;
+      currentX += wordWidth + spaceWidth;
+    }
+    currentY += lineHeight;
+  }
+  return currentY;
+}
+
+function drawSlideBadgeToCanvas(
+  ctx: CanvasRenderingContext2D,
+  badge: string,
+  x: number,
+  y: number,
+  accentColor: string
+) {
+  ctx.save();
+  ctx.font = "bold 20px system-ui, sans-serif";
+  const badgeText = badge.toUpperCase();
+  const textWidth = ctx.measureText(badgeText).width;
+  
+  const px = 14;
+  const rectX = x;
+  const rectY = y - 22;
+  const rectW = textWidth + px * 2;
+  const rectH = 34;
+  
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 1.5;
+  drawRoundedRect(ctx, rectX, rectY, rectW, rectH, 6);
+  ctx.stroke();
+  
+  ctx.fillStyle = accentColor;
+  ctx.fillText(badgeText, rectX + px, y + 2);
+  ctx.restore();
+  return rectW;
+}
+
+function drawSlideMetricsToCanvas(
+  ctx: CanvasRenderingContext2D,
+  metrics: SlideMetric[],
+  subtitle: string | undefined,
+  body: string | undefined,
+  footer: string | undefined,
+  startY: number,
+  width: number,
+  accentColor: string,
+  templateId: string,
+  isDark: boolean
+) {
+  let currentY = startY;
+  
+  // 1. Subtitle Tagline
+  if (subtitle) {
+    ctx.save();
+    const paddingLeft = templateId === "minimal_clean" ? 100 : 130;
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(paddingLeft - 20, currentY - 20, 4, 32);
+    
+    ctx.fillStyle = isDark ? "#A1A1AA" : "#4B5563";
+    ctx.font = templateId === "minimal_clean" ? "italic 28px Georgia, serif" : "italic 28px system-ui, sans-serif";
+    currentY = wrapText(ctx, `"${subtitle}"`, paddingLeft, currentY, width - 40, 38) + 30;
+    ctx.restore();
+  }
+  
+  // 2. Body description
+  if (body) {
+    ctx.save();
+    const paddingLeft = templateId === "minimal_clean" ? 100 : 130;
+    ctx.fillStyle = isDark ? "#D1D5DB" : "#4B5563";
+    ctx.font = templateId === "minimal_clean" ? "normal 24px Georgia, serif" : "normal 24px system-ui, sans-serif";
+    currentY = wrapText(ctx, body, paddingLeft, currentY, width - 40, 34) + 20;
+    ctx.restore();
+  }
+  
+  // 3. Metrics Cards
+  const maxMetricsY = footer ? 920 : 980;
+  const availableSpace = maxMetricsY - currentY;
+  const metricCount = Math.min(metrics.length, 3);
+  const metricSpacing = metricCount > 0 ? Math.min(185, availableSpace / metricCount) : 185;
+  
+  const leftPadding = templateId === "minimal_clean" ? 100 : 130;
+  const contentWidth = width - (leftPadding - 80) - 20;
+  const centerX = leftPadding + contentWidth / 2;
+  
+  for (let i = 0; i < metricCount; i++) {
+    const m = metrics[i];
+    const mY = currentY + i * metricSpacing;
+    
+    ctx.save();
+    ctx.textAlign = "center";
+    
+    ctx.fillStyle = accentColor;
+    ctx.font = templateId === "minimal_clean" ? "bold 52px Georgia, serif" : "bold 52px system-ui, sans-serif";
+    ctx.fillText(m.value, centerX, mY + 45);
+    
+    let labelY = mY + 80;
+    if (m.label) {
+      ctx.fillStyle = isDark ? "#FFFFFF" : "#18181B";
+      ctx.font = templateId === "minimal_clean" ? "bold 26px Georgia, serif" : "bold 26px system-ui, sans-serif";
+      ctx.fillText(m.label, centerX, labelY);
+      labelY += 32;
+    }
+    
+    ctx.fillStyle = isDark ? "#9CA3AF" : "#4B5563";
+    ctx.font = templateId === "minimal_clean" ? "normal 22px Georgia, serif" : "normal 22px system-ui, sans-serif";
+    wrapText(ctx, m.text, centerX, labelY, contentWidth, 28);
+    
+    if (i < metricCount - 1) {
+      ctx.strokeStyle = isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(centerX - 100, mY + metricSpacing - 10);
+      ctx.lineTo(centerX + 100, mY + metricSpacing - 10);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+}
+
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -241,6 +488,8 @@ function drawSlideToCanvas(
   const isCta = slide.type === "cta";
   const isContent = !isCover && !isCta;
   const points = isContent ? getSlidePoints(slide) : [];
+  const metrics = isContent ? getSlideMetrics(slide) : [];
+  const layout = slide.layout || (metrics.length > 0 ? "metrics" : points.length > 0 ? "points" : "paragraph");
 
   if (templateId === "bold_impact") {
     // Background
@@ -257,20 +506,43 @@ function drawSlideToCanvas(
     ctx.fillStyle = accentColor;
     ctx.fillRect(0, 0, 1080, 20);
 
-    // Slide counter
+    // Slide header (Badge & Counter)
     ctx.fillStyle = accentColor;
     ctx.font = "bold 24px system-ui, sans-serif";
-    ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 100);
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 80, 110, accentColor);
+      ctx.save();
+      ctx.textAlign = "right";
+      ctx.fillText(`${slideIndex + 1} / ${totalSlides}`, 1000, 110);
+      ctx.restore();
+    } else {
+      ctx.fillText(isCover ? "● ● ● ● ●" : `${slideIndex + 1} / ${totalSlides}`, 80, 110);
+    }
 
-    // Title & Body/Points
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "black 56px system-ui, sans-serif";
-    if (isContent && points.length > 0) {
-      const titleNextY = wrapText(ctx, slide.title, 80, 160, 920, 75);
-      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "bold_impact", true);
+    // Title & Body/Content
+    if (isContent) {
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 80, 180, 920, 75, "#FFFFFF", accentColor);
+      if (layout === "metrics") {
+        drawSlideMetricsToCanvas(ctx, metrics, slide.subtitle, slide.body, slide.footer, titleNextY + 30, 920, accentColor, "bold_impact", true);
+      } else if (layout === "points") {
+        drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "bold_impact", true);
+      } else {
+        ctx.save();
+        if (slide.subtitle) {
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(60, titleNextY + 10, 4, 32);
+          ctx.fillStyle = "#A1A1AA";
+          ctx.font = "italic 28px system-ui, sans-serif";
+          titleNextY = wrapText(ctx, `"${slide.subtitle}"`, 80, titleNextY + 30, 920, 38) + 30;
+        }
+        ctx.fillStyle = "#A1A1AA";
+        ctx.font = "normal 32px system-ui, sans-serif";
+        wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+        ctx.restore();
+      }
     } else {
       const titleY = isCover ? 450 : 350;
-      const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+      const titleNextY = drawTitleWithHighlights(ctx, slide.title, 80, titleY, 920, 75, "#FFFFFF", accentColor);
       ctx.fillStyle = "#A1A1AA";
       ctx.font = "normal 32px system-ui, sans-serif";
       wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
@@ -314,20 +586,43 @@ function drawSlideToCanvas(
     ctx.fillStyle = accentColor;
     ctx.fillRect(0, 0, 20, 1080);
 
-    // Slide counter
+    // Slide header
     ctx.fillStyle = "#A1A1AA";
     ctx.font = "bold 28px Georgia, serif";
-    ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 100, 120, accentColor);
+      ctx.save();
+      ctx.textAlign = "right";
+      ctx.fillText(`0${slideIndex + 1}`, 980, 120);
+      ctx.restore();
+    } else {
+      ctx.fillText(isCover ? "Swipe →" : `0${slideIndex + 1}`, 100, 120);
+    }
 
-    // Title & Body/Points
-    ctx.fillStyle = accentColor;
-    ctx.font = "bold 56px Georgia, serif";
-    if (isContent && points.length > 0) {
-      const titleNextY = wrapText(ctx, slide.title, 100, 160, 880, 75);
-      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 880, accentColor, "minimal_clean", false);
+    // Title & Content
+    if (isContent) {
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 100, 180, 880, 75, "#18181B", accentColor);
+      if (layout === "metrics") {
+        drawSlideMetricsToCanvas(ctx, metrics, slide.subtitle, slide.body, slide.footer, titleNextY + 30, 880, accentColor, "minimal_clean", false);
+      } else if (layout === "points") {
+        drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 880, accentColor, "minimal_clean", false);
+      } else {
+        ctx.save();
+        if (slide.subtitle) {
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(80, titleNextY + 10, 4, 32);
+          ctx.fillStyle = "#4B5563";
+          ctx.font = "italic 28px Georgia, serif";
+          titleNextY = wrapText(ctx, `"${slide.subtitle}"`, 100, titleNextY + 30, 880, 38) + 30;
+        }
+        ctx.fillStyle = "#3F3F46";
+        ctx.font = "normal 32px Georgia, serif";
+        wrapText(ctx, slide.body, 100, titleNextY + 70, 880, 50);
+        ctx.restore();
+      }
     } else {
       const titleY = isCover ? 480 : 380;
-      const titleNextY = wrapText(ctx, slide.title, 100, titleY, 880, 75);
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 100, titleY, 880, 75, "#18181B", accentColor);
       ctx.fillStyle = accentColor;
       ctx.fillRect(100, titleNextY + 15, 120, 6);
       ctx.fillStyle = "#3F3F46";
@@ -365,31 +660,57 @@ function drawSlideToCanvas(
       ctx.fill();
     }
 
-    // Slide counter (rounded pill)
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
-    drawRoundedRect(ctx, 80, 80, 160, 50, 25);
-    ctx.fill();
+    // Slide header
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 80, 105, "#FFFFFF");
+      ctx.save();
+      ctx.fillStyle = "rgba(255,255,255,0.2)";
+      drawRoundedRect(ctx, 840, 80, 160, 50, 25);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${slideIndex + 1} / ${totalSlides}`, 920, 112);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,0.2)";
+      drawRoundedRect(ctx, 80, 80, 160, 50, 25);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
+    }
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 22px system-ui, sans-serif";
-    ctx.fillText(isCover ? "New Post" : `${slideIndex + 1} / ${totalSlides}`, 115, 112);
-
-    // Title & Body/Points
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "black 56px system-ui, sans-serif";
-    if (isContent && points.length > 0) {
-      const titleNextY = wrapText(ctx, slide.title, 80, 160, 920, 75);
-      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "gradient_flow", true);
+    // Title & Content
+    if (isContent) {
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 80, 180, 920, 75, "#FFFFFF", accentColor);
+      if (layout === "metrics") {
+        drawSlideMetricsToCanvas(ctx, metrics, slide.subtitle, slide.body, slide.footer, titleNextY + 30, 920, accentColor, "gradient_flow", true);
+      } else if (layout === "points") {
+        drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 920, accentColor, "gradient_flow", true);
+      } else {
+        ctx.save();
+        if (slide.subtitle) {
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(60, titleNextY + 10, 4, 32);
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.font = "italic 28px system-ui, sans-serif";
+          titleNextY = wrapText(ctx, `"${slide.subtitle}"`, 80, titleNextY + 30, 920, 38) + 30;
+        }
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "normal 32px system-ui, sans-serif";
+        wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
+        ctx.restore();
+      }
     } else {
       const titleY = isCover ? 480 : 380;
-      const titleNextY = wrapText(ctx, slide.title, 80, titleY, 920, 75);
+      const titleNextY = drawTitleWithHighlights(ctx, slide.title, 80, titleY, 920, 75, "#FFFFFF", accentColor);
       ctx.fillStyle = "rgba(255,255,255,0.85)";
       ctx.font = "normal 32px system-ui, sans-serif";
       wrapText(ctx, slide.body, 80, titleNextY + 30, 920, 48);
     }
 
     if (isCover) {
-      // Draw page dots
       for (let d = 0; d < totalSlides; d++) {
         ctx.fillStyle = d === 0 ? "#FFFFFF" : "rgba(255,255,255,0.4)";
         ctx.beginPath();
@@ -398,14 +719,13 @@ function drawSlideToCanvas(
       }
     }
   } else if (templateId === "split_pro") {
-    // Left panel (accent background)
+    // Left panel
     if (bgImgElement) {
       ctx.drawImage(bgImgElement, 0, 0, 1080, 1080);
       ctx.fillStyle = accentColor;
       ctx.globalAlpha = 0.8;
       ctx.fillRect(0, 0, 432, 1080);
       ctx.globalAlpha = 1.0;
-      // Right panel overlay
       ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
       ctx.fillRect(432, 0, 648, 1080);
     } else {
@@ -424,29 +744,56 @@ function drawSlideToCanvas(
     ctx.font = "normal 28px system-ui, sans-serif";
     ctx.fillText(`${totalSlides} slides`, 80, 980);
 
-    // Right panel content
+    // Right panel header
     ctx.fillStyle = accentColor;
-    drawRoundedRect(ctx, 500, 80, 150, 48, 24);
-    ctx.fill();
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 500, 105, accentColor);
+      ctx.save();
+      drawRoundedRect(ctx, 850, 80, 150, 48, 24);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 20px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${slideIndex + 1}/${totalSlides}`, 925, 111);
+      ctx.restore();
+    } else {
+      drawRoundedRect(ctx, 500, 80, 150, 48, 24);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 20px system-ui, sans-serif";
+      ctx.fillText(isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`, 530, 111);
+    }
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px system-ui, sans-serif";
-    ctx.fillText(isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`, 530, 111);
-
-    ctx.fillStyle = "#18181B";
-    ctx.font = "black 50px system-ui, sans-serif";
-    if (isContent && points.length > 0) {
-      const titleNextY = wrapText(ctx, slide.title, 500, 160, 500, 70);
-      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 500, accentColor, "split_pro", false);
+    // Right panel Title & Content
+    if (isContent) {
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 500, 180, 500, 70, "#18181B", accentColor);
+      if (layout === "metrics") {
+        drawSlideMetricsToCanvas(ctx, metrics, slide.subtitle, slide.body, slide.footer, titleNextY + 30, 500, accentColor, "split_pro", false);
+      } else if (layout === "points") {
+        drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 500, accentColor, "split_pro", false);
+      } else {
+        ctx.save();
+        if (slide.subtitle) {
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(480, titleNextY + 10, 4, 32);
+          ctx.fillStyle = "#4B5563";
+          ctx.font = "italic 28px system-ui, sans-serif";
+          titleNextY = wrapText(ctx, `"${slide.subtitle}"`, 500, titleNextY + 30, 500, 38) + 30;
+        }
+        ctx.fillStyle = "#71717A";
+        ctx.font = "normal 30px system-ui, sans-serif";
+        wrapText(ctx, slide.body, 500, titleNextY + 30, 500, 46);
+        ctx.restore();
+      }
     } else {
       const titleY = isCover ? 480 : 380;
-      const titleNextY = wrapText(ctx, slide.title, 500, titleY, 500, 70);
+      const titleNextY = drawTitleWithHighlights(ctx, slide.title, 500, titleY, 500, 70, "#18181B", accentColor);
       ctx.fillStyle = "#71717A";
       ctx.font = "normal 30px system-ui, sans-serif";
       wrapText(ctx, slide.body, 500, titleNextY + 30, 500, 46);
     }
 
-    // Page indicators bottom right
+    // Page indicators
     const dotCount = Math.min(totalSlides, 5);
     for (let d = 0; d < dotCount; d++) {
       ctx.fillStyle = d === slideIndex ? accentColor : "#E4E4E7";
@@ -490,24 +837,51 @@ function drawSlideToCanvas(
     ctx.fill();
     ctx.stroke();
 
-    // Counter pill
-    ctx.fillStyle = accentColor;
-    drawRoundedRect(ctx, 120, 120, 160, 50, 25);
-    ctx.fill();
+    // Slide header
+    if (isContent && slide.badge) {
+      drawSlideBadgeToCanvas(ctx, slide.badge, 130, 145, accentColor);
+      ctx.save();
+      ctx.fillStyle = accentColor;
+      drawRoundedRect(ctx, 780, 120, 160, 50, 25);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${slideIndex + 1} / ${totalSlides}`, 860, 152);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = accentColor;
+      drawRoundedRect(ctx, 120, 120, 160, 50, 25);
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
+    }
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 22px system-ui, sans-serif";
-    ctx.fillText(isCover ? "New" : `${slideIndex + 1} of ${totalSlides}`, 155, 152);
-
-    // Title & Body/Points
-    ctx.fillStyle = accentColor;
-    ctx.font = "black 56px system-ui, sans-serif";
-    if (isContent && points.length > 0) {
-      const titleNextY = wrapText(ctx, slide.title, 130, 180, 820, 75);
-      drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 820, accentColor, "frosted_card", true);
+    // Title & Content
+    if (isContent) {
+      let titleNextY = drawTitleWithHighlights(ctx, slide.title, 130, 210, 820, 75, "#FFFFFF", accentColor);
+      if (layout === "metrics") {
+        drawSlideMetricsToCanvas(ctx, metrics, slide.subtitle, slide.body, slide.footer, titleNextY + 30, 820, accentColor, "frosted_card", true);
+      } else if (layout === "points") {
+        drawSlidePointsToCanvas(ctx, points, slide.subtitle, slide.footer, titleNextY + 30, 820, accentColor, "frosted_card", true);
+      } else {
+        ctx.save();
+        if (slide.subtitle) {
+          ctx.fillStyle = accentColor;
+          ctx.fillRect(110, titleNextY + 10, 4, 32);
+          ctx.fillStyle = "#E2E8F0";
+          ctx.font = "italic 28px system-ui, sans-serif";
+          titleNextY = wrapText(ctx, `"${slide.subtitle}"`, 130, titleNextY + 30, 820, 38) + 30;
+        }
+        ctx.fillStyle = "#E2E8F0";
+        ctx.font = "normal 32px system-ui, sans-serif";
+        wrapText(ctx, slide.body, 130, titleNextY + 30, 820, 48);
+        ctx.restore();
+      }
     } else {
       const titleY = isCover ? 480 : 380;
-      const titleNextY = wrapText(ctx, slide.title, 130, titleY, 820, 75);
+      const titleNextY = drawTitleWithHighlights(ctx, slide.title, 130, titleY, 820, 75, "#FFFFFF", accentColor);
       ctx.fillStyle = "#E2E8F0";
       ctx.font = "normal 32px system-ui, sans-serif";
       wrapText(ctx, slide.body, 130, titleNextY + 30, 820, 48);
@@ -601,95 +975,150 @@ function SlidePointsRenderer({
 }) {
   const isContent = slide.type !== "cover" && slide.type !== "cta";
   const points = isContent ? getSlidePoints(slide) : [];
+  const metrics = isContent ? getSlideMetrics(slide) : [];
+  const layout = slide.layout || (metrics.length > 0 ? "metrics" : points.length > 0 ? "points" : "paragraph");
 
-  if (points.length === 0) {
+  if (!isContent) {
+    return null;
+  }
+
+  const renderSubtitle = () => {
+    if (!slide.subtitle) return null;
     return (
-      <p className={`leading-relaxed ${
-        templateId === "minimal_clean" ? "text-zinc-600" :
-        templateId === "gradient_flow" ? "text-white/80" :
-        templateId === "split_pro" ? "text-zinc-500" :
-        templateId === "frosted_card" ? "text-slate-300" : "text-zinc-400"
-      } ${compact ? "text-[10px]" : "text-sm"}`}>
-        {slide.body}
-      </p>
+      <div className="flex items-stretch gap-2 mb-2 mt-1">
+        <div className="w-0.5 rounded-full flex-shrink-0" style={{ background: accentColor }} />
+        <p className={`italic font-medium ${compact ? "text-[9px]" : "text-xs"} ${
+          isDark ? "text-zinc-300" : "text-zinc-500"
+        }`}>
+          "{slide.subtitle}"
+        </p>
+      </div>
+    );
+  };
+
+  const renderFooter = () => {
+    if (!slide.footer) return null;
+    return (
+      <div className={`flex items-center gap-2 rounded-lg border p-2 mt-auto ${
+        isDark 
+          ? "border-green-500/20 bg-green-500/10 text-zinc-300" 
+          : "border-green-200 bg-green-50/50 text-stone-700"
+      } ${compact ? "text-[8px] py-1" : "text-xs"}`}>
+        <span className="text-green-500 font-bold flex-shrink-0">✓</span>
+        <p className="flex-1 truncate font-medium">{slide.footer}</p>
+      </div>
+    );
+  };
+
+  if (layout === "metrics" && metrics.length > 0) {
+    return (
+      <div className="flex-1 flex flex-col justify-between">
+        <div>
+          {renderSubtitle()}
+          {slide.body && (
+            <p className={`leading-relaxed ${compact ? "text-[8px] mb-2" : "text-xs mb-3"} ${
+              isDark ? "text-zinc-400" : "text-zinc-600"
+            }`}>
+              {slide.body}
+            </p>
+          )}
+          <div className={`flex flex-col ${compact ? "gap-1 my-1" : "gap-3 my-3"}`}>
+            {metrics.map((m, i) => (
+              <div key={i} className="flex flex-col items-center text-center">
+                <div className={`font-black ${compact ? "text-sm" : "text-2xl"}`} style={{ color: accentColor }}>
+                  {m.value}
+                </div>
+                {m.label && (
+                  <div className={`font-bold leading-tight ${compact ? "text-[8px]" : "text-[11px]"} ${isDark ? "text-white" : "text-zinc-855"}`}>
+                    {m.label}
+                  </div>
+                )}
+                <p className={`leading-normal ${compact ? "text-[7.5px]" : "text-[10px]"} ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+                  {m.text}
+                </p>
+                {i < metrics.length - 1 && (
+                  <div className="w-1/3 my-0.5 border-b opacity-25" style={{ borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)" }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        {renderFooter()}
+      </div>
+    );
+  }
+
+  if (layout === "points" && points.length > 0) {
+    return (
+      <div className="flex-1 flex flex-col justify-between">
+        <div>
+          {renderSubtitle()}
+          <div className={`flex flex-col ${compact ? "gap-1 my-1" : "gap-3 my-3"}`}>
+            {points.map((pt, i) => {
+              if (templateId === "minimal_clean") {
+                return (
+                  <div key={i} className={`border-t border-stone-200 ${compact ? "pt-1" : "pt-2"} relative pl-7`}>
+                    <div className="absolute left-0 top-2 font-mono text-[9px] font-bold text-stone-400">
+                      0{i+1}
+                    </div>
+                    <h4 className={`font-bold text-stone-900 leading-snug ${compact ? "text-[9px]" : "text-xs"}`}>
+                      {pt.title}
+                    </h4>
+                    <p className={`text-stone-600 leading-normal ${compact ? "text-[8px]" : "text-[11px]"}`}>
+                      {pt.text}
+                    </p>
+                  </div>
+                );
+              }
+              
+              return (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 rounded-lg p-2 relative pl-8 border ${
+                    isDark 
+                      ? "bg-white/[0.03] border-white/5" 
+                      : "bg-black/[0.02] border-black/5"
+                  }`}
+                >
+                  <div className="absolute left-2.5 top-2.5 font-mono text-[9px] font-semibold opacity-60" style={{ color: accentColor }}>
+                    0{i+1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`font-bold leading-snug ${compact ? "text-[9px]" : "text-xs"} ${
+                      isDark ? "text-white" : "text-zinc-900"
+                    }`}>
+                      {pt.title}
+                    </h4>
+                    <p className={`leading-normal ${compact ? "text-[8px]" : "text-[11px]"} ${
+                      isDark ? "text-zinc-400" : "text-zinc-500"
+                    }`}>
+                      {pt.text}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {renderFooter()}
+      </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-between">
+    <div className="flex-1 flex flex-col justify-between h-full">
       <div>
-        {/* Tagline / Subtitle */}
-        {slide.subtitle && (
-          <div className="flex items-stretch gap-2 mb-2 mt-1">
-            <div className="w-0.5 rounded-full flex-shrink-0" style={{ background: accentColor }} />
-            <p className={`italic font-medium ${compact ? "text-[9px]" : "text-xs"} ${
-              isDark ? "text-zinc-300" : "text-zinc-500"
-            }`}>
-              "{slide.subtitle}"
-            </p>
-          </div>
-        )}
-
-        {/* 3 Points */}
-        <div className={`flex flex-col ${compact ? "gap-1 my-1" : "gap-3 my-3"}`}>
-          {points.map((pt, i) => {
-            if (templateId === "minimal_clean") {
-              return (
-                <div key={i} className={`border-t border-stone-200 ${compact ? "pt-1" : "pt-2"} relative pl-7`}>
-                  <div className="absolute left-0 top-2 font-mono text-[9px] font-bold text-stone-400">
-                    0{i+1}
-                  </div>
-                  <h4 className={`font-bold text-stone-900 leading-snug ${compact ? "text-[9px]" : "text-xs"}`}>
-                    {pt.title}
-                  </h4>
-                  <p className={`text-stone-600 leading-normal ${compact ? "text-[8px]" : "text-[11px]"}`}>
-                    {pt.text}
-                  </p>
-                </div>
-              );
-            }
-            
-            return (
-              <div
-                key={i}
-                className={`flex items-start gap-3 rounded-lg p-2 relative pl-8 border ${
-                  isDark 
-                    ? "bg-white/[0.03] border-white/5" 
-                    : "bg-black/[0.02] border-black/5"
-                }`}
-              >
-                <div className="absolute left-2.5 top-2.5 font-mono text-[9px] font-semibold opacity-60" style={{ color: accentColor }}>
-                  0{i+1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className={`font-bold leading-snug ${compact ? "text-[9px]" : "text-xs"} ${
-                    isDark ? "text-white" : "text-zinc-900"
-                  }`}>
-                    {pt.title}
-                  </h4>
-                  <p className={`leading-normal ${compact ? "text-[8px]" : "text-[11px]"} ${
-                    isDark ? "text-zinc-400" : "text-zinc-500"
-                  }`}>
-                    {pt.text}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {renderSubtitle()}
+        <p className={`leading-relaxed ${
+          templateId === "minimal_clean" ? "text-zinc-700" :
+          templateId === "gradient_flow" ? "text-white/90" :
+          templateId === "split_pro" ? "text-zinc-650" :
+          templateId === "frosted_card" ? "text-slate-200" : "text-zinc-350"
+        } ${compact ? "text-[9px] mt-1" : "text-sm mt-3"}`}>
+          {slide.body}
+        </p>
       </div>
-
-      {/* Footer Callout Banner */}
-      {slide.footer && (
-        <div className={`flex items-center gap-2 rounded-lg border p-2 mt-auto ${
-          isDark 
-            ? "border-green-500/20 bg-green-500/10 text-zinc-300" 
-            : "border-green-200 bg-green-50/50 text-stone-700"
-        } ${compact ? "text-[8px] py-1" : "text-xs"}`}>
-          <span className="text-green-500 font-bold flex-shrink-0">✓</span>
-          <p className="flex-1 truncate font-medium">{slide.footer}</p>
-        </div>
-      )}
+      {renderFooter()}
     </div>
   );
 }
@@ -723,6 +1152,7 @@ function SlideCanvasComponent({
 }) {
   const isCover = slide.type === "cover";
   const isCta = slide.type === "cta";
+  const isContent = !isCover && !isCta;
   const padding = compact ? "p-4" : "p-7";
 
   const getGradientStyle = () => {
@@ -741,6 +1171,13 @@ function SlideCanvasComponent({
         {backgroundImage && <div className="absolute inset-0 bg-black/45 z-0" />}
         <div className="absolute top-0 left-0 right-0 h-1 z-10" style={{ background: accentColor }} />
         <div className="relative z-10 flex justify-between items-center mb-auto">
+          {isContent && slide.badge ? (
+            <div className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide`} style={{ color: accentColor, borderColor: `${accentColor}50` }}>
+              {slide.badge}
+            </div>
+          ) : (
+            <div />
+          )}
           <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold uppercase tracking-widest`} style={{ color: accentColor }}>
             {isCover ? "●●●●●" : `${slideIndex + 1} / ${totalSlides}`}
           </div>
@@ -750,7 +1187,7 @@ function SlideCanvasComponent({
             className={`font-black leading-tight text-white ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}
             style={{ textShadow: `0 0 30px ${accentColor}40` }}
           >
-            {slide.title}
+            {renderHighlightedText(slide.title, accentColor)}
           </h2>
           <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
           {showAuthor && (
@@ -774,6 +1211,13 @@ function SlideCanvasComponent({
         <div className="absolute left-0 top-0 bottom-0 w-1 z-10" style={{ background: accentColor }} />
         <div className={`relative z-10 ${compact ? "ml-3" : "ml-5"} flex flex-col h-full`}>
           <div className="flex justify-between items-start">
+            {isContent && slide.badge ? (
+              <div className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-wide`} style={{ color: accentColor, borderColor: `${accentColor}50` }}>
+                {slide.badge}
+              </div>
+            ) : (
+              <div />
+            )}
             <div className={`font-mono ${compact ? "text-[8px]" : "text-xs"} text-zinc-400 uppercase tracking-widest`}>
               {isCover ? "Swipe →" : `0${slideIndex + 1}`}
             </div>
@@ -781,9 +1225,9 @@ function SlideCanvasComponent({
           <div className="mt-auto flex-1 flex flex-col justify-end">
             <h2
               className={`font-bold leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-4"}`}
-              style={{ color: accentColor, fontFamily: "Georgia, serif" }}
+              style={{ color: "#18181B", fontFamily: "Georgia, serif" }}
             >
-              {slide.title}
+              {renderHighlightedText(slide.title, accentColor)}
             </h2>
             <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={false} />
           </div>
@@ -813,6 +1257,13 @@ function SlideCanvasComponent({
         )}
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex justify-between items-start">
+            {isContent && slide.badge ? (
+              <div className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide text-white border-white/30`}>
+                {slide.badge}
+              </div>
+            ) : (
+              <div />
+            )}
             <div
               className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold text-white`}
               style={{ background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)" }}
@@ -822,7 +1273,7 @@ function SlideCanvasComponent({
           </div>
           <div className="mt-auto flex-1 flex flex-col justify-end">
             <h2 className={`font-black text-white leading-tight ${compact ? "text-sm mb-1" : "text-2xl mb-3"}`}>
-              {slide.title}
+              {renderHighlightedText(slide.title, accentColor)}
             </h2>
             <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
           </div>
@@ -860,15 +1311,24 @@ function SlideCanvasComponent({
           className={`relative z-10 flex-1 flex flex-col justify-between ${compact ? "p-3" : "p-6"}`}
           style={{ background: backgroundImage ? "rgba(255,255,255,0.85)" : undefined }}
         >
-          <div
-            className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold w-fit`}
-            style={{ background: `${accentColor}18`, color: accentColor }}
-          >
-            {isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`}
+          <div className="flex justify-between items-start">
+            {isContent && slide.badge ? (
+              <div className={`px-2 py-0.5 rounded border text-[8px] font-bold uppercase tracking-wide`} style={{ color: accentColor, borderColor: `${accentColor}50` }}>
+                {slide.badge}
+              </div>
+            ) : (
+              <div />
+            )}
+            <div
+              className={`${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} rounded-full font-bold w-fit`}
+              style={{ background: `${accentColor}18`, color: accentColor }}
+            >
+              {isCover ? "Swipe →" : isCta ? "Follow" : `Step ${slideIndex}`}
+            </div>
           </div>
           <div className="flex-1 flex flex-col justify-center my-2">
             <h2 className={`font-black leading-tight text-zinc-900 ${compact ? "text-[11px] mb-1" : "text-xl mb-3"}`}>
-              {slide.title}
+              {renderHighlightedText(slide.title, accentColor)}
             </h2>
             <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={false} />
           </div>
@@ -923,6 +1383,13 @@ function SlideCanvasComponent({
         }}
       >
         <div className="flex justify-between items-start">
+          {isContent && slide.badge ? (
+            <div className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide text-white border-white/20`}>
+              {slide.badge}
+            </div>
+          ) : (
+            <div />
+          )}
           <div
             className={`rounded-full ${compact ? "text-[8px] px-2 py-0.5" : "text-xs px-3 py-1"} font-bold`}
             style={{ background: accentColor, color: "#fff" }}
@@ -933,9 +1400,9 @@ function SlideCanvasComponent({
         <div className="mt-auto flex-1 flex flex-col justify-end">
           <h2
             className={`font-black leading-tight ${compact ? "text-sm mb-1" : "text-xl mb-3"}`}
-            style={{ color: accentColor }}
+            style={{ color: "#FFFFFF" }}
           >
-            {slide.title}
+            {renderHighlightedText(slide.title, accentColor)}
           </h2>
           <SlidePointsRenderer slide={slide} accentColor={accentColor} templateId={templateId} compact={compact} isDark={true} />
           {showAuthor && (
@@ -945,6 +1412,107 @@ function SlideCanvasComponent({
       </div>
     </div>
   );
+}
+
+// Custom Markdown-to-HTML parser for long-form LinkedIn Articles
+function renderMarkdownToHtml(text: string) {
+  if (!text) return "";
+  
+  return text
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("# ")) {
+        return `<h1 class="text-xl font-black text-zinc-900 dark:text-white mt-4 mb-2">${trimmed.substring(2)}</h1>`;
+      }
+      if (trimmed.startsWith("## ")) {
+        return `<h2 class="text-lg font-extrabold text-zinc-800 dark:text-zinc-100 mt-4 mb-2">${trimmed.substring(3)}</h2>`;
+      }
+      if (trimmed.startsWith("### ")) {
+        return `<h3 class="text-base font-bold text-zinc-800 dark:text-zinc-200 mt-3 mb-1.5">${trimmed.substring(4)}</h3>`;
+      }
+      if (trimmed.startsWith("> ")) {
+        return `<blockquote class="border-l-4 border-zinc-300 dark:border-zinc-700 pl-3 italic text-zinc-650 dark:text-zinc-400 my-2">${trimmed.substring(2)}</blockquote>`;
+      }
+      if (trimmed.startsWith("• ") || trimmed.startsWith("- ")) {
+        return `<li class="ml-4 list-disc text-zinc-800 dark:text-zinc-250 my-1">${trimmed.substring(2)}</li>`;
+      }
+      if (trimmed === "") {
+        return `<div class="h-2"></div>`;
+      }
+      
+      let html = trimmed.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-blue-500 underline">$1</a>');
+      
+      return `<p class="my-1.5 leading-relaxed text-zinc-800 dark:text-zinc-250">${html}</p>`;
+    })
+    .join("");
+}
+
+interface ArticleSection {
+  index: number;
+  heading: string;
+  level: number;
+  content: string;
+}
+
+function parseArticleSections(content: string): ArticleSection[] {
+  if (!content) return [];
+  
+  const lines = content.split("\n");
+  const sections: ArticleSection[] = [];
+  let currentSection: ArticleSection | null = null;
+  let sectionIndex = 0;
+  
+  const pushCurrent = () => {
+    if (currentSection) {
+      currentSection.content = currentSection.content.trim();
+      sections.push(currentSection);
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    if (trimmed.startsWith("# ")) {
+      pushCurrent();
+      currentSection = {
+        index: sectionIndex++,
+        heading: trimmed.substring(2),
+        level: 1,
+        content: ""
+      };
+    } else if (trimmed.startsWith("## ")) {
+      pushCurrent();
+      currentSection = {
+        index: sectionIndex++,
+        heading: trimmed.substring(3),
+        level: 2,
+        content: ""
+      };
+    } else if (trimmed.startsWith("### ")) {
+      pushCurrent();
+      currentSection = {
+        index: sectionIndex++,
+        heading: trimmed.substring(4),
+        level: 3,
+        content: ""
+      };
+    } else {
+      if (!currentSection) {
+        currentSection = {
+          index: sectionIndex++,
+          heading: "Introduction",
+          level: 2,
+          content: ""
+        };
+      }
+      currentSection.content += line + "\n";
+    }
+  }
+  pushCurrent();
+  return sections;
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -1008,6 +1576,26 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [accentColor, setAccentColor] = useState("#3B82F6");
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showAuthor, setShowAuthor] = useState(true); // Author branding toggle for carousel slides
+  const [promoPosts, setPromoPosts] = useState<any[]>([]);
+  const [generatingPromo, setGeneratingPromo] = useState(false);
+  const [promoStyleType, setPromoStyleType] = useState<"expert" | "own">("expert");
+  const [selectedPromoStyleId, setSelectedPromoStyleId] = useState("fomo_style");
+
+  const [activeImageSelectSection, setActiveImageSelectSection] = useState<number | null>(null);
+  const [sectionUnsplashQuery, setSectionUnsplashQuery] = useState("");
+  const [sectionUnsplashResults, setSectionUnsplashResults] = useState<any[]>([]);
+  const [searchingSectionUnsplash, setSearchingSectionUnsplash] = useState(false);
+  const [sectionAiPrompt, setSectionAiPrompt] = useState("");
+  const [generatingSectionAi, setGeneratingSectionAi] = useState(false);
+  const [sectionActiveTab, setSectionActiveTab] = useState<Record<number, "search" | "ai" | "upload">>({});
+  const [editingSectionIndex, setEditingSectionIndex] = useState<number | null>(null);
+  const [editingSectionText, setEditingSectionText] = useState("");
+
+  const [regenStyleType, setRegenStyleType] = useState<"expert" | "own">("expert");
+  const [regenStyleId, setRegenStyleId] = useState("");
+  const [activeImageSelectPost, setActiveImageSelectPost] = useState(false);
+  const [expertStyles, setExpertStyles] = useState<any[]>([]);
+  const [customStyles, setCustomStyles] = useState<any[]>([]);
 
   // Voice Recording & Document Upload for Feedback
   const [isRecordingFeedback, setIsRecordingFeedback] = useState(false);
@@ -1153,6 +1741,27 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
   };
 
+  useEffect(() => {
+    async function loadStyles() {
+      try {
+        const expRes = await fetch("/api/style/experts");
+        const expData = await expRes.json();
+        if (expData.success) {
+          setExpertStyles(expData.experts || []);
+        }
+
+        const custRes = await fetch("/api/style/custom");
+        const custData = await custRes.json();
+        if (custData.success) {
+          setCustomStyles(custData.customStyles || []);
+        }
+      } catch (err) {
+        console.error("Failed to load styles:", err);
+      }
+    }
+    loadStyles();
+  }, []);
+
   // Load Data
   useEffect(() => {
     async function loadPostData() {
@@ -1168,6 +1777,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           setImages(data.images || []);
           setVoice(data.voice || null);
           setSeriesPosts(data.series || []);
+          setRegenStyleType(data.post.style_type || "expert");
+          setRegenStyleId(data.post.style_id || "fomo_style");
 
           // Check if post is a carousel
           const cleanContent = rawContent.trim();
@@ -1183,6 +1794,18 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
             } catch (e) {
               console.error("Failed to parse carousel JSON:", e);
             }
+          }
+
+          // Fetch promo posts
+          try {
+            const postsRes = await fetch("/api/posts");
+            const postsData = await postsRes.json();
+            if (postsData.success) {
+              const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
+              setPromoPosts(promos);
+            }
+          } catch (promoErr) {
+            console.error("Failed to fetch promo posts:", promoErr);
           }
         }
 
@@ -1211,6 +1834,331 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
     loadPostData();
   }, [id]);
+
+  // Automatically trigger promotional post generation in the background if none exists yet for the article
+  useEffect(() => {
+    if (post && post.content_type === "article" && post.status !== "published" && promoPosts.length === 0 && !generatingPromo) {
+      const autoGeneratePromo = async () => {
+        setGeneratingPromo(true);
+        try {
+          const res = await fetch("/api/content/generate-promo-post", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              parent_post_id: id,
+              style_type: promoStyleType,
+              style_id: selectedPromoStyleId,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const postsRes = await fetch("/api/posts");
+            const postsData = await postsRes.json();
+            if (postsData.success) {
+              const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
+              setPromoPosts(promos);
+            }
+          }
+        } catch (e) {
+          console.error("Auto promo generation failed:", e);
+        } finally {
+          setGeneratingPromo(false);
+        }
+      };
+      autoGeneratePromo();
+    }
+  }, [post?.id, post?.content_type, post?.status, promoPosts.length]);
+
+  const generatePromoPost = async () => {
+    setGeneratingPromo(true);
+    try {
+      const res = await fetch("/api/content/generate-promo-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parent_post_id: id,
+          style_type: promoStyleType,
+          style_id: selectedPromoStyleId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Promotional post draft generated successfully!");
+        // Reload promo posts
+        const postsRes = await fetch("/api/posts");
+        const postsData = await postsRes.json();
+        if (postsData.success) {
+          const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
+          setPromoPosts(promos);
+        }
+      } else {
+        alert("Failed to generate promotional post: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error generating promo post: " + e.message);
+    } finally {
+      setGeneratingPromo(false);
+    }
+  };
+
+  const handlePublishPromoPost = async (promoId: string) => {
+    try {
+      const pubRes = await fetch(`/api/posts/${promoId}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backend: "waterfall" }),
+      });
+      const pubData = await pubRes.json();
+      
+      if (pubRes.status === 403 && pubData.limit_hit) {
+        alert(`${pubData.title}: ${pubData.body}`);
+      } else if (pubData.success) {
+        alert(`Successfully published promotional post to LinkedIn!`);
+        // Reload promo posts
+        const postsRes = await fetch("/api/posts");
+        const postsData = await postsRes.json();
+        if (postsData.success) {
+          const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
+          setPromoPosts(promos);
+        }
+      } else if (pubData.pending_review) {
+        alert(`Successfully copied promo post draft to clipboard! ${pubData.message}`);
+        navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
+        window.open(pubData.redirect_url || "https://www.linkedin.com/", "_blank");
+        // Reload promo posts
+        const postsRes = await fetch("/api/posts");
+        const postsData = await postsRes.json();
+        if (postsData.success) {
+          const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
+          setPromoPosts(promos);
+        }
+      } else {
+        alert("Publish failed: " + (pubData.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error publishing promo post: " + e.message);
+    }
+  };
+
+  const handleSectionImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, secIndex: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isVideoFile = file.type.startsWith("video/");
+    const maxSize = isVideoFile ? 15 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert(`File is too large. Max ${isVideoFile ? "15MB" : "5MB"} allowed.`);
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      await attachSectionImage(base64Data, "upload", secIndex);
+      setActiveImageSelectSection(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const attachSectionImage = async (url: string, sourceType: string, secIndex: number, promptUsed = "") => {
+    try {
+      const res = await fetch(`/api/posts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_url: url,
+          source_type: sourceType,
+          prompt_used: promptUsed || null,
+          section_index: secIndex === -1 ? null : secIndex
+        }),
+      });
+      if (res.ok) {
+        const postRes = await fetch(`/api/posts/${id}`);
+        if (postRes.ok) {
+          const postData = await postRes.json();
+          setImages(postData.images || []);
+        }
+      } else {
+        alert("Failed to attach image to section");
+      }
+    } catch (err: any) {
+      alert("Error attaching image: " + err.message);
+    }
+  };
+
+  const handleSectionImageSearch = async (secIndex: number, queryStr: string) => {
+    if (!queryStr.trim()) return;
+    setSearchingSectionUnsplash(true);
+    try {
+      const res = await fetch(`/api/images/search?query=${encodeURIComponent(queryStr)}`);
+      const data = await res.json();
+      if (data.success) {
+        setSectionUnsplashResults(data.images || data.results || []);
+      } else {
+        alert("Failed to find images: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error searching images: " + e.message);
+    } finally {
+      setSearchingSectionUnsplash(false);
+    }
+  };
+
+  const handleSectionImageGenerate = async (secIndex: number, promptStr: string) => {
+    if (!promptStr.trim()) return;
+    setGeneratingSectionAi(true);
+    try {
+      const res = await fetch("/api/images/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_id: id,
+          post_content: postContent,
+          prompt: promptStr,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.image) {
+        await attachSectionImage(data.image.url, "ai", secIndex, promptStr);
+        setActiveImageSelectSection(null);
+      } else {
+        alert("Generation failed: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error generating image: " + e.message);
+    } finally {
+      setGeneratingSectionAi(false);
+    }
+  };
+
+  const renderSectionImageSelector = (secIndex: number) => {
+    const activeTab = sectionActiveTab[secIndex] || "search";
+    const setActiveTab = (tab: "search" | "ai" | "upload") => {
+      setSectionActiveTab(prev => ({ ...prev, [secIndex]: tab }));
+    };
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab("search")}
+              className={`text-xs font-bold px-2.5 py-1 rounded-full border-none cursor-pointer ${activeTab === "search" ? "bg-zinc-800 text-cyan-400" : "bg-transparent text-zinc-500"}`}
+            >
+              Unsplash
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("ai");
+                if (!sectionAiPrompt) {
+                  const seed = secIndex === -1 
+                    ? (post?.post_title || postContent?.split("\n")[0]?.substring(0, 60) || "business concept")
+                    : (parseArticleSections(postContent).find(s => s.index === secIndex)?.heading || "SaaS concept");
+                  setSectionAiPrompt(`Professional detailed illustration for: ${seed}`);
+                }
+              }}
+              className={`text-xs font-bold px-2.5 py-1 rounded-full border-none cursor-pointer ${activeTab === "ai" ? "bg-zinc-800 text-cyan-400" : "bg-transparent text-zinc-500"}`}
+            >
+              AI Generate
+            </button>
+            <button
+              onClick={() => setActiveTab("upload")}
+              className={`text-xs font-bold px-2.5 py-1 rounded-full border-none cursor-pointer ${activeTab === "upload" ? "bg-zinc-800 text-cyan-400" : "bg-transparent text-zinc-500"}`}
+            >
+              Upload
+            </button>
+          </div>
+          <button
+            onClick={() => setActiveImageSelectSection(null)}
+            className="text-[10px] font-bold text-zinc-500 hover:text-white bg-transparent border-none cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+
+        {activeTab === "search" && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={sectionUnsplashQuery}
+                onChange={(e) => setSectionUnsplashQuery(e.target.value)}
+                placeholder="Search keywords..."
+                className="flex-1 bg-zinc-900 border border-zinc-850 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-cyan-500"
+              />
+              <button
+                onClick={() => handleSectionImageSearch(secIndex, sectionUnsplashQuery)}
+                disabled={searchingSectionUnsplash}
+                className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 disabled:bg-zinc-850 text-xs font-bold text-white rounded-lg border-none cursor-pointer"
+              >
+                {searchingSectionUnsplash ? "Searching..." : "Search"}
+              </button>
+            </div>
+            
+            {sectionUnsplashResults.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1">
+                {sectionUnsplashResults.map((img) => (
+                  <div
+                    key={img.id}
+                    onClick={() => {
+                      attachSectionImage(img.url, "search", secIndex);
+                      setActiveImageSelectSection(null);
+                      setSectionUnsplashResults([]);
+                    }}
+                    className="relative aspect-video rounded-lg overflow-hidden cursor-pointer border border-zinc-850 hover:border-cyan-500"
+                  >
+                    <img src={img.url} alt="Search result" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "ai" && (
+          <div className="space-y-2">
+            <textarea
+              value={sectionAiPrompt}
+              onChange={(e) => setSectionAiPrompt(e.target.value)}
+              placeholder="Describe the image you want to generate..."
+              className="w-full bg-zinc-900 border border-zinc-850 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-cyan-500 resize-y min-h-[60px]"
+            />
+            <button
+              onClick={() => handleSectionImageGenerate(secIndex, sectionAiPrompt)}
+              disabled={generatingSectionAi}
+              className="w-full py-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 disabled:from-zinc-850 disabled:to-zinc-850 text-xs font-black text-white rounded-lg border-none cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              {generatingSectionAi ? (
+                <>
+                  <div className="w-3 h-3 rounded-full border border-white border-t-transparent animate-spin" />
+                  Generating with AI...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" /> Generate Image
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {activeTab === "upload" && (
+          <div className="space-y-2">
+            <label className="flex flex-col items-center justify-center border border-dashed border-zinc-850 rounded-lg p-4 bg-zinc-950/20 text-center cursor-pointer hover:border-cyan-500/40">
+              <Upload className="w-5 h-5 text-cyan-400 mb-1" />
+              <span className="text-[10px] font-bold text-zinc-300">Choose custom image or video file</span>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => handleSectionImageUpload(e, secIndex)}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (post?.id && post?.status === "published") {
@@ -1460,6 +2408,36 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleConvertToNormal = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/posts/${id}/convert-to-normal`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.post) {
+        setPost(data.post);
+        const rawContent = data.post.post_content || "";
+        setPostContent(rawContent);
+        setIsCarousel(false);
+        setCarouselData(null);
+        
+        // Fetch updated revisions list
+        const revRes = await fetch(`/api/posts/${id}`);
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          setRevisions(revData.revisions || []);
+        }
+      } else {
+        alert("Conversion failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Conversion failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBgImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1599,13 +2577,17 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       let slideBgImgElement: HTMLImageElement | undefined = undefined;
 
       if (slideBgImage) {
-        slideBgImgElement = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error("Failed to load background image"));
-          img.src = slideBgImage;
-        });
+        try {
+          slideBgImgElement = await new Promise<HTMLImageElement>((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null as any);
+            img.src = slideBgImage;
+          });
+        } catch (e) {
+          console.warn("Failed to load background image, drawing without it:", e);
+        }
       }
 
       drawSlideToCanvas(ctx, slide, i, slides.length, selectedTemplate, accentColor, slideBgImgElement);
@@ -1687,9 +2669,17 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           alert(`Successfully published to LinkedIn!`);
           router.push("/dashboard");
         } else if (pubData.pending_review) {
+          if (isCarousel) {
+            try {
+              const doc = await generatePdfDocument();
+              doc.save(`${(carouselData.title || "carousel").toLowerCase().replace(/[^a-z0-9]+/g, "_")}_carousel.pdf`);
+            } catch (err: any) {
+              console.warn("Auto-downloading carousel PDF failed:", err);
+            }
+          }
           alert(`Successfully copied draft to clipboard! ${pubData.message}`);
           navigator.clipboard.writeText(pubData.post_content + "\n\n" + pubData.hashtags.map((h: string) => `#${h}`).join(" "));
-          window.open("https://www.linkedin.com/", "_blank");
+          window.open(pubData.redirect_url || "https://www.linkedin.com/", "_blank");
           router.push("/dashboard");
         } else {
           alert("Publish failed: " + (pubData.error || "Unknown error. Check server logs."));
@@ -1741,7 +2731,9 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         body: JSON.stringify({
           post_id: id,
           feedback: feedback || "Regenerate based on attached document.",
-          document_text: attachedDocText || undefined
+          document_text: attachedDocText || undefined,
+          style_type: regenStyleType,
+          style_id: regenStyleId
         }),
       });
       const data = await res.json();
@@ -1799,7 +2791,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const activeImage = images.find((img) => img.is_selected) || images[0];
+  const activeImage = images.find((img) => img.is_selected && (img.section_index === null || img.section_index === undefined));
   const lastRevision = revisions[0] || {};
 
   return (
@@ -1810,7 +2802,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
           <button onClick={() => router.back()} className="ios-back-btn">
             <ArrowLeft className="w-5 h-5" /> Back
           </button>
-          <span className="font-semibold text-zinc-900 dark:text-white text-base">Approval Package</span>
+          <span className="font-semibold text-zinc-900 dark:text-white text-base">Approval Package {post?.current_revision ? `(v${post.current_revision})` : ""}</span>
           <div className="w-12" />
         </div>
 
@@ -1980,7 +2972,17 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         {isCarousel && carouselData ? (
           /* CAROUSEL PREVIEW VIEW */
           <div className="space-y-6">
-            <div className="ios-section-label">Carousel Preview & Style</div>
+            <div className="ios-section-label flex justify-between items-center px-1 select-none">
+              <span>Carousel Preview & Style</span>
+              {post?.status !== "published" && (
+                <button
+                  onClick={handleConvertToNormal}
+                  className="text-xs text-purple-600 dark:text-purple-400 font-bold hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none"
+                >
+                  📝 Convert to Text Post
+                </button>
+              )}
+            </div>
 
             {/* Canvas Slide Preview */}
             <div className="relative">
@@ -2290,8 +3292,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                   <textarea
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
-                    className="w-full text-sm text-zinc-850 dark:text-zinc-100 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 focus:outline-none focus:border-blue-500 resize-y leading-relaxed font-sans min-h-[180px]"
-                    placeholder="Write your post here..."
+                    className="w-full text-sm text-zinc-850 dark:text-zinc-100 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 focus:outline-none focus:border-blue-500 resize-y leading-relaxed font-sans min-h-[280px]"
+                    placeholder={post?.content_type === "article" ? "Write your article here..." : "Write your post here..."}
                   />
                   <div className="flex gap-2">
                     <button
@@ -2315,22 +3317,260 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                   </div>
                 </div>
               ) : (
-                <div className="w-full text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap mb-3 select-text font-sans">
-                  {postContent || "(Empty Post)"}
-                </div>
+                post?.content_type === "article" ? (
+                  <div className="w-full space-y-6 mb-3 font-sans">
+                    {/* Render Hero Image (section_index = 0) at the very top of the article */}
+                    {(() => {
+                      const heroImg = images.find(img => img.section_index === 0 && img.is_selected);
+                      return (
+                        <div className="border-b dark:border-zinc-800 pb-4 mb-4">
+                          <p className="text-[11px] font-black text-zinc-400 uppercase tracking-wider mb-2">Article Cover / Hero Image</p>
+                          {heroImg ? (
+                            <div className="relative rounded-2xl overflow-hidden aspect-[21/9] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800">
+                              {heroImg.url.startsWith("data:video/") || heroImg.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i) ? (
+                                <video src={heroImg.url} controls className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={heroImg.url} alt="Article cover" className="w-full h-full object-cover" />
+                              )}
+                              {post?.status !== "published" && (
+                                <button
+                                  onClick={async () => {
+                                    await fetch(`/api/posts/${id}`, {
+                                      method: "PUT",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ image_url: heroImg.url, is_selected: false, section_index: 0 })
+                                    });
+                                    const postRes = await fetch(`/api/posts/${id}`);
+                                    const postData = await postRes.json();
+                                    setImages(postData.images || []);
+                                  }}
+                                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white border-none cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            post?.status !== "published" && (
+                              <button
+                                onClick={() => {
+                                  setActiveImageSelectSection(0);
+                                  setSectionUnsplashQuery(post?.post_title || "abstract professional background");
+                                }}
+                                className="w-full aspect-[21/9] rounded-2xl border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-cyan-500/50 flex flex-col items-center justify-center text-zinc-450 cursor-pointer bg-zinc-950/20 text-xs font-bold transition-colors"
+                              >
+                                <ImageIcon className="w-6 h-6 mb-1 text-cyan-400" />
+                                Add Article Hero Image
+                              </button>
+                            )
+                          )}
+                          
+                          {activeImageSelectSection === 0 && (
+                            <div className="mt-3 p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl">
+                              {renderSectionImageSelector(0)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Render H1 and Sections */}
+                    {parseArticleSections(postContent).map((sec) => {
+                      const sectionImg = images.find(img => img.section_index === sec.index && img.is_selected);
+                      const isEditingThisSection = editingSectionIndex === sec.index;
+                      
+                      return (
+                        <div key={sec.index} className="space-y-3 relative group">
+                          {/* Heading */}
+                          <div className="flex items-center justify-between">
+                            {sec.level === 1 ? (
+                              <h1 className="text-xl font-black text-zinc-900 dark:text-white mt-4">{sec.heading}</h1>
+                            ) : sec.level === 2 ? (
+                              <h2 className="text-lg font-extrabold text-zinc-800 dark:text-zinc-150 mt-4">{sec.heading}</h2>
+                            ) : (
+                              <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200 mt-3">{sec.heading}</h3>
+                            )}
+                            
+                            {post?.status !== "published" && !isEditingThisSection && (
+                              <button
+                                onClick={() => {
+                                  setEditingSectionIndex(sec.index);
+                                  setEditingSectionText(sec.content);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-cyan-455 hover:underline bg-transparent border-none cursor-pointer"
+                              >
+                                Edit Section Text
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Content / Text Editor */}
+                          {isEditingThisSection ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingSectionText}
+                                onChange={(e) => setEditingSectionText(e.target.value)}
+                                className="w-full text-sm text-zinc-850 dark:text-zinc-100 bg-zinc-950 border border-zinc-800 rounded-xl p-3 focus:outline-none focus:border-cyan-500 resize-y leading-relaxed font-sans min-h-[120px]"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setEditingSectionIndex(null)}
+                                  className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-zinc-800 text-zinc-400 border-none cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    const updatedSections = parseArticleSections(postContent).map(s => {
+                                      if (s.index === sec.index) {
+                                        return { ...s, content: editingSectionText };
+                                      }
+                                      return s;
+                                    });
+                                    const reconstructed = updatedSections.map(s => {
+                                      const prefix = s.level === 1 ? "# " : s.level === 2 ? "## " : s.level === 3 ? "### " : "";
+                                      return `${prefix}${s.heading}\n${s.content}`;
+                                    }).join("\n\n");
+                                    setPostContent(reconstructed);
+                                    await saveChanges(reconstructed, hashtags);
+                                    setEditingSectionIndex(null);
+                                  }}
+                                  className="flex-1 py-1.5 rounded-lg text-xs font-black bg-cyan-600 hover:bg-cyan-700 text-white border-none cursor-pointer"
+                                >
+                                  Save Section
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div 
+                              className="text-sm text-zinc-800 dark:text-zinc-250 leading-relaxed whitespace-pre-wrap select-text font-sans"
+                              dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(sec.content) }}
+                            />
+                          )}
+
+                          {/* Section Image */}
+                          {sectionImg ? (
+                            <div className="relative rounded-xl overflow-hidden aspect-video bg-zinc-100 dark:bg-zinc-800 max-w-md border border-zinc-200 dark:border-zinc-800">
+                              {sectionImg.url.startsWith("data:video/") || sectionImg.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i) ? (
+                                <video src={sectionImg.url} controls className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={sectionImg.url} alt="Section media" className="w-full h-full object-cover" />
+                              )}
+                              {post?.status !== "published" && (
+                                <button
+                                  onClick={async () => {
+                                    await fetch(`/api/posts/${id}`, {
+                                      method: "PUT",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ image_url: sectionImg.url, is_selected: false, section_index: sec.index })
+                                    });
+                                    const postRes = await fetch(`/api/posts/${id}`);
+                                    const postData = await postRes.json();
+                                    setImages(postData.images || []);
+                                  }}
+                                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white border-none cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            post?.status !== "published" && activeImageSelectSection !== sec.index && (
+                              <button
+                                onClick={() => {
+                                  setActiveImageSelectSection(sec.index);
+                                  setSectionUnsplashQuery(sec.heading);
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-455 hover:underline bg-transparent border-none cursor-pointer"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5" /> Add Section Image
+                              </button>
+                            )
+                          )}
+
+                          {activeImageSelectSection === sec.index && (
+                            <div className="mt-3 p-3 bg-zinc-950/40 border border-zinc-850 rounded-xl max-w-lg">
+                              {renderSectionImageSelector(sec.index)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="w-full text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap mb-3 select-text font-sans">
+                    {postContent || "(Empty Post)"}
+                  </div>
+                )
               )}
 
               <div className="text-blue-600 dark:text-blue-400 text-sm font-semibold mb-3 flex flex-wrap gap-1">
                 {hashtags.map((tag) => `#${tag} `)}
               </div>
 
-              {activeImage && (
-                <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 aspect-video mb-3 bg-zinc-100 flex items-center justify-center">
-                  {activeImage.url.startsWith("data:video/") || activeImage.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i) ? (
-                    <video src={activeImage.url} controls className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={activeImage.url} alt="Post asset" className="w-full h-full object-cover" />
+              {activeImage ? (
+                <div className="space-y-2 mb-3">
+                  <div className="relative rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 aspect-video bg-zinc-100 flex items-center justify-center group">
+                    {activeImage.url.startsWith("data:video/") || activeImage.url.match(/\.(mp4|webm|ogg|mov|avi)($|\?)/i) ? (
+                      <video src={activeImage.url} controls className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={activeImage.url} alt="Post asset" className="w-full h-full object-cover" />
+                    )}
+
+                    {post?.status !== "published" && (
+                      <button
+                        onClick={async () => {
+                          await fetch(`/api/posts/${id}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              image_url: activeImage.url,
+                              is_selected: false
+                            })
+                          });
+                          const postRes = await fetch(`/api/posts/${id}`);
+                          if (postRes.ok) {
+                            const postData = await postRes.json();
+                            setImages(postData.images || []);
+                          }
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove media"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {post?.status !== "published" && activeImageSelectSection !== -1 && (
+                    <button
+                      onClick={() => {
+                        setActiveImageSelectSection(-1);
+                        setSectionUnsplashQuery(post?.post_title || "business concepts");
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-455 hover:underline bg-transparent border-none cursor-pointer"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" /> Change Image/Video
+                    </button>
                   )}
+                </div>
+              ) : (
+                post?.status !== "published" && activeImageSelectSection !== -1 && (
+                  <button
+                    onClick={() => {
+                      setActiveImageSelectSection(-1);
+                      setSectionUnsplashQuery(post?.post_title || "business concepts");
+                    }}
+                    className="w-full aspect-video rounded-xl border-2 border-dashed border-zinc-350 dark:border-zinc-800 hover:border-cyan-500/50 flex flex-col items-center justify-center text-zinc-450 cursor-pointer bg-zinc-950/20 text-xs font-bold transition-colors mb-3"
+                  >
+                    <ImageIcon className="w-6 h-6 mb-1 text-cyan-400" />
+                    Add Image or Video
+                  </button>
+                )
+              )}
+
+              {activeImageSelectSection === -1 && (
+                <div className="mt-2 mb-3 p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl max-w-lg">
+                  {renderSectionImageSelector(-1)}
                 </div>
               )}
 
@@ -2341,6 +3581,156 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 <span>✉️ Send</span>
               </div>
             </div>
+          </>
+        )}
+
+        {post?.content_type === "article" && (
+          <>
+            <div className="ios-section-label flex justify-between items-center select-none mt-6">
+              <span>Connected Feed Post Teaser</span>
+            </div>
+            
+            {promoPosts.length === 0 ? (
+              generatingPromo ? (
+                <div className="ios-card p-6 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-col items-center justify-center space-y-3">
+                  <div className="w-8 h-8 rounded-full border-4 border-cyan-400 border-t-transparent animate-spin" />
+                  <p className="text-sm font-black text-zinc-800 dark:text-zinc-250">AI is drafting your viral promo post...</p>
+                  <p className="text-xs text-zinc-500 text-center max-w-xs leading-relaxed">We are formulating a high-engagement FOMO-style post referencing this article's key themes.</p>
+                </div>
+              ) : (
+                <div className="ios-card p-4 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-850">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-250">Promote this Article</p>
+                <p className="text-xs text-zinc-400 mt-1">Generate a short-form, high-engagement feed post to drive traffic to your LinkedIn article.</p>
+                
+                <div className="mt-4">
+                  <p className="text-xs font-bold text-zinc-500 mb-2 uppercase tracking-wide">Select Teaser Style</p>
+                  <div className="flex gap-2 mb-4 select-none">
+                    <Badge
+                      onClick={() => setPromoStyleType("expert")}
+                      className={`cursor-pointer rounded-full font-bold px-3 py-1 ${promoStyleType === "expert" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-650 dark:text-zinc-400"}`}
+                    >
+                      Expert Voices
+                    </Badge>
+                    <Badge
+                      onClick={() => {
+                        setPromoStyleType("own")}
+                      }
+                      className={`cursor-pointer rounded-full font-bold px-3 py-1 ${promoStyleType === "own" ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-655 dark:text-zinc-400"}`}
+                    >
+                      My Voice DNA
+                    </Badge>
+                  </div>
+
+                  {promoStyleType === "expert" && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+                      {[
+                        { id: "fomo_style", name: "FOMO Style" },
+                        { id: "justin_welsh", name: "Justin Welsh" },
+                        { id: "lara_acosta", name: "Lara Acosta" },
+                        { id: "sahil_bloom", name: "Sahil Bloom" }
+                      ].map((style) => (
+                        <div
+                          key={style.id}
+                          onClick={() => setSelectedPromoStyleId(style.id)}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-center cursor-pointer transition-all text-[11px] font-bold ${
+                            selectedPromoStyleId === style.id ? "border-cyan-500 bg-cyan-950/20 text-cyan-400" : "border-zinc-200 dark:border-zinc-800 text-zinc-500"
+                          }`}
+                        >
+                          {style.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={generatePromoPost}
+                    disabled={generatingPromo}
+                    className="w-full py-3.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 hover:from-cyan-300 hover:via-blue-400 hover:to-purple-500 disabled:from-zinc-850 disabled:to-zinc-850 disabled:text-zinc-500 text-white font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-98 shadow-md border-none cursor-pointer transition-all duration-200 text-xs"
+                  >
+                    {generatingPromo ? (
+                      <>
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        Generating Teaser...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" /> Generate Teaser Feed Post
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )) : (
+              promoPosts.map((promo) => (
+                <div key={promo.id} className="ios-card p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wide">Teaser Draft ({promo.status})</span>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Will link to this article: {post.status === "published" ? "Live Link" : "Placeholder Link"}</p>
+                    </div>
+                    <button
+                      onClick={() => router.push(`/posts/${promo.id}/approval`)}
+                      className="text-xs font-bold text-cyan-500 hover:underline bg-transparent border-none cursor-pointer"
+                    >
+                      Open Editor →
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-zinc-950 border border-zinc-250 dark:border-zinc-800/80 rounded-xl text-xs text-zinc-800 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed select-text font-sans">
+                    {promo.post_content}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 text-[10px] text-cyan-500 font-semibold">
+                    {promo.hashtags?.map((tag: string) => `#${tag} `)}
+                  </div>
+
+                  {post.status === "published" && (!post.linkedin_post_url || post.linkedin_post_url.includes("post/new")) && (
+                    <div className="p-3 bg-cyan-950/20 border border-cyan-800/30 rounded-xl space-y-2">
+                      <p className="text-xs font-bold text-cyan-400">🔗 Paste published LinkedIn Article URL</p>
+                      <p className="text-[10px] text-zinc-400">Paste your article's link from LinkedIn below so the promotional feed post can link directly to it.</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          id={`live-article-url-input-${promo.id}`}
+                          placeholder="https://www.linkedin.com/pulse/..."
+                          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                        <button
+                          onClick={async () => {
+                            const val = (document.getElementById(`live-article-url-input-${promo.id}`) as HTMLInputElement)?.value;
+                            if (val && val.trim().startsWith("http")) {
+                              const res = await fetch(`/api/posts/${id}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ status: "published", linkedin_post_url: val.trim() }),
+                              });
+                              if (res.ok) {
+                                alert("Live article URL saved successfully!");
+                                window.location.reload();
+                              }
+                            } else {
+                              alert("Please enter a valid HTTP URL");
+                            }
+                          }}
+                          className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 text-xs font-bold text-white rounded-lg border-none cursor-pointer"
+                        >
+                          Save Link
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {promo.status !== "published" && (
+                    <button
+                      onClick={() => handlePublishPromoPost(promo.id)}
+                      className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl text-xs border-none cursor-pointer"
+                    >
+                      🚀 Approve & Publish Promo Post
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
           </>
         )}
 
@@ -2475,6 +3865,76 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
                 placeholder="Example: Make it shorter. Make the opener more interesting. Add bullet points..."
                 className="w-full h-24 p-3 rounded-xl border bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-red-500"
               />
+
+              {/* Writing Style Selection */}
+              <div className="space-y-2 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-wider block">Change Writing Style (Optional)</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegenStyleType("expert");
+                      if (expertStyles.length > 0 && !expertStyles.some(s => s.id === regenStyleId)) {
+                        setRegenStyleId(expertStyles[0].id);
+                      }
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${
+                      regenStyleType === "expert"
+                        ? "bg-zinc-850 border-zinc-700 text-cyan-400"
+                        : "bg-transparent border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    Expert Voices
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegenStyleType("own");
+                      if (customStyles.length > 0) {
+                        setRegenStyleId(customStyles[0].id);
+                      } else {
+                        setRegenStyleId("fomo_style");
+                      }
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${
+                      regenStyleType === "own"
+                        ? "bg-zinc-850 border-zinc-700 text-cyan-400"
+                        : "bg-transparent border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    My Voice DNA
+                  </button>
+                </div>
+
+                <select
+                  value={regenStyleId}
+                  onChange={(e) => setRegenStyleId(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                >
+                  {regenStyleType === "expert" ? (
+                    <>
+                      <option value="fomo_style">FOMO Teaser Style (Default)</option>
+                      {expertStyles.map((style) => (
+                        <option key={style.id} value={style.id}>
+                          {style.name} ({style.style_json?.tone || "Expert Style"})
+                        </option>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {customStyles.length === 0 ? (
+                        <option value="fomo_style" disabled>No Voice DNA created yet</option>
+                      ) : (
+                        customStyles.map((style) => (
+                          <option key={style.id} value={style.id}>
+                            {style.name}
+                          </option>
+                        ))
+                      )}
+                    </>
+                  )}
+                </select>
+              </div>
 
               <div className="flex items-center justify-between text-xs text-zinc-500 py-1 flex-wrap gap-2">
                 <div className="flex gap-2">

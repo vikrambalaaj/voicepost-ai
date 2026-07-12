@@ -15,6 +15,12 @@ export interface AntigravityAgentInput {
   post_content?: string;
   image_url?: string;
   web_search_context?: string;
+  preserve_text?: boolean;
+  series_context?: {
+    index: number;
+    count: number;
+    previous_parts: string[];
+  };
 }
 
 export interface AntigravityAgentResponse {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 import { getAuthenticatedUserId } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -17,6 +18,9 @@ export async function POST(
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+  const userAgent = req.headers.get("user-agent") || undefined;
 
   // Parse body ONCE — req.json() can only be called once per request
   let backend = "waterfall";
@@ -40,6 +44,31 @@ export async function POST(
 
     if (postErr || !post) {
       return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
+    }
+
+    if (post.content_type === "article") {
+      try {
+        await db
+          .from("posts")
+          .update({
+            status: "published",
+            published_at: new Date().toISOString(),
+            linkedin_post_id: `mock_article_${Math.random().toString(36).substring(2, 12)}`,
+            linkedin_post_url: "https://www.linkedin.com/post/new/",
+          })
+          .eq("id", id);
+      } catch (dbErr) {
+        console.error("Failed to update article status to published:", dbErr);
+      }
+
+      return NextResponse.json({
+        success: false,
+        pending_review: true,
+        post_content: post.post_content,
+        hashtags: post.hashtags || [],
+        redirect_url: "https://www.linkedin.com/post/new/",
+        message: "Your article content and hashtags have been copied to your clipboard. Since LinkedIn does not support publishing articles programmatically, we are redirecting you to LinkedIn's article editor where you can paste it.",
+      });
     }
 
 
@@ -128,6 +157,8 @@ export async function POST(
     }
 
     const isMock = account.access_token.startsWith("mock_") || !process.env.LINKEDIN_CLIENT_ID;
+
+    let finalPostContent = "";
 
     // Real LinkedIn publication flow
     if (!isMock && !isPublished) {
@@ -355,10 +386,25 @@ export async function POST(
           }
         }
 
+        finalPostContent = post.post_content || "";
+        if (post.parent_post_id) {
+          try {
+            const { data: parent } = await db
+              .from("posts")
+              .select("linkedin_post_url")
+              .eq("id", post.parent_post_id)
+              .single();
+            const parentUrl = parent?.linkedin_post_url || "https://www.linkedin.com/post/new/";
+            finalPostContent = finalPostContent.replace(/{article_url}/g, parentUrl);
+          } catch (parentErr) {
+            console.error("Failed to fetch parent post for placeholder replacement:", parentErr);
+          }
+        }
+
         // Post content UGC
         const commentary = isCarousel
           ? `${carouselTitle}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`
-          : `${post.post_content}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`;
+          : `${finalPostContent}\n\n${post.hashtags?.map((h: string) => h.startsWith("#") ? h : `#${h}`).join(" ") || ""}`;
 
         const payload: any = {
           author: account.linkedin_profile_id,
@@ -410,10 +456,39 @@ export async function POST(
       } catch (err: any) {
         console.error("LinkedIn OAuth publishing error:", err.message);
         // Fallback action sheet support if API review pending
+        try {
+          await db
+            .from("posts")
+            .update({
+              status: "published",
+              published_at: new Date().toISOString(),
+              linkedin_post_id: linkedinPostId,
+              linkedin_post_url: permalink,
+            })
+            .eq("id", id);
+        } catch (dbErr) {
+          console.error("Failed to update post status to published during fallback:", dbErr);
+        }
+
+        // Log sandbox fallback audit event
+        await logAuditEvent({
+          userId,
+          action: "POST_PUBLISHED_SANDBOX",
+          targetType: "post",
+          targetId: id,
+          details: {
+            content_type: post.content_type,
+            sandbox: true,
+            is_carousel: isCarousel,
+          },
+          ipAddress,
+          userAgent,
+        });
+
         return NextResponse.json({
           success: false,
           pending_review: true,
-          post_content: isCarousel ? carouselTextContent : post.post_content,
+          post_content: isCarousel ? carouselTextContent : finalPostContent,
           hashtags: post.hashtags,
           message: "VoicePost's LinkedIn API integration is currently in sandbox mode (pending official review). Your post content and hashtags have been copied to your clipboard so you can paste them directly on LinkedIn.",
         });
@@ -439,6 +514,23 @@ export async function POST(
         posts_used_this_month: user.posts_used_this_month + 1,
       })
       .eq("id", userId);
+
+    // Log successful publish audit event
+    await logAuditEvent({
+      userId,
+      action: "POST_PUBLISHED",
+      targetType: "post",
+      targetId: id,
+      details: {
+        content_type: post.content_type,
+        sandbox: false,
+        is_carousel: isCarousel,
+        linkedin_post_id: linkedinPostId,
+        linkedin_post_url: permalink,
+      },
+      ipAddress,
+      userAgent,
+    });
 
     return NextResponse.json({
       success: true,

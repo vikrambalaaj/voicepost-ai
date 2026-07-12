@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { sendApprovalEmailInternal } from "@/lib/email";
+import { logAuditEvent } from "@/lib/audit";
 
 export async function GET(
   req: NextRequest,
@@ -126,7 +127,10 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { post_content, hashtags, status, image_url, source_type, prompt_used } = body;
+    const { post_content, hashtags, status, image_url, source_type, prompt_used, section_index } = body;
+
+    const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
+    const userAgent = req.headers.get("user-agent") || undefined;
 
     // Find active user
     const userId = await getAuthenticatedUserId(req);
@@ -221,6 +225,35 @@ export async function PUT(
         }
       }
 
+      // Log audit events for updates
+      if (isContentChanged) {
+        await logAuditEvent({
+          userId,
+          action: "POST_EDITED",
+          targetType: "post",
+          targetId: id,
+          details: {
+            revision_number: nextRevisionNum,
+            status: status || existingPost.status,
+          },
+          ipAddress,
+          userAgent,
+        });
+      } else if (status !== undefined && status !== existingPost.status) {
+        await logAuditEvent({
+          userId,
+          action: "POST_STATUS_UPDATED",
+          targetType: "post",
+          targetId: id,
+          details: {
+            old_status: existingPost.status,
+            new_status: status,
+          },
+          ipAddress,
+          userAgent,
+        });
+      }
+
       return NextResponse.json({ success: true, post: updatedPost });
     }
 
@@ -239,10 +272,11 @@ export async function PUT(
 
     let imageResult;
     if (existingImg && existingImg.length > 0) {
-      // Just update it to be selected
+      // Just update it
+      const isSel = body.is_selected !== undefined ? body.is_selected : true;
       const { data: updatedImg, error: imgErr } = await db
         .from("post_images")
-        .update({ is_selected: true })
+        .update({ is_selected: isSel, section_index: section_index !== undefined ? section_index : null })
         .eq("id", existingImg[0].id)
         .select()
         .single();
@@ -260,6 +294,7 @@ export async function PUT(
           url: image_url,
           prompt_used: prompt_used || null,
           is_selected: true,
+          section_index: section_index !== undefined ? section_index : null,
         })
         .select()
         .single();
@@ -268,6 +303,21 @@ export async function PUT(
       }
       imageResult = newImage;
     }
+
+    // Log media attachment audit event
+    await logAuditEvent({
+      userId,
+      action: "POST_MEDIA_ATTACHED",
+      targetType: "post",
+      targetId: id,
+      details: {
+        media_url: image_url,
+        source_type: source_type || "search",
+        section_index: section_index !== undefined ? section_index : null,
+      },
+      ipAddress,
+      userAgent,
+    });
 
     return NextResponse.json({ success: true, image: imageResult });
   } catch (err: any) {

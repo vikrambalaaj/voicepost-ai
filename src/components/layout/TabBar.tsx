@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, FileText, Plus, CreditCard, User } from "lucide-react";
+import { Home, FileText, Plus, CreditCard, User, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const TabBar: React.FC = () => {
@@ -19,6 +19,11 @@ export const TabBar: React.FC = () => {
       label: "Posts",
       icon: FileText,
       path: "/posts",
+    },
+    {
+      label: "Inspiration",
+      icon: Lightbulb,
+      path: "/inspiration",
     },
     {
       label: "Create",

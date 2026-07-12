@@ -264,5 +264,5 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ success: true, results: results.slice(0, 12) });
+  return NextResponse.json({ success: true, results: results.slice(0, 12), images: results.slice(0, 12) });
 }
