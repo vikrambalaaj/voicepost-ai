@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface AnimatedGradientBackgroundProps {
@@ -135,34 +135,56 @@ export function BeamsBackground({
             ctx.restore();
         }
 
-        function animate() {
+        const reduceMotion =
+            typeof window !== "undefined" &&
+            window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        const FRAME_MS = 1000 / 24; // ~24fps is plenty for a blurred ambient background
+        let lastFrame = 0;
+        let running = false;
+
+        function drawFrame() {
             if (!canvas || !ctx) return;
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             const totalBeams = beamsRef.current.length;
             beamsRef.current.forEach((beam, index) => {
                 beam.y -= beam.speed;
                 beam.pulse += beam.pulseSpeed;
-
-                // Reset beam when it goes off screen
                 if (beam.y + beam.length < -100) {
                     resetBeam(beam, index, totalBeams);
                 }
-
                 drawBeam(ctx, beam);
             });
+        }
 
+        function animate(now: number) {
+            if (!running) return;
+            if (now - lastFrame >= FRAME_MS) {
+                lastFrame = now;
+                drawFrame();
+            }
             animationFrameRef.current = requestAnimationFrame(animate);
         }
 
-        animate();
+        function start() {
+            if (running || reduceMotion) return;
+            running = true;
+            animationFrameRef.current = requestAnimationFrame(animate);
+        }
+        function stop() {
+            running = false;
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        }
+        // Don't burn battery while the tab/app is in the background
+        const onVisibility = () => (document.hidden ? stop() : start());
+        document.addEventListener("visibilitychange", onVisibility);
+
+        drawFrame(); // always paint one static frame
+        start();
 
         return () => {
             window.removeEventListener("resize", updateCanvasSize);
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
+            document.removeEventListener("visibilitychange", onVisibility);
+            stop();
         };
     }, [intensity]);
 

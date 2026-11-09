@@ -1,5 +1,6 @@
 "use client";
 
+import { createRecorder } from "@/lib/utils/recorder";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
@@ -844,7 +845,7 @@ function drawSlideToCanvas(
     
     ctx.fillStyle = "#A1A1AA";
     ctx.font = "normal 28px system-ui, sans-serif";
-    wrapText(ctx, slide.paragraph || spotlightMetric.text || slide.body || "", 240, 620, 600, 40);
+    wrapText(ctx, spotlightMetric.text || slide.body || "", 240, 620, 600, 40);
     ctx.restore();
 
     // Footer
@@ -1692,6 +1693,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const [showAuthor, setShowAuthor] = useState(true); // Author branding toggle for carousel slides
   const [promoPosts, setPromoPosts] = useState<any[]>([]);
   const [generatingPromo, setGeneratingPromo] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [promoStyleType, setPromoStyleType] = useState<"expert" | "own">("expert");
   const [selectedPromoStyleId, setSelectedPromoStyleId] = useState("fomo_style");
 
@@ -1742,7 +1744,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const startFeedbackRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const recorder = createRecorder(stream);
       const chunks: Blob[] = [];
 
       recorder.ondataavailable = (e) => {
@@ -1750,7 +1752,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       };
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunks, { type: "audio/webm" });
+        const audioBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
         setIsTranscribingFeedback(true);
 
         try {
@@ -1858,14 +1860,11 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function loadStyles() {
       try {
-        const expRes = await fetch("/api/style/experts");
-        const expData = await expRes.json();
+        const [expRes, custRes] = await Promise.all([fetch("/api/style/experts"), fetch("/api/style/custom")]);
+        const [expData, custData] = await Promise.all([expRes.json(), custRes.json()]);
         if (expData.success) {
           setExpertStyles(expData.experts || []);
         }
-
-        const custRes = await fetch("/api/style/custom");
-        const custData = await custRes.json();
         if (custData.success) {
           setCustomStyles(custData.customStyles || []);
         }
@@ -1880,7 +1879,13 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function loadPostData() {
       try {
-        const res = await fetch(`/api/posts/${id}`);
+        // All four requests are independent: fire them together instead of as a waterfall.
+        const [res, postsRes, accRes, listRes] = await Promise.all([
+          fetch(`/api/posts/${id}`),
+          fetch("/api/posts").catch(() => null),
+          fetch("/api/linkedin/scraping-status").catch(() => null),
+          fetch("/api/linkedin/accounts").catch(() => null),
+        ]);
         const data = await res.json();
         if (data.success) {
           setPost(data.post);
@@ -1910,31 +1915,28 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
             }
           }
 
-          // Fetch promo posts
+          // Promo posts (already fetched above)
           try {
-            const postsRes = await fetch("/api/posts");
-            const postsData = await postsRes.json();
-            if (postsData.success) {
+            const postsData = postsRes ? await postsRes.json() : null;
+            if (postsData?.success) {
               const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
               setPromoPosts(promos);
             }
           } catch (promoErr) {
-            console.error("Failed to fetch promo posts:", promoErr);
+            console.error("Failed to read promo posts:", promoErr);
           }
+        } else {
+          setLoadError(data.error || "This post could not be loaded.");
         }
 
-        // Load connected LinkedIn account
-        const [accRes, listRes] = await Promise.all([
-          fetch("/api/linkedin/scraping-status"),
-          fetch("/api/linkedin/accounts")
-        ]);
-        if (accRes.ok) {
+        // Connected LinkedIn account
+        if (accRes?.ok) {
           const accData = await accRes.json();
           if (accData.status && accData.status !== "disconnected") {
             setLinkedAccount(accData);
           }
         }
-        if (listRes.ok) {
+        if (listRes?.ok) {
           const listData = await listRes.json();
           if (listData.success) {
             setAccountsList(listData.accounts || []);
@@ -1942,6 +1944,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
         }
       } catch (err) {
         console.error("Failed to load approval package:", err);
+        setLoadError("Could not load this post. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -1949,39 +1952,8 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
     loadPostData();
   }, [id]);
 
-  // Automatically trigger promotional post generation in the background if none exists yet for the article
-  useEffect(() => {
-    if (post && post.content_type === "article" && post.status !== "published" && promoPosts.length === 0 && !generatingPromo) {
-      const autoGeneratePromo = async () => {
-        setGeneratingPromo(true);
-        try {
-          const res = await fetch("/api/content/generate-promo-post", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              parent_post_id: id,
-              style_type: promoStyleType,
-              style_id: selectedPromoStyleId,
-            }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            const postsRes = await fetch("/api/posts");
-            const postsData = await postsRes.json();
-            if (postsData.success) {
-              const promos = postsData.posts.filter((p: any) => p.parent_post_id === id);
-              setPromoPosts(promos);
-            }
-          }
-        } catch (e) {
-          console.error("Auto promo generation failed:", e);
-        } finally {
-          setGeneratingPromo(false);
-        }
-      };
-      autoGeneratePromo();
-    }
-  }, [post?.id, post?.content_type, post?.status, promoPosts.length]);
+  // Promo generation is an explicit user action (button below) - it used to fire automatically on
+  // every visit, spending an LLM call each time and retrying forever when it failed.
 
   const generatePromoPost = async () => {
     setGeneratingPromo(true);
@@ -2344,7 +2316,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
   const startVoiceRecording = async (cid: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const recorder = createRecorder(stream);
       const chunks: Blob[] = [];
       
       recorder.ondataavailable = (e) => {
@@ -2352,7 +2324,7 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       };
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunks, { type: "audio/webm" });
+        const audioBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
         setVoiceTranscribingCommentId(cid);
         
         try {
@@ -2900,6 +2872,24 @@ export default function ApprovalPage({ params }: { params: { id: string } }) {
       <IosShell>
         <div className="flex items-center justify-center min-h-[50vh] text-sm text-zinc-400">
           Loading Approval Package...
+        </div>
+      </IosShell>
+    );
+  }
+
+  if (!post) {
+    return (
+      <IosShell>
+        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 px-6 text-center">
+          <p className="text-sm text-zinc-400" role="alert">{loadError || "Post not found."}</p>
+          <div className="flex gap-3">
+            <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold">
+              Retry
+            </button>
+            <button onClick={() => router.push("/dashboard")} className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-200 text-sm font-semibold">
+              Back to dashboard
+            </button>
+          </div>
         </div>
       </IosShell>
     );
