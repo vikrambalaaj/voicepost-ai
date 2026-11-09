@@ -11,6 +11,8 @@ export interface LLMRequest {
   maxTokens?: number;
   responseFormat?: "text" | "json";
   enableSearch?: boolean;
+  /** Absolute epoch ms by which the whole waterfall must finish (route-level budget). */
+  deadlineAt?: number;
 }
 
 export interface LLMResponse {
@@ -32,20 +34,12 @@ export class LLMExhaustedError extends Error {
 
 // Timeout helper
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timeout of ${timeoutMs}ms exceeded`));
-    }, timeoutMs);
-
-    fetch(url, options)
-      .then((response) => {
-        clearTimeout(timer);
-        resolve(response);
-      })
-      .catch((err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
+  // AbortSignal actually cancels the request, so a timed-out provider stops generating (and billing).
+  return fetch(url, { ...options, signal: AbortSignal.timeout(Math.max(500, timeoutMs)) }).catch((err) => {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      throw new Error(`Timeout of ${timeoutMs}ms exceeded`);
+    }
+    throw err;
   });
 }
 
@@ -140,15 +134,19 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
   }
 
   // Determine timeout based on use case
-  // Keep well under Vercel Hobby 10s limit on Vercel, but allow longer locally
-  let timeoutMs = 8000; // 8s default on Vercel to give content generation enough time to complete
+  // Functions run up to 60s on Vercel (see vercel.json), so long-form generation needs
+  // far more than 8s; the overall deadline below keeps the whole waterfall inside that budget.
+  let timeoutMs = 22000;
   if (!process.env.VERCEL) {
     timeoutMs = 60000; // 60s locally to allow slower high-quality models to complete
-  } else if (request.useCase === "transcript_correction") {
-    timeoutMs = 4000; // 4s on Vercel
-  } else if (request.useCase === "style_analysis") {
-    timeoutMs = 4500; // 4.5s on Vercel
+  } else if (request.useCase === "transcript_correction" || request.useCase === "keyword_extraction") {
+    timeoutMs = 9000;
+  } else if (request.useCase === "style_analysis" || request.useCase === "style_preview") {
+    timeoutMs = 14000;
   }
+  const deadlineAt = request.deadlineAt ?? (process.env.VERCEL ? Date.now() + 50000 : Number.POSITIVE_INFINITY);
+  const MAX_ATTEMPTS = 3; // a long fallback chain only multiplies latency and cost
+  let attempts = 0;
 
   // Helper to check if a provider has its API key or configuration set
   const isProviderConfigured = (p: any) => {
@@ -185,6 +183,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
 
   // 4. Iterate over eligible providers
   for (const provider of eligibleProviders) {
+    if (attempts >= MAX_ATTEMPTS || deadlineAt - Date.now() < 3000) break;
     let apiKey = process.env[provider.apiKeyEnvVar];
     if (provider.id === "google") {
       apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -202,8 +201,10 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
       continue;
     }
 
+    attempts++;
     fallbackChain.push(provider.name);
     const startTime = Date.now();
+    const callTimeoutMs = Math.min(timeoutMs, deadlineAt - Date.now());
 
     // Map plan to specific models as defined in provider configs (use DB override if set)
     const model = modelOverrides.get(provider.id) || getModelForPlan(provider, request.userPlan);
@@ -233,7 +234,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
               max_tokens: request.maxTokens || 800,
             }),
           },
-          timeoutMs
+          callTimeoutMs
         );
 
         if (!response.ok) {
@@ -287,7 +288,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
             },
             body: JSON.stringify(nativePayload),
           },
-          timeoutMs
+          callTimeoutMs
         );
 
         if (!response.ok) {
@@ -328,7 +329,7 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
             },
             body: JSON.stringify(payload),
           },
-          timeoutMs
+          callTimeoutMs
         );
 
         if (!response.ok) {
@@ -352,8 +353,10 @@ export async function routeLLMRequest(request: LLMRequest): Promise<LLMResponse>
       const latencyMs = Date.now() - startTime;
 
       // Log success to db async
-      await logUsage(db, provider.id, dateStr, inputTokens, outputTokens);
-      await logGenerationEvent(db, request, provider.id, model, inputTokens, outputTokens, latencyMs, fallbackChain, true);
+      await Promise.all([
+        logUsage(db, provider.id, dateStr, inputTokens, outputTokens),
+        logGenerationEvent(db, request, provider.id, model, inputTokens, outputTokens, latencyMs, fallbackChain, true),
+      ]);
 
       return {
         content,
@@ -417,19 +420,26 @@ function getModelForPlan(provider: ProviderConfig, plan: string): string {
 async function logUsage(db: any, providerId: string, dateStr: string, inputTokens: number, outputTokens: number) {
   try {
     // Increment requests and tokens count daily
-    const { data } = await db.rpc("increment_provider_usage", {
+    // The RPC returns VOID, so `data` is always null: only `error` says whether it ran.
+    const { error } = await db.rpc("increment_provider_usage", {
       p_id: providerId,
       p_date: dateStr,
       p_tokens: inputTokens + outputTokens
     });
-    
-    if (!data) {
-      // Fallback manual upsert if RPC is not deployed yet
+
+    if (error) {
+      // RPC not deployed: read-modify-write fallback (still counts upwards, unlike a blind upsert of 1)
+      const { data: row } = await db
+        .from("provider_usage_daily")
+        .select("request_count, token_count")
+        .eq("provider_id", providerId)
+        .eq("date", dateStr)
+        .maybeSingle();
       await db.from("provider_usage_daily").upsert({
         provider_id: providerId,
         date: dateStr,
-        request_count: 1,
-        token_count: inputTokens + outputTokens
+        request_count: (row?.request_count ?? 0) + 1,
+        token_count: (row?.token_count ?? 0) + inputTokens + outputTokens,
       }, { onConflict: "provider_id,date" });
     }
   } catch (err) {

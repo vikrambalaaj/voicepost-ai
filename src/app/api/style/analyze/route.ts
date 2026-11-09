@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt } from "@/app/api/content/generate/route";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 
@@ -13,6 +14,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     let accountId = null;
     try {

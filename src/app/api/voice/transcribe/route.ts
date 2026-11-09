@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 
 export const maxDuration = 60;
@@ -13,6 +14,8 @@ export async function POST(req: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const limited = await aiRateLimit(userId);
+  if (limited) return limited;
 
   const { data: user } = await db.from("users").select("id, industry, keywords, plan").eq("id", userId).single();
   if (!user) {

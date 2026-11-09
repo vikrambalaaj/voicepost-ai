@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 import { sendApprovalEmailInternal } from "@/lib/email";
@@ -83,10 +84,14 @@ export async function humanizePostContent(
   content: string,
   userId: string,
   userPlan: "free" | "starter" | "pro" | "agency",
-  sessionId: string
+  sessionId: string,
+  deadlineAt?: number
 ): Promise<string> {
+  // The polish pass is optional: skip it rather than risk blowing the function time limit.
+  if (deadlineAt && deadlineAt - Date.now() < 12000) return content;
   try {
     const res = await routeLLMRequest({
+      deadlineAt,
       useCase: "content_generation",
       messages: [
         {
@@ -114,11 +119,14 @@ export async function humanizeCarouselSlides(
   userId: string,
   userPlan: "free" | "starter" | "pro" | "agency",
   sessionId: string,
-  topic?: string
+  topic?: string,
+  deadlineAt?: number
 ): Promise<any[]> {
+  if (deadlineAt && deadlineAt - Date.now() < 12000) return slides;
   try {
     const topicContext = topic ? `The carousel topic is: "${topic}". All slide content must remain 100% about this topic after humanization. Do NOT introduce client names, case studies, or generic business jargon unrelated to this topic. Banned phrases: "Our client", "A client of ours", "Success Story", "A Client's Journey", "Real-World Example".` : "";
     const res = await routeLLMRequest({
+      deadlineAt,
       useCase: "content_generation",
       messages: [
         {
@@ -156,6 +164,8 @@ export async function humanizeCarouselSlides(
 }
 
 export async function POST(req: NextRequest) {
+  // One time budget for the whole request (maxDuration is 60s) shared by every LLM call below.
+  const requestDeadline = Date.now() + 52000;
   const db = getServiceSupabase();
 
   try {
@@ -172,6 +182,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     const { data: user } = await db
       .from("users")
@@ -189,7 +201,7 @@ export async function POST(req: NextRequest) {
       const { data: exp } = await db.from("expert_styles").select("style_json").eq("id", style_id).single();
       selectedStyleJson = exp?.style_json || {};
     } else if (style_type === "custom") {
-      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).single();
+      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).eq("user_id", userId).single();
       selectedStyleJson = cust?.style_json || {};
     } else if (style_type === "own") {
       const { data: own } = await db.from("style_profiles").select("style_json").eq("user_id", user.id).single();
@@ -257,6 +269,7 @@ export async function POST(req: NextRequest) {
       }
       try {
         const queryRes = await routeLLMRequest({
+          deadlineAt: requestDeadline,
           useCase: "keyword_extraction",
           messages: [
             {
@@ -534,6 +547,7 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         }
 
         const waterfallRes = await routeLLMRequest({
+          deadlineAt: requestDeadline,
           useCase: "content_generation",
           messages: [
             { role: "system", content: systemPrompt },
@@ -566,7 +580,8 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
           resultJson.post_content,
           user.id,
           user.plan || "pro",
-          `generate-${index}-` + Date.now()
+          `generate-${index}-` + Date.now(),
+          requestDeadline
         );
 
         let cleanedPostContent = resultJson.post_content;
