@@ -4,6 +4,15 @@ import nodemailer from "nodemailer";
 import { createEmailActionToken } from "@/lib/email-token";
 
 // Render a beautiful HTML email for the draft post notification
+export function escapeHtml(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildEmailHtml({
   recipientName,
   postContent,
@@ -22,7 +31,7 @@ function buildEmailHtml({
   const hashtagPills = hashtags
     .map(
       (tag) =>
-        `<span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin:3px 3px 0 0;font-family:sans-serif;">#${tag}</span>`
+        `<span style="display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin:3px 3px 0 0;font-family:sans-serif;">#${escapeHtml(tag)}</span>`
     )
     .join("");
 
@@ -61,7 +70,7 @@ function buildEmailHtml({
 
               <!-- Greeting -->
               <p style="margin:0 0 8px;font-size:22px;font-weight:800;color:#18181B;line-height:1.3;">
-                ✍️ Your draft is ready, ${recipientName.split(" ")[0]}
+                ✍️ Your draft is ready, ${escapeHtml(recipientName.split(" ")[0])}
               </p>
               <p style="margin:0 0 24px;font-size:14px;color:#71717A;line-height:1.6;">
                 Your voice memo has been turned into a LinkedIn post. Approve it to queue for publishing, or request changes.
@@ -221,21 +230,16 @@ export async function sendApprovalEmailInternal({
   // 1. Fetch post to get user_id
   const { data: post } = await db.from("posts").select("user_id").eq("id", post_id).single();
 
-  let recipientEmail = "demo@voicepost.com";
-  let recipientName = "there";
-
-  if (post?.user_id) {
-    const { data: user } = await db.from("users").select("email, full_name").eq("id", post.user_id).single();
-    if (user) {
-      recipientEmail = user.email || recipientEmail;
-      recipientName = user.full_name || recipientName;
-    }
-  } else {
-    const { data: users } = await db.from("users").select("email, full_name").limit(1);
-    const fallbackUser = users?.[0];
-    recipientEmail = fallbackUser?.email || recipientEmail;
-    recipientName = fallbackUser?.full_name || recipientName;
+  // Never fall back to "some other user": an unresolved post means no email.
+  if (!post?.user_id) {
+    return { success: false, error: "Post not found; approval email not sent." };
   }
+  const { data: user } = await db.from("users").select("email, full_name").eq("id", post.user_id).single();
+  if (!user?.email) {
+    return { success: false, error: "Post owner has no email address; approval email not sent." };
+  }
+  const recipientEmail: string = user.email;
+  const recipientName: string = user.full_name || "there";
 
   const finalApprovalUrl = `${baseUrl}/posts/${post_id}/approval`;
 
@@ -281,9 +285,9 @@ function buildApprovedEmailHtml({
   scheduled?: boolean;
   scheduledAt?: string;
 }): string {
-  const firstName = recipientName.split(" ")[0] || "there";
+  const firstName = escapeHtml(recipientName.split(" ")[0] || "there");
   const hashtagPills = hashtags
-    .map((tag) => `<span style="display:inline-block;background:#ECFDF5;color:#065F46;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin:3px 3px 0 0;">#${tag}</span>`)
+    .map((tag) => `<span style="display:inline-block;background:#ECFDF5;color:#065F46;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin:3px 3px 0 0;">#${escapeHtml(tag)}</span>`)
     .join("");
   const safeContent = postContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>");
 
@@ -340,7 +344,7 @@ function buildRejectedEmailHtml({
   feedback?: string;
   approvalUrl: string;
 }): string {
-  const firstName = recipientName.split(" ")[0] || "there";
+  const firstName = escapeHtml(recipientName.split(" ")[0] || "there");
   const safeContent = postContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>");
   const safeFeedback = feedback ? feedback.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
 

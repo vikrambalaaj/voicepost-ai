@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 import { BANNED_WORDS } from "@/app/api/content/generate/route";
@@ -21,6 +22,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     const { data: user } = await db
       .from("users")
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
       const { data: exp } = await db.from("expert_styles").select("style_json").eq("id", style_id).single();
       selectedStyleJson = exp?.style_json || {};
     } else if (style_type === "custom") {
-      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).single();
+      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).eq("user_id", userId).single();
       selectedStyleJson = cust?.style_json || {};
     } else if (style_type === "own") {
       const { data: own } = await db.from("style_profiles").select("style_json").eq("user_id", user.id).single();

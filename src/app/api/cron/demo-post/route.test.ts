@@ -82,7 +82,10 @@ describe("Automated Demo Post Cron Endpoint", () => {
   });
 
   it("should successfully generate and publish a demo post when cron triggers", async () => {
-    const req = new NextRequest("http://localhost:6250/api/cron/demo-post");
+    process.env.CRON_SECRET = "test-cron-secret";
+    const req = new NextRequest("http://localhost:6250/api/cron/demo-post", {
+      headers: { authorization: "Bearer test-cron-secret" },
+    });
     const res = await GET(req);
 
     expect(res.status).toBe(200);
@@ -90,5 +93,17 @@ describe("Automated Demo Post Cron Endpoint", () => {
     expect(body.success).toBe(true);
     expect(body.post_id).toBe("post_cron_123");
     expect(body.scheduled_interval).toBe("every 4 days");
+  });
+
+  it("rejects the call when CRON_SECRET is unset or the bearer token is wrong", async () => {
+    delete process.env.CRON_SECRET;
+    const open = await GET(new NextRequest("http://localhost:6250/api/cron/demo-post"));
+    expect(open.status).toBe(401);
+
+    process.env.CRON_SECRET = "test-cron-secret";
+    const wrong = await GET(
+      new NextRequest("http://localhost:6250/api/cron/demo-post", { headers: { authorization: "Bearer nope" } })
+    );
+    expect(wrong.status).toBe(401);
   });
 });

@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (refresh) {
       console.log(`[comments] Synchronous refresh requested for post ${postId}`);
       try {
-        await syncUserEngagement(userId);
+        await syncUserEngagement(userId, postId);
       } catch (syncErr) {
         console.error("[comments] Synchronous sync failed:", syncErr);
       }
@@ -212,6 +212,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from("post_comments")
       .select("*")
       .eq("id", comment_id)
+      .eq("post_id", params.id)
       .single();
 
     if (commentErr || !comment) {
@@ -282,6 +283,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         replied_at: new Date().toISOString()
       })
       .eq("id", comment_id)
+      .eq("post_id", params.id)
       .select()
       .single();
 

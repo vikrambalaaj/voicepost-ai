@@ -1,4 +1,6 @@
+import { assertPublicUrl, safeFetch } from "@/lib/safe-fetch";
 import { NextRequest, NextResponse } from "next/server";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 
 export const maxDuration = 60;
@@ -103,6 +105,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     const body = await req.json();
     const { url } = body;
@@ -119,7 +123,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid URL provided" }, { status: 400 });
     }
 
-    const response = await fetch(targetUrl.href, {
+    try {
+      await assertPublicUrl(targetUrl.href);
+    } catch {
+      return NextResponse.json({ error: "That URL cannot be fetched." }, { status: 400 });
+    }
+
+    const response = await safeFetch(targetUrl.href, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"

@@ -14,14 +14,13 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
 
+  // Never trust an unsigned event: anyone could POST a fake "subscription updated".
+  if (!endpointSecret || !sig) {
+    return NextResponse.json({ error: "Webhook signature required" }, { status: 400 });
+  }
+
   try {
-    if (endpointSecret && sig) {
-      event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
-    } else {
-      // Local dev/standalone mode fallback
-      const body = JSON.parse(payload);
-      event = body as Stripe.Event;
-    }
+    event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
   } catch (err: any) {
     console.error("Stripe signature validation failed:", err.message);
     return NextResponse.json({ error: "Webhook Error: " + err.message }, { status: 400 });

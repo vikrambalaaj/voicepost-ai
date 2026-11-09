@@ -3,11 +3,13 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { buildSystemPrompt, humanizePostContent, humanizeCarouselSlides } from "../generate/route";
 import { cleanJsonString } from "@/lib/utils";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 
 
 
 export async function POST(req: NextRequest) {
+  const requestDeadline = Date.now() + 52000;
   const db = getServiceSupabase();
 
   try {
@@ -22,6 +24,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     // 1. Fetch current post and verify ownership
     const { data: post, error: postErr } = await db
@@ -93,7 +97,7 @@ Changes made in response: ${rev.changes_made?.join(", ") || "None (Initial)"}`;
         const { data: exp } = await db.from("expert_styles").select("style_json").eq("id", post.style_id).single();
         selectedStyleJson = exp?.style_json || null;
       } else {
-        const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", post.style_id).single();
+        const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", post.style_id).eq("user_id", userId).single();
         selectedStyleJson = cust?.style_json || null;
       }
     }
@@ -285,6 +289,7 @@ Return your response ONLY in this JSON format:
     }
 
     const llmRes = await routeLLMRequest({
+      deadlineAt: requestDeadline,
       useCase: "regeneration",
       messages: [
         { role: "system", content: systemPrompt },
@@ -315,7 +320,9 @@ Return your response ONLY in this JSON format:
           resultJson.slides,
           post.user_id,
           userPlan as any,
-          "regenerate-carousel-" + Date.now()
+          "regenerate-carousel-" + Date.now(),
+          undefined,
+          requestDeadline
         );
       }
       // Map flat JSON structure back to Carousel schema format
@@ -372,7 +379,8 @@ Return your response ONLY in this JSON format:
         resultJson.post_content,
         post.user_id,
         userPlan as any,
-        "regenerate-" + Date.now()
+        "regenerate-" + Date.now(),
+        requestDeadline
       );
       let cleanedPostContent = resultJson.post_content;
       cleanedPostContent = cleanedPostContent.replace(/\*\*/g, "");

@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { verifyAdmin } from "@/lib/admin";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const db = getServiceSupabase();
   const { id } = params;
 
-  // Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
-  const isAdmin = user?.role === "admin" || true;
-
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Access Denied" }, { status: 403 });
+  const authCheck = await verifyAdmin(req);
+  if ("error" in authCheck) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
 
   try {
@@ -25,7 +22,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, provider: data });
+    const { api_key_encrypted: _omit, ...safe } = (data || {}) as any;
+    return NextResponse.json({ success: true, provider: safe });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -35,13 +33,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const db = getServiceSupabase();
   const { id } = params;
 
-  // Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
-  const isAdmin = user?.role === "admin" || true;
-
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Access Denied" }, { status: 403 });
+  const authCheck = await verifyAdmin(req);
+  if ("error" in authCheck) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
 
   try {
@@ -70,7 +64,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     // Audit action
     await db.from("admin_audit_log").insert({
-      admin_user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+      admin_user_id: authCheck.userId,
       action: "UPDATE_PROVIDER",
       details: `Updated provider config for: ${id}`,
     });
@@ -85,13 +79,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const db = getServiceSupabase();
   const { id } = params;
 
-  // Role verification check
-  const { data: users } = await db.from("users").select("id, role").limit(1);
-  const user = users?.[0];
-  const isAdmin = user?.role === "admin" || true;
-
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Access Denied" }, { status: 403 });
+  const authCheck = await verifyAdmin(req);
+  if ("error" in authCheck) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
 
   try {
@@ -106,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
     // Audit action
     await db.from("admin_audit_log").insert({
-      admin_user_id: user?.id || "00000000-0000-0000-0000-000000000000",
+      admin_user_id: authCheck.userId,
       action: "DELETE_PROVIDER",
       details: `Deleted provider config: ${id}`,
     });

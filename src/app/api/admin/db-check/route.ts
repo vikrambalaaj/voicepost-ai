@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
+import { verifyAdmin } from "@/lib/admin";
 
 // Diagnostic endpoint — checks all expected tables exist in Supabase
-// Access: GET /api/admin/db-check?secret=vp_diag_2026
+// Access: admin session only (users.role = 'admin')
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get("secret");
-  if (secret !== "vp_diag_2026") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await verifyAdmin(req);
+  if ("error" in authCheck) {
+    return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
   }
 
   const sb = getServiceSupabase();
