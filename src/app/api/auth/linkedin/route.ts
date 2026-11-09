@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 
 export async function GET(req: NextRequest) {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(mockCallbackUrl);
   }
 
-  const csrfToken = Math.random().toString(36).substring(2, 15);
+  const csrfToken = randomBytes(24).toString("hex");
 
   const authUrl = new URL("https://www.linkedin.com/oauth/v2/authorization");
   authUrl.searchParams.set("response_type", "code");
@@ -37,7 +38,8 @@ export async function GET(req: NextRequest) {
     path: "/",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    maxAge: 3600,
+    sameSite: "lax",
+    maxAge: 600,
   });
 
   return response;

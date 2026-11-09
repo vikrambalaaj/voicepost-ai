@@ -20,6 +20,15 @@ export default function ScrapingProgressPage() {
     });
 
     let completeTimer: NodeJS.Timeout | null = null;
+    const goNext = () => {
+      const params = new URLSearchParams(window.location.search);
+      const redir = params.get("redirect") || "/dashboard";
+      // only allow same-site relative redirects
+      router.push(redir.startsWith("/") && !redir.startsWith("//") ? redir : "/dashboard");
+    };
+    // Never trap the user here: continue after 75s whatever the status is.
+    const giveUpTimer = setTimeout(goNext, 75000);
+    const TERMINAL = ["complete", "low_data", "permission_error", "error", "token_expired", "disconnected"];
     
     const pollInterval = setInterval(async () => {
       try {
@@ -31,16 +40,11 @@ export default function ScrapingProgressPage() {
           setPostsCount(data.posts_scraped || 0);
           setTraits(data.style_traits || []);
 
-          if (data.status === "complete") {
+          if (TERMINAL.includes(data.status)) {
             setPercent(100);
             clearInterval(pollInterval);
-            
-            // Redirect after 2s delay
-            completeTimer = setTimeout(() => {
-              const params = new URLSearchParams(window.location.search);
-              const redir = params.get("redirect") || "/dashboard";
-              router.push(redir);
-            }, 2000);
+            clearTimeout(giveUpTimer);
+            completeTimer = setTimeout(goNext, data.status === "complete" ? 1500 : 800);
           } else {
             // Incremental mockup percentage up to 90%
             setPercent((prev) => Math.min(prev + 15, 90));
@@ -53,6 +57,7 @@ export default function ScrapingProgressPage() {
 
     return () => {
       clearInterval(pollInterval);
+      clearTimeout(giveUpTimer);
       if (completeTimer) clearTimeout(completeTimer);
     };
   }, [router]);

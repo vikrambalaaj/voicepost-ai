@@ -1,43 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { randomUUID } from "crypto";
+import { getAuthenticatedUserId } from "@/lib/auth";
 import { createSessionCookie } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
+
+const RESCRAPE_AFTER_MS = 7 * 24 * 3600 * 1000;
 
 async function upsertLinkedinAccount(db: any, accountData: any) {
   const { data: existing } = await db
     .from("linkedin_accounts")
-    .select("id")
+    .select("id, scraping_status, last_scraped_at")
     .eq("user_id", accountData.user_id)
     .eq("linkedin_profile_id", accountData.linkedin_profile_id)
     .limit(1);
 
-  if (existing?.[0]) {
-    return db
-      .from("linkedin_accounts")
-      .update(accountData)
-      .eq("id", existing[0].id)
-      .select()
-      .single();
-  } else {
-    const { data: inserted, error: insertErr } = await db
-      .from("linkedin_accounts")
-      .insert(accountData)
-      .select()
-      .single();
-
-    if (insertErr) {
-      // Fallback update
-      return db
-        .from("linkedin_accounts")
-        .update(accountData)
-        .eq("user_id", accountData.user_id)
-        .eq("linkedin_profile_id", accountData.linkedin_profile_id)
-        .select()
-        .single();
-    }
-    return { data: inserted, error: null };
+  const row = existing?.[0];
+  if (row) {
+    // Returning login: keep scrape state, only refresh token + profile details.
+    const { scraping_status, last_scraped_at, is_primary, ...refresh } = accountData;
+    const res = await db.from("linkedin_accounts").update(refresh).eq("id", row.id).select().single();
+    const lastScraped = row.last_scraped_at ? new Date(row.last_scraped_at).getTime() : 0;
+    const needsScrape =
+      row.scraping_status !== "complete" || Date.now() - lastScraped > RESCRAPE_AFTER_MS;
+    return { ...res, needsScrape };
   }
+
+  const { data: inserted, error: insertErr } = await db
+    .from("linkedin_accounts")
+    .insert(accountData)
+    .select()
+    .single();
+  if (insertErr) {
+    console.error("[auth-callback] linkedin_accounts insert failed:", insertErr.message);
+    return { data: null, error: insertErr, needsScrape: true };
+  }
+  return { data: inserted, error: null, needsScrape: true };
 }
 
 export async function GET(req: NextRequest) {
@@ -54,8 +52,11 @@ export async function GET(req: NextRequest) {
   const loginPurpose = purpose === "login" || req.nextUrl.searchParams.get("purpose") === "login";
 
   // CSRF check for real OAuth codes
-  if (code !== "mock_code" && storedToken && stateToken !== storedToken) {
-    console.warn("State mismatch detected, but proceeding for compatibility:", { stateToken, storedToken });
+  if (code !== "mock_code" && (!storedToken || !stateToken || stateToken !== storedToken)) {
+    console.warn("[auth-callback] OAuth state mismatch - rejecting");
+    const res = NextResponse.redirect(new URL("/login?error=csrf_failed", req.nextUrl.origin));
+    res.cookies.delete("linkedin_oauth_state");
+    return res;
   }
 
   const db = getServiceSupabase();
@@ -101,31 +102,23 @@ export async function GET(req: NextRequest) {
       const tokenData = await tokenRes.json();
       const accessToken = tokenData.access_token;
 
-      // Fetch userinfo using modern OIDC endpoint
-      const userinfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!userinfoRes.ok) throw new Error(`Userinfo fetch failed: ${userinfoRes.statusText}`);
-      const userinfoData = await userinfoRes.json();
-
-      // Attempt to retrieve profile headline from legacy profile endpoint (OIDC token might allow it)
-      let headline = "LinkedIn Professional";
-      try {
-        const meRes = await fetch("https://api.linkedin.com/v2/me?projection=(id,localizedHeadline)", {
+      // Userinfo (OIDC) and headline (legacy /v2/me) are independent: fetch in parallel.
+      const [userinfoRes, headline] = await Promise.all([
+        fetch("https://api.linkedin.com/v2/userinfo", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }),
+        fetch("https://api.linkedin.com/v2/me?projection=(id,localizedHeadline)", {
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "X-Restli-Protocol-Version": "2.0.0",
           },
-        });
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData.localizedHeadline) {
-            headline = meData.localizedHeadline;
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to fetch headline from /v2/me, using fallback:", err);
-      }
+        })
+          .then(async (r) => (r.ok ? (await r.json()).localizedHeadline : null))
+          .catch(() => null)
+          .then((h) => h || "LinkedIn Professional"),
+      ]);
+      if (!userinfoRes.ok) throw new Error(`Userinfo fetch failed: ${userinfoRes.statusText}`);
+      const userinfoData = await userinfoRes.json();
 
       accountInfo = {
         linkedin_profile_id: `urn:li:person:${userinfoData.sub}`,
@@ -152,7 +145,7 @@ export async function GET(req: NextRequest) {
     // Session token might be invalid or expired
   }
 
-  if (currentUserId) {
+  if (currentUserId && !isMock) {
     userId = currentUserId;
     // Update user info with LinkedIn profile details
     await db.from("users").update({
@@ -161,15 +154,23 @@ export async function GET(req: NextRequest) {
     }).eq("id", userId);
   } else if (isMock) {
     // Demo mode: use or create a fixed demo user
-    const demoId = "00000000-0000-0000-0000-000000000000";
-    await db.from("users").upsert({
+    const demoEmail = accountInfo.profile_email || "demo@voicepost.com";
+    // users.email is UNIQUE: if a row already owns the demo email under another id,
+    // reuse that row instead of failing the whole login with db_error.
+    const { data: emailOwner } = await db.from("users").select("id").eq("email", demoEmail).limit(1);
+    const demoId = emailOwner?.[0]?.id || "00000000-0000-0000-0000-000000000000";
+    const { error: demoUserErr } = await db.from("users").upsert({
       id: demoId,
-      email: accountInfo.profile_email || "demo@voicepost.com",
+      email: demoEmail,
       full_name: accountInfo.profile_name,
       industry: "SaaS & AI",
       job_title: "Tech Founder",
       plan: "free",
     }).select();
+    if (demoUserErr) {
+      console.error("[auth-callback] demo user upsert failed:", demoUserErr.message);
+      return NextResponse.redirect(new URL("/login?error=db_error", req.nextUrl.origin));
+    }
     
     // Clean up any stray accounts for the demo user that are not the standard mock accounts
     await db
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest) {
   }
 
   // --- Upsert LinkedIn Account ---
-  const { data: linkedinAccount, error: accError } = await upsertLinkedinAccount(db, {
+  const { data: linkedinAccount, error: accError, needsScrape } = await upsertLinkedinAccount(db, {
     user_id: userId,
     linkedin_profile_id: accountInfo.linkedin_profile_id,
     access_token: accountInfo.access_token,
@@ -228,7 +229,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (accError) {
-    console.error("Failed to save linkedin account:", accError);
+    console.error("Failed to save linkedin account:", accError.message || accError);
     const dest = loginPurpose ? "/login?error=db_error" : "/settings/linkedin?status=db_error";
     return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
   }
@@ -261,8 +262,8 @@ export async function GET(req: NextRequest) {
       is_primary: false,
       last_scraped_at: new Date().toISOString(),
     });
-  } else {
-    // Real LinkedIn Pages lookup
+  } else if (needsScrape) {
+    // Real LinkedIn Pages lookup (first connect / weekly refresh only)
     try {
       let orgs: string[] = [];
 
@@ -343,26 +344,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Set session cookie (30-day expiry)
-  const sessionPayload = createSessionCookie({
-    userId,
-    email: accountInfo.profile_email,
-    name: accountInfo.profile_name,
-    picture: accountInfo.profile_picture_url,
-    linkedin_connected: true,
-  });
-
-  // Trigger background post scraping — fire and forget (do NOT await, redirect must be instant)
-  fetch(`${req.nextUrl.origin}/api/linkedin/scrape-posts`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Cookie": `vp_session=${sessionPayload}`,
-    },
-    body: JSON.stringify({ accountId: linkedinAccount.id }),
-  }).catch((err) => console.error("Failed to scrape posts in callback:", err));
+  let sessionPayload: string;
+  try {
+    sessionPayload = createSessionCookie({
+      userId,
+      email: accountInfo.profile_email,
+      name: accountInfo.profile_name,
+      picture: accountInfo.profile_picture_url,
+      linkedin_connected: true,
+    });
+  } catch (err: any) {
+    console.error("[auth-callback] cannot issue session:", err.message);
+    return NextResponse.redirect(new URL("/login?error=server_config", req.nextUrl.origin));
+  }
 
   // Log authentication/connection audit event
-  await logAuditEvent({
+  const auditPromise = logAuditEvent({
     userId,
     action: loginPurpose ? "USER_LOGGED_IN" : "LINKEDIN_ACCOUNT_CONNECTED",
     targetType: "linkedin_account",
@@ -378,9 +375,9 @@ export async function GET(req: NextRequest) {
   });
 
   // --- Build redirect response ---
-  const redirectDest = loginPurpose
-    ? "/settings/linkedin/scraping?redirect=/dashboard"
-    : "/settings/linkedin/scraping?redirect=/settings/linkedin";
+  // Only send users through the (slow) writing-style scrape on first connect or when stale.
+  const after = loginPurpose ? "/dashboard" : "/settings/linkedin";
+  const redirectDest = needsScrape ? `/settings/linkedin/scraping?redirect=${after}` : after;
   const response = NextResponse.redirect(new URL(redirectDest, req.nextUrl.origin));
 
   response.cookies.set("vp_session", sessionPayload, {
@@ -390,6 +387,8 @@ export async function GET(req: NextRequest) {
     maxAge: 30 * 24 * 60 * 60, // 30 days
     sameSite: "lax",
   });
+
+  await auditPromise;
 
   // Clear CSRF cookie
   response.cookies.delete("linkedin_oauth_state");
