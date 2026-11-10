@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createRecorder, stopStream } from "@/lib/utils/recorder";
 import { useRouter } from "next/navigation";
 import { IosShell } from "@/components/layout/IosShell";
 import { Mic, Type, Search, ImageIcon, Sparkles, Upload, Check, Trash2, ArrowLeft, Plus, Minus, Globe } from "lucide-react";
@@ -39,6 +40,7 @@ export default function CreatePostPage() {
   const [personalProfile, setPersonalProfile] = useState<any>(null);
   const [isSeries, setIsSeries] = useState(false);
   const [seriesPostCount, setSeriesPostCount] = useState(3);
+  const [offlineRecordings, setOfflineRecordings] = useState<any[]>([]);
   
   // Step 3 Image States
   const [imageTab, setImageTab] = useState<"search" | "ai" | "upload" | "url">("search");
@@ -74,7 +76,47 @@ export default function CreatePostPage() {
   const [generationTime, setGenerationTime] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
+  const loadOfflineRecordings = async () => {
+    try {
+      const { getOfflineRecordings } = await import("@/lib/utils/offline-voice");
+      const list = await getOfflineRecordings();
+      setOfflineRecordings(list);
+    } catch (e) {
+      console.warn("IndexedDB load failed:", e);
+    }
+  };
+
+  // Release the microphone / stop polling when leaving the page, and warn before closing mid-recording.
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.onstop = null;
+          mediaRecorderRef.current.stop();
+        }
+      } catch {}
+      stopStream(streamRef.current);
+      streamRef.current = null;
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch {}
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isRecording]);
+
+  useEffect(() => {
+    loadOfflineRecordings();
     const saved = localStorage.getItem("voicepost_ai_backend");
     if (saved === "antigravity" || saved === "waterfall") {
       setAiBackend(saved);
@@ -114,6 +156,9 @@ export default function CreatePostPage() {
   // Refs for Recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordingStartRef = useRef<number>(0);
+  const mountedRef = useRef(true);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -283,15 +328,14 @@ export default function CreatePostPage() {
   const startRecording = async () => {
     await triggerWarmup();
 
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       audioChunksRef.current = [];
-      
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : "audio/wav",
-      });
+
+      // Pick a container this browser can record (iOS Safari: audio/mp4, not webm).
+      const recorder = createRecorder(stream);
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -299,22 +343,46 @@ export default function CreatePostPage() {
         }
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        // Measure real elapsed time: `recordingDuration` state is stale inside this closure.
+        const elapsedSeconds = Math.max(1, Math.round((Date.now() - recordingStartRef.current) / 1000));
         setAudioBlob(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-        handleTranscribe(audioBlob);
+        stopStream(stream);
+        streamRef.current = null;
+
+        // Cache recording locally in case the network fails or is offline
+        const tempId = "voice_" + Date.now();
+        try {
+          const { saveOfflineRecording } = await import("@/lib/utils/offline-voice");
+          await saveOfflineRecording(tempId, audioBlob, `Recording at ${new Date().toLocaleTimeString()}`);
+          loadOfflineRecordings();
+        } catch (e) {
+          console.warn("Failed to save recording offline:", e);
+        }
+
+        handleTranscribe(audioBlob, tempId, elapsedSeconds);
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recordingStartRef.current = Date.now();
+      recorder.start(1000); // emit a chunk every second so a crash loses at most 1s of audio
       setIsRecording(true);
       setRecordingDuration(0);
       
-      setTimeout(() => startVisualizer(stream), 100);
+      const liveStream = stream;
+      setTimeout(() => startVisualizer(liveStream), 100);
 
-    } catch (err) {
-      alert("Microphone permission denied. Please enter your thoughts via text instead.");
+    } catch (err: any) {
+      // Always release the mic, even when the recorder could not be created.
+      stopStream(stream);
+      streamRef.current = null;
+      const denied = err?.name === "NotAllowedError" || err?.name === "SecurityError";
+      alert(
+        denied
+          ? "Microphone permission denied. Please enter your thoughts via text instead."
+          : "Voice recording isn't supported in this browser. Please type your thoughts instead."
+      );
       setActiveInputMode("type");
     }
   };
@@ -329,12 +397,12 @@ export default function CreatePostPage() {
   };
 
   // Transcribe Audio — uses async polling pattern to avoid Vercel 10s timeout
-  const handleTranscribe = async (blob: Blob) => {
+  const handleTranscribe = async (blob: Blob, tempId?: string, durationOverride?: number) => {
     setTranscribing(true);
     try {
       const formData = new FormData();
       formData.append("file", blob);
-      formData.append("duration", recordingDuration.toString());
+      formData.append("duration", String(durationOverride ?? recordingDuration));
 
       // Step 1: Submit audio (fast ~2s) — returns transcript_id
       const res = await fetch("/api/voice/transcribe", {
@@ -356,11 +424,23 @@ export default function CreatePostPage() {
       const maxAttempts = 40; // 40 × 2s = 80s max
       for (let i = 0; i < maxAttempts; i++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (!mountedRef.current) return; // user left the page: stop polling
         const pollRes = await fetch(pollUrl);
         const pollData = await pollRes.json();
 
         if (pollData.status === "completed" && pollData.corrected_transcript) {
           setTranscript(pollData.corrected_transcript);
+          
+          // Clear successful transcription from local IndexedDB cache
+          if (tempId) {
+            try {
+              const { deleteOfflineRecording } = await import("@/lib/utils/offline-voice");
+              await deleteOfflineRecording(tempId);
+              loadOfflineRecordings();
+            } catch (e) {
+              console.warn("Failed to delete offline recording from cache:", e);
+            }
+          }
           return;
         } else if (pollData.status === "error") {
           throw new Error(pollData.error || "Transcription failed");
@@ -855,6 +935,44 @@ export default function CreatePostPage() {
                   >
                     <Mic className="w-8 h-8" />
                   </button>
+                  {offlineRecordings.length > 0 && (
+                    <div className="mt-6 w-full text-left bg-zinc-900/50 border border-amber-500/20 rounded-xl p-3.5">
+                      <h4 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+                        ⚠️ Recoverable Offline Recordings
+                      </h4>
+                      <div className="space-y-2">
+                        {offlineRecordings.map((rec) => (
+                          <div key={rec.id} className="flex items-center justify-between bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
+                            <div className="min-w-0 flex-1 mr-2">
+                              <p className="text-xs text-white font-medium truncate">{rec.title}</p>
+                              <p className="text-[10px] text-zinc-500">{(rec.blob.size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <button
+                                onClick={() => {
+                                  setAudioBlob(rec.blob);
+                                  handleTranscribe(rec.blob, rec.id);
+                                }}
+                                className="text-[10px] bg-amber-500 hover:bg-amber-600 text-black px-2 py-1 rounded border-none font-bold cursor-pointer transition-colors"
+                              >
+                                Transcribe
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const { deleteOfflineRecording } = await import("@/lib/utils/offline-voice");
+                                  await deleteOfflineRecording(rec.id);
+                                  loadOfflineRecordings();
+                                }}
+                                className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-2 py-1 rounded border-none cursor-pointer transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {transcript && (
                     <div className="mt-6 w-full text-left">
                       <label className="text-xs font-bold text-zinc-400 uppercase">Corrected Transcript (Tap to edit)</label>

@@ -5,6 +5,7 @@ import { Home, FileText, Plus, CreditCard, User, ChevronRight, LogOut, Lightbulb
 import { cn } from "@/lib/utils";
 import { TabBar } from "./TabBar";
 import { BeamsBackground } from "@/components/ui/beams-background";
+import { motion } from "framer-motion";
 
 export const IosShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
@@ -107,7 +108,13 @@ export const IosShell = ({ children }: { children: React.ReactNode }) => {
         <main className="ios-scroll relative flex-1 z-10 bg-transparent">
           {/* Content wrapper to center and align beautifully on desktop */}
           <div className="w-full md:max-w-4xl md:mx-auto md:py-8 md:px-6">
-            {children}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              {children}
+            </motion.div>
           </div>
           <div className="h-24 md:hidden" /> {/* Spacer for floating mobile tab bar */}
         </main>

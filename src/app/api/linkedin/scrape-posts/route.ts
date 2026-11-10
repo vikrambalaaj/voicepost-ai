@@ -28,6 +28,11 @@ const MOCK_SCRAPED_POSTS = [
 
 export async function POST(req: NextRequest) {
   const db = getServiceSupabase();
+  let activeAccountId: string | null = null;
+
+  const setStatus = async (accountId: string, userId: string, status: string) => {
+    await db.from("linkedin_accounts").update({ scraping_status: status }).eq("id", accountId).eq("user_id", userId);
+  };
 
   try {
     const userId = await getAuthenticatedUserId(req);
@@ -70,6 +75,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "LinkedIn account not found or unauthorized" }, { status: 404 });
     }
 
+    activeAccountId = accountId;
+
     // Set status to running
     await db
       .from("linkedin_accounts")
@@ -110,15 +117,15 @@ export async function POST(req: NextRequest) {
 
         if (!ugcRes.ok) {
           const errText = await ugcRes.text();
-          console.warn(`[scrape-posts] LinkedIn API error ${ugcRes.status}: ${errText}. Falling back to mock posts.`);
-          // Fall back to mock posts if API not permitted (e.g., scope not approved)
-          postsToSave = MOCK_SCRAPED_POSTS.map((p, index) => ({
-            user_id: userId,
-            linkedin_account_id: accountId,
-            linkedin_post_id: `mock_fallback_${index}`,
-            content: p.text,
-            published_at: p.created_at,
-          }));
+          console.warn(`[scrape-posts] LinkedIn API error ${ugcRes.status}: ${errText}`);
+          // Never substitute sample posts for a real user: that would train their style
+          // profile on someone else's writing. Record why and let the UI move on.
+          await setStatus(accountId, userId, ugcRes.status === 401 ? "token_expired" : ugcRes.status === 403 ? "permission_error" : "error");
+          return NextResponse.json({
+            success: false,
+            posts_scraped: 0,
+            reason: ugcRes.status === 403 ? "permission_error" : "linkedin_api_error",
+          });
         } else {
           const ugcData = await ugcRes.json();
           const elements = ugcData.elements || [];
@@ -138,15 +145,19 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error("[scrape-posts] Fetch error:", err);
-        // Graceful fallback
-        postsToSave = MOCK_SCRAPED_POSTS.map((p, index) => ({
-          user_id: userId,
-          linkedin_account_id: accountId,
-          linkedin_post_id: `mock_fallback_${index}`,
-          content: p.text,
-          published_at: p.created_at,
-        }));
+        await setStatus(accountId, userId, "error");
+        return NextResponse.json({ success: false, posts_scraped: 0, reason: "fetch_error" });
       }
+    }
+
+    // Real account with nothing to learn from: finish cleanly as low_data
+    if (!isMock && postsToSave.length === 0) {
+      await db.from("linkedin_accounts").update({
+        scraping_status: "low_data",
+        posts_scraped_count: 0,
+        last_scraped_at: new Date().toISOString(),
+      }).eq("id", accountId).eq("user_id", userId);
+      return NextResponse.json({ success: true, posts_scraped: 0, source: "linkedin_api" });
     }
 
     // Save scraped posts to user_posts_raw table
@@ -209,6 +220,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[scrape-posts] Error:", error);
+    // Never leave the account stuck on "running" (the UI polls this status).
+    try {
+      const uid = await getAuthenticatedUserId(req);
+      if (uid && activeAccountId) await setStatus(activeAccountId, uid, "error");
+    } catch {}
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

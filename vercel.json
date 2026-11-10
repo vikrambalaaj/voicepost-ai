@@ -18,6 +18,10 @@
       "schedule": "0 0 * * 1"
     },
     {
+      "path": "/api/cron/reset-weekly-limits?scope=month",
+      "schedule": "0 0 1 * *"
+    },
+    {
       "path": "/api/cron/fetch-trends",
       "schedule": "0 1 * * *"
     },

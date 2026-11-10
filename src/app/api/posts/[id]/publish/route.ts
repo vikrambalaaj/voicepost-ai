@@ -3,6 +3,7 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
+import { safeFetch } from "@/lib/safe-fetch";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -33,6 +34,11 @@ export async function POST(
     // Request body may be empty
   }
 
+  let prevStatus = "approved";
+  let claimed = false;
+  let quotaTaken = false;
+  let finalized = false;
+
   try {
     // 1. Fetch post details and verify ownership
     const { data: post, error: postErr } = await db
@@ -45,6 +51,14 @@ export async function POST(
     if (postErr || !post) {
       return NextResponse.json({ error: "Post not found or unauthorized" }, { status: 404 });
     }
+
+    if (post.status === "published" || post.status === "publishing") {
+      return NextResponse.json(
+        { error: post.status === "published" ? "This post is already published." : "This post is already being published." },
+        { status: 409 }
+      );
+    }
+    prevStatus = post.status || "approved";
 
     if (post.content_type === "article") {
       try {
@@ -84,15 +98,6 @@ export async function POST(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Gatekeeper check before final publish
-    if (user.plan === "free" && user.posts_used_this_week >= (user.posts_limit_weekly || 3)) {
-      return NextResponse.json({
-        limit_hit: true,
-        title: "You've hit your limit",
-        body: "Upgrade to keep creating posts without interruption.",
-      }, { status: 403 });
-    }
-
     // 3. Fetch connected LinkedIn account
     const { data: accounts } = await db
       .from("linkedin_accounts")
@@ -105,6 +110,30 @@ export async function POST(
     }
 
     const account = accounts[0];
+
+    // Claim the post so a double-click / retry cannot publish twice.
+    const { data: claimedRows } = await db
+      .from("posts")
+      .update({ status: "publishing" })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .not("status", "in", "(published,publishing)")
+      .select("id");
+    if (!claimedRows || claimedRows.length === 0) {
+      return NextResponse.json({ error: "This post is already being published." }, { status: 409 });
+    }
+    claimed = true;
+
+    // Atomic quota check + increment for ALL plans (refunded below if publishing fails).
+    const { data: quotaOk } = await db.rpc("consume_post_quota", { p_user: userId });
+    if (quotaOk === false) {
+      return NextResponse.json({
+        limit_hit: true,
+        title: "You've hit your limit",
+        body: "Upgrade to keep creating posts without interruption.",
+      }, { status: 403 });
+    }
+    quotaTaken = quotaOk === true;
 
     let linkedinPostId = `mock_share_${Math.random().toString(36).substring(2, 12)}`;
     let permalink = `https://www.linkedin.com/feed/update/urn:li:share:${linkedinPostId}`;
@@ -163,6 +192,15 @@ export async function POST(
     // Real LinkedIn publication flow
     if (!isMock && !isPublished) {
       try {
+        if (
+          !account.refresh_token &&
+          account.token_expires_at &&
+          new Date(account.token_expires_at).getTime() < Date.now()
+        ) {
+          await db.from("linkedin_accounts").update({ scraping_status: "token_expired" }).eq("id", account.id);
+          return NextResponse.json({ token_expired: true, error: "LinkedIn session expired. Please reconnect your account." }, { status: 401 });
+        }
+
         // Auto-refresh token only if expires in less than 7 days AND refresh_token exists
         if (
           account.refresh_token &&
@@ -306,7 +344,7 @@ export async function POST(
                 const base64Content = selectedImage.url.split(";base64,").pop();
                 videoBuffer = Buffer.from(base64Content!, "base64");
               } else {
-                const vidRes = await fetch(selectedImage.url);
+                const vidRes = await safeFetch(selectedImage.url);
                 const arrayBuffer = await vidRes.arrayBuffer();
                 videoBuffer = Buffer.from(arrayBuffer);
               }
@@ -367,7 +405,10 @@ export async function POST(
                 const buf = Buffer.from(base64, "base64");
                 imgBlob = new Blob([buf], { type: mime });
               } else {
-                const imgBlobRes = await fetch(selectedImage.url);
+                const imgBlobRes = await safeFetch(selectedImage.url);
+                if (!imgBlobRes.ok) {
+                  throw new Error(`Could not download the selected image (${imgBlobRes.status}). It may have expired - please pick or regenerate it.`);
+                }
                 imgBlob = await imgBlobRes.blob();
               }
 
@@ -455,31 +496,18 @@ export async function POST(
 
       } catch (err: any) {
         console.error("LinkedIn OAuth publishing error:", err.message);
-        // Fallback action sheet support if API review pending
-        try {
-          await db
-            .from("posts")
-            .update({
-              status: "published",
-              published_at: new Date().toISOString(),
-              linkedin_post_id: linkedinPostId,
-              linkedin_post_url: permalink,
-            })
-            .eq("id", id);
-        } catch (dbErr) {
-          console.error("Failed to update post status to published during fallback:", dbErr);
-        }
-
-        // Log sandbox fallback audit event
+        // The post was NOT published. Leave it unpublished (status is restored in `finally`),
+        // so no fake LinkedIn id / permalink is stored. The client can still offer a
+        // copy-to-clipboard manual publish from this response.
         await logAuditEvent({
           userId,
-          action: "POST_PUBLISHED_SANDBOX",
+          action: "POST_PUBLISH_FAILED",
           targetType: "post",
           targetId: id,
           details: {
             content_type: post.content_type,
-            sandbox: true,
             is_carousel: isCarousel,
+            error: String(err.message || err).slice(0, 300),
           },
           ipAddress,
           userAgent,
@@ -488,10 +516,11 @@ export async function POST(
         return NextResponse.json({
           success: false,
           pending_review: true,
-          post_content: isCarousel ? carouselTextContent : finalPostContent,
-          hashtags: post.hashtags,
-          message: "VoicePost's LinkedIn API integration is currently in sandbox mode (pending official review). Your post content and hashtags have been copied to your clipboard so you can paste them directly on LinkedIn.",
-        });
+          publish_error: String(err.message || err).slice(0, 300),
+          post_content: isCarousel ? carouselTextContent : finalPostContent || post.post_content,
+          hashtags: post.hashtags || [],
+          message: "We couldn't publish to LinkedIn automatically, so nothing was posted. Your post content and hashtags have been copied to your clipboard so you can paste them directly on LinkedIn.",
+        }, { status: 502 });
       }
     }
 
@@ -506,14 +535,7 @@ export async function POST(
       })
       .eq("id", id);
 
-    // 5. Update user limits
-    await db
-      .from("users")
-      .update({
-        posts_used_this_week: user.posts_used_this_week + 1,
-        posts_used_this_month: user.posts_used_this_month + 1,
-      })
-      .eq("id", userId);
+    finalized = true;
 
     // Log successful publish audit event
     await logAuditEvent({
@@ -540,5 +562,19 @@ export async function POST(
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  } finally {
+    // Unwind the lock and the quota slot if the post did not end up published.
+    if (!finalized) {
+      try {
+        if (claimed) {
+          await db.from("posts").update({ status: prevStatus }).eq("id", id).eq("status", "publishing");
+        }
+        if (quotaTaken) {
+          await db.rpc("refund_post_quota", { p_user: userId });
+        }
+      } catch (e) {
+        console.error("Failed to unwind publish lock/quota:", e);
+      }
+    }
   }
 }

@@ -75,6 +75,8 @@ class MockQueryBuilder {
       data = [mockLinkedInAccount];
     } else if (this.table === "post_images") {
       data = [mockVideoAsset];
+    } else if (this.table === "posts") {
+      data = [{ id: "claimed" }]; // publish lock claim succeeded
     }
     return Promise.resolve({ data, error: null }).then(onfulfilled);
   });
@@ -83,6 +85,7 @@ class MockQueryBuilder {
 vi.mock("@/lib/supabase", () => {
   const dbMock = {
     from: vi.fn().mockImplementation((table: string) => new MockQueryBuilder(table)),
+    rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
   };
   return {
     getServiceSupabase: () => dbMock,
@@ -94,7 +97,10 @@ describe("Publish Post API Route (/api/posts/[id]/publish)", () => {
 
   beforeEach(() => {
     db = getServiceSupabase();
-    vi.mocked(db.from).mockClear();
+    vi.mocked(db.from).mockReset();
+    vi.mocked(db.from).mockImplementation((table: string) => new MockQueryBuilder(table));
+    db.rpc.mockReset();
+    db.rpc.mockResolvedValue({ data: true, error: null });
   });
 
   it("should successfully mock publish a carousel post with PDF data", async () => {
@@ -137,5 +143,34 @@ describe("Publish Post API Route (/api/posts/[id]/publish)", () => {
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(body.linkedin_post_url).toContain("mock_share_");
+  });
+
+  it("returns 409 and does not publish when the post is already published", async () => {
+    const postsQueryBuilder = new MockQueryBuilder("posts");
+    postsQueryBuilder.single = vi.fn().mockResolvedValue({
+      data: { ...mockVideoPost, status: "published" },
+      error: null,
+    });
+    vi.mocked(db.from).mockImplementation((table: string) =>
+      table === "posts" ? postsQueryBuilder : new MockQueryBuilder(table)
+    );
+
+    const req = new NextRequest("http://localhost:6250/api/posts/post_video_123/publish", {
+      method: "POST",
+      body: JSON.stringify({ backend: "waterfall" }),
+    });
+    const res = await POST(req, { params: { id: "post_video_123" } });
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 403 limit_hit when the atomic quota check refuses", async () => {
+    db.rpc.mockResolvedValueOnce({ data: false, error: null });
+    const req = new NextRequest("http://localhost:6250/api/posts/post_video_123/publish", {
+      method: "POST",
+      body: JSON.stringify({ backend: "waterfall" }),
+    });
+    const res = await POST(req, { params: { id: "post_video_123" } });
+    expect(res.status).toBe(403);
+    expect((await res.json()).limit_hit).toBe(true);
   });
 });

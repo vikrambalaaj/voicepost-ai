@@ -32,6 +32,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "ASSEMBLYAI_API_KEY not configured" }, { status: 500 });
   }
 
+  // Idempotent: once a transcript has been corrected and stored, later polls return the stored
+  // result instead of re-running the LLM pass and inserting another voice_recordings row.
+  const dedupeKey = `assemblyai/${transcriptId}`;
+  {
+    const { data: existing } = await getServiceSupabase()
+      .from("voice_recordings")
+      .select("transcript_raw, transcript_corrected, duration_seconds")
+      .eq("user_id", userId)
+      .eq("storage_path", dedupeKey)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json({
+        status: "completed",
+        raw_transcript: existing.transcript_raw,
+        corrected_transcript: existing.transcript_corrected,
+        duration_seconds: existing.duration_seconds ?? durationSeconds,
+      });
+    }
+  }
+
   try {
     // Single poll — no waiting loop (client calls this endpoint repeatedly)
     const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
@@ -58,7 +79,8 @@ export async function GET(req: NextRequest) {
     let correctedTranscript = rawTranscript;
 
     const db = getServiceSupabase();
-    const userPlan = "pro"; // default; could look up user if needed
+    const { data: planRow } = await db.from("users").select("plan").eq("id", userId).single();
+    const userPlan = (planRow?.plan as string) || "free";
 
     try {
       const correctionPrompt = `You are an expert audio transcription editor. Correct any spelling, capitalization, grammar, or punctuation errors in the transcribed text below. 
@@ -97,7 +119,7 @@ TRANSCRIPT:
     try {
       await db.from("voice_recordings").insert({
         user_id: userId,
-        storage_path: "recordings/audio_" + Date.now() + ".webm",
+        storage_path: dedupeKey,
         duration_seconds: durationSeconds,
         transcript_raw: rawTranscript,
         transcript_corrected: correctedTranscript,

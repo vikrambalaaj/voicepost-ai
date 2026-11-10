@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { routeLLMRequest } from "@/lib/llm/router";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 import { logAuditEvent } from "@/lib/audit";
@@ -21,6 +22,8 @@ export async function POST(
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     const db = getServiceSupabase();
 

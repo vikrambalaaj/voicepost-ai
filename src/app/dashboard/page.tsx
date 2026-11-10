@@ -32,9 +32,17 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch posts
-        const postsRes = await fetch("/api/posts");
-        const postsData = await postsRes.json();
+        // The three requests are independent: run them in parallel instead of one after another.
+        const [postsRes, statusRes, sessionRes] = await Promise.all([
+          fetch("/api/posts"),
+          fetch("/api/linkedin/scraping-status"),
+          fetch("/api/auth/session"),
+        ]);
+        const [postsData, statusData, sessionData] = await Promise.all([
+          postsRes.json(),
+          statusRes.json().catch(() => ({})),
+          sessionRes.json().catch(() => ({})),
+        ]);
         let loadedPosts: any[] = [];
         if (postsData.success && postsData.posts?.length > 0) {
           setPosts(postsData.posts.slice(0, 4));
@@ -43,19 +51,12 @@ export default function DashboardPage() {
           setPosts([]);
         }
 
-        // Fetch LinkedIn status
-        const statusRes = await fetch("/api/linkedin/scraping-status");
-        const statusData = await statusRes.json();
         const connected = statusData.status && statusData.status !== "disconnected";
         setLinkedinConnected(connected);
         if (connected) {
           setScrapingStatus(statusData);
         }
 
-        // Fetch session data
-        const sessionRes = await fetch("/api/auth/session");
-        const sessionData = await sessionRes.json();
-        
         const plan = sessionData.user?.plan || "free";
         const isFree = plan === "free";
 

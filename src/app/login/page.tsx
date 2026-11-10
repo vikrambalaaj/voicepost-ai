@@ -1,13 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { SparklesCore } from "@/components/ui/sparkles-core";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,19 +17,13 @@ export default function LoginPage() {
         setErrorMsg("Database error: Failed to save your account details.");
       } else if (err === "csrf_failed") {
         setErrorMsg("Security validation failed. Please try logging in again.");
+      } else if (err === "server_config") {
+        setErrorMsg("Sign-in is temporarily unavailable (server configuration). Please try again shortly.");
       } else if (err) {
-        setErrorMsg(`Login error: ${err}`);
+        setErrorMsg("Login failed. Please try again.");
       }
     }
-
-    // If already logged in, skip to dashboard
-    fetch("/api/auth/session")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.authenticated) router.replace("/dashboard");
-        else setCheckingSession(false);
-      })
-      .catch(() => setCheckingSession(false));
+    // Already-logged-in users are redirected to /dashboard by the middleware.
   }, []);
 
   const handleLinkedInLogin = () => {
@@ -41,28 +31,18 @@ export default function LoginPage() {
     window.location.href = "/api/auth/linkedin?purpose=login";
   };
 
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center relative overflow-hidden">
-      {/* Sparkles background */}
-      <div className="absolute inset-0 z-0">
-        <SparklesCore
-          background="transparent"
-          minSize={0.4}
-          maxSize={1.0}
-          particleDensity={50}
-          particleColor="#3B82F6"
-          speed={0.8}
-          className="w-full h-full"
-        />
-      </div>
+      {/* Static dotted background (no JS particle engine) */}
+      <div
+        className="absolute inset-0 z-0 opacity-40 pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(circle, rgba(59,130,246,0.55) 1px, transparent 1.5px)",
+          backgroundSize: "28px 28px",
+          maskImage: "radial-gradient(ellipse at center, black 30%, transparent 75%)",
+          WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 75%)",
+        }}
+      />
 
       {/* Glow orbs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />

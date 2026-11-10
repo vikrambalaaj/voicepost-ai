@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
 import { runAntigravityAgent } from "@/lib/agents/antigravity";
+import { aiRateLimit } from "@/lib/rate-limit";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { cleanJsonString } from "@/lib/utils";
 import { sendApprovalEmailInternal } from "@/lib/email";
@@ -17,8 +18,56 @@ export const BANNED_WORDS = [
   "thought leader", "move the needle"
 ];
 
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(styleJson: any = {}): string {
+  let professionalismInstruction = "";
+  if (styleJson.dna_professionalism !== undefined) {
+    if (styleJson.dna_professionalism > 75) {
+      professionalismInstruction = "Write in an authoritative, highly professional, corporate enterprise tone.";
+    } else if (styleJson.dna_professionalism < 35) {
+      professionalismInstruction = "Write in a highly casual, friendly, conversational, and direct tone.";
+    } else {
+      professionalismInstruction = "Write in a balanced professional and conversational tone.";
+    }
+  }
+
+  let emojiInstruction = "Do not use emojis unless instructed.";
+  if (styleJson.dna_emoji_density !== undefined) {
+    if (styleJson.dna_emoji_density > 75) {
+      emojiInstruction = "Include emojis frequently to separate sections and highlight points (rich emoji usage).";
+    } else if (styleJson.dna_emoji_density < 20) {
+      emojiInstruction = "Strictly do NOT use any emojis in the post content under any circumstances.";
+    } else {
+      emojiInstruction = "Use emojis sparingly (maximum 2-3 throughout the entire post).";
+    }
+  }
+
+  let assertivenessInstruction = "";
+  if (styleJson.dna_assertiveness !== undefined) {
+    if (styleJson.dna_assertiveness > 75) {
+      assertivenessInstruction = "Be extremely bold, confident, and direct. Make strong, clear statements.";
+    } else if (styleJson.dna_assertiveness < 35) {
+      assertivenessInstruction = "Be diplomatic, inclusive, and advisory. Use consultative language.";
+    }
+  }
+
+  let formattingInstruction = "";
+  if (styleJson.dna_formatting_layout !== undefined) {
+    if (styleJson.dna_formatting_layout === "paragraphs") {
+      formattingInstruction = "Format the post using clean paragraphs separated by empty lines. Avoid bullet lists.";
+    } else if (styleJson.dna_formatting_layout === "bullets") {
+      formattingInstruction = "Use bullet points or numbered lists heavily to structure the body. Keep text paragraphs minimal.";
+    } else {
+      formattingInstruction = "Use a mix of short paragraphs and structured bullet points to ensure maximum readability.";
+    }
+  }
+
   return `You are a professional ghostwriter for high-impact LinkedIn content. Your writing MUST pass AI detection tools as human-written.
+
+CRITICAL STYLE INSTRUCTIONS:
+- ${professionalismInstruction}
+- ${emojiInstruction}
+- ${assertivenessInstruction}
+- ${formattingInstruction}
 
 CRITICAL RULES:
 1. NEVER use any of these banned AI words/phrases: ${BANNED_WORDS.join(", ")}.
@@ -35,10 +84,14 @@ export async function humanizePostContent(
   content: string,
   userId: string,
   userPlan: "free" | "starter" | "pro" | "agency",
-  sessionId: string
+  sessionId: string,
+  deadlineAt?: number
 ): Promise<string> {
+  // The polish pass is optional: skip it rather than risk blowing the function time limit.
+  if (deadlineAt && deadlineAt - Date.now() < 12000) return content;
   try {
     const res = await routeLLMRequest({
+      deadlineAt,
       useCase: "content_generation",
       messages: [
         {
@@ -66,11 +119,14 @@ export async function humanizeCarouselSlides(
   userId: string,
   userPlan: "free" | "starter" | "pro" | "agency",
   sessionId: string,
-  topic?: string
+  topic?: string,
+  deadlineAt?: number
 ): Promise<any[]> {
+  if (deadlineAt && deadlineAt - Date.now() < 12000) return slides;
   try {
     const topicContext = topic ? `The carousel topic is: "${topic}". All slide content must remain 100% about this topic after humanization. Do NOT introduce client names, case studies, or generic business jargon unrelated to this topic. Banned phrases: "Our client", "A client of ours", "Success Story", "A Client's Journey", "Real-World Example".` : "";
     const res = await routeLLMRequest({
+      deadlineAt,
       useCase: "content_generation",
       messages: [
         {
@@ -108,6 +164,8 @@ export async function humanizeCarouselSlides(
 }
 
 export async function POST(req: NextRequest) {
+  // One time budget for the whole request (maxDuration is 60s) shared by every LLM call below.
+  const requestDeadline = Date.now() + 52000;
   const db = getServiceSupabase();
 
   try {
@@ -124,6 +182,8 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const limited = await aiRateLimit(userId);
+    if (limited) return limited;
 
     const { data: user } = await db
       .from("users")
@@ -141,7 +201,7 @@ export async function POST(req: NextRequest) {
       const { data: exp } = await db.from("expert_styles").select("style_json").eq("id", style_id).single();
       selectedStyleJson = exp?.style_json || {};
     } else if (style_type === "custom") {
-      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).single();
+      const { data: cust } = await db.from("custom_styles").select("style_json").eq("id", style_id).eq("user_id", userId).single();
       selectedStyleJson = cust?.style_json || {};
     } else if (style_type === "own") {
       const { data: own } = await db.from("style_profiles").select("style_json").eq("user_id", user.id).single();
@@ -209,6 +269,7 @@ export async function POST(req: NextRequest) {
       }
       try {
         const queryRes = await routeLLMRequest({
+          deadlineAt: requestDeadline,
           useCase: "keyword_extraction",
           messages: [
             {
@@ -323,7 +384,7 @@ export async function POST(req: NextRequest) {
       // Fallback if not generated by agent
       if (!llmRes || !resultJson.post_content) {
         // Build AI Request
-        let systemPrompt = buildSystemPrompt();
+        let systemPrompt = buildSystemPrompt(selectedStyleJson);
         if (preserve_text) {
           systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
         }
@@ -486,6 +547,7 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
         }
 
         const waterfallRes = await routeLLMRequest({
+          deadlineAt: requestDeadline,
           useCase: "content_generation",
           messages: [
             { role: "system", content: systemPrompt },
@@ -518,7 +580,8 @@ Return your response ONLY in this JSON format (hashtags must be 6-8 lowercase st
           resultJson.post_content,
           user.id,
           user.plan || "pro",
-          `generate-${index}-` + Date.now()
+          `generate-${index}-` + Date.now(),
+          requestDeadline
         );
 
         let cleanedPostContent = resultJson.post_content;

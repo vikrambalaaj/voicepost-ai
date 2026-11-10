@@ -25,15 +25,17 @@ export async function triggerBackgroundSync(userId: string) {
   });
 }
 
-export async function syncUserEngagement(userId: string) {
+export async function syncUserEngagement(userId: string, onlyPostId?: string) {
   const db = getServiceSupabase();
 
   // 1. Get all published posts for this user
-  const { data: posts } = await db
+  let postsQuery = db
     .from("posts")
     .select("id, linkedin_post_id, linkedin_account_id, post_content, agent_thoughts")
     .eq("user_id", userId)
     .eq("status", "published");
+  if (onlyPostId) postsQuery = postsQuery.eq("id", onlyPostId);
+  const { data: posts } = await postsQuery;
 
   if (!posts || posts.length === 0) return;
 
@@ -87,7 +89,11 @@ export async function syncUserEngagement(userId: string) {
           console.warn(`[sync] LinkedIn API error for post ${post.id}:`, lnErr);
         }
       } else {
-        // Mock post or mock mode
+        // Real accounts never get invented commenters: a post without a real LinkedIn id
+        // (e.g. copied and pasted by hand) simply has nothing to sync.
+        if (!isMock) continue;
+
+        // Demo account only: mock post or mock mode
         // Try loading existing comments from DB
         const { data: dbComments } = await db
           .from("post_comments")

@@ -316,6 +316,13 @@ class MockSupabaseClient {
 
 const isPlaceholder = !supabaseUrl || supabaseUrl.includes("placeholder-project") || supabaseUrl.includes("your-supabase-project");
 
+// A missing Supabase URL in production must be a loud failure: the local JSON mock would
+// silently write to a per-instance /tmp file and lose every user's data on the next cold start.
+// (During `next build` there is no runtime traffic, so only guard the real runtime.)
+if (isPlaceholder && process.env.NODE_ENV === "production" && process.env.VERCEL_ENV && process.env.NEXT_PHASE !== "phase-production-build") {
+  console.error("[supabase] NEXT_PUBLIC_SUPABASE_URL is missing/placeholder in production - refusing to use the mock database.");
+}
+
 const createProxiedClient = (client: any) => {
   return client;
 };
@@ -328,6 +335,9 @@ export const supabase = isPlaceholder ? rawSupabase : createProxiedClient(rawSup
 
 export const getServiceSupabase = () => {
   if (isPlaceholder) {
+    if (process.env.NODE_ENV === "production" && process.env.VERCEL_ENV) {
+      throw new Error("Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL missing).");
+    }
     return new MockSupabaseClient() as any;
   }
   const rawService = createClient(supabaseUrl, supabaseServiceKey, {

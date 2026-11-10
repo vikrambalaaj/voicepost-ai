@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Routes that don't require authentication
+// Routes that don't require a session cookie (each handles its own auth where needed)
 const PUBLIC_PATHS = [
   "/login",
   "/pricing",
@@ -9,30 +9,81 @@ const PUBLIC_PATHS = [
   "/api/linkedin/scrape-posts",
   "/api/style/analyze",
   "/api/notify/email",
-  "/api/admin/db-check",
+  "/api/webhooks/stripe", // verified by Stripe signature
 ];
+// Verified by CRON_SECRET bearer token inside the route (Vercel cron sends no cookie)
+const PUBLIC_PREFIXES = ["/api/cron/"];
 
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "?"));
+  return PUBLIC_PATHS.includes(pathname) || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-  const session = req.cookies.get("vp_session")?.value;
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
 
-  // Root path behavior: redirect to dashboard if logged in, otherwise login
-  if (pathname === "/") {
-    if (session) {
-      try {
-        const dotIndex = session.lastIndexOf(".");
-        const encoded = dotIndex === -1 ? session : session.substring(0, dotIndex);
-        const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
-        if (decoded.exp && decoded.exp > Date.now()) {
-          return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
-        }
-      } catch {}
+function hexToBytes(hex: string): Uint8Array | null {
+  if (hex.length % 2 !== 0 || /[^0-9a-f]/i.test(hex)) return null;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+// Verifies the HMAC signature (Web Crypto: middleware runs on the edge runtime) and expiry.
+async function verifySession(cookie: string | undefined): Promise<Record<string, any> | null> {
+  if (!cookie) return null;
+  try {
+    let secret = process.env.SESSION_SECRET;
+    if (!secret || secret.length < 16) {
+      if (process.env.NODE_ENV === "production") return null; // fail closed
+      secret = "voicepost-dev-secret-change-in-production";
     }
-    return NextResponse.redirect(new URL("/login", req.nextUrl.origin));
+    const dot = cookie.lastIndexOf(".");
+    if (dot === -1) return null;
+    const encoded = cookie.substring(0, dot);
+    const sig = hexToBytes(cookie.substring(dot + 1));
+    if (!encoded || !sig) return null;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const ok = await crypto.subtle.verify("HMAC", key, sig as unknown as BufferSource, new TextEncoder().encode(encoded));
+    if (!ok) return null;
+    const data = JSON.parse(new TextDecoder().decode(b64ToBytes(encoded)));
+    if (data.exp && data.exp < Date.now()) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function toLogin(req: NextRequest, from?: string, clear = false) {
+  const url = new URL("/login", req.nextUrl.origin);
+  if (from) url.searchParams.set("from", from);
+  const res = NextResponse.redirect(url);
+  if (clear) res.cookies.delete("vp_session");
+  return res;
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const rawSession = req.cookies.get("vp_session")?.value;
+
+  // Root path: dashboard if logged in, otherwise login
+  if (pathname === "/") {
+    const ok = await verifySession(rawSession);
+    return NextResponse.redirect(new URL(ok ? "/dashboard" : "/login", req.nextUrl.origin));
+  }
+
+  // Logged-in users never need the login page
+  if (pathname === "/login" && rawSession && (await verifySession(rawSession))) {
+    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
 
   // Allow public paths and static assets
@@ -47,33 +98,21 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session cookie
-  if (!session) {
-    // Redirect to login page
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (!rawSession) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return toLogin(req, pathname);
   }
 
-  // Validate session is not expired (simple base64 JSON check)
-  let decoded: any = null;
-  try {
-    const dotIndex = session.lastIndexOf(".");
-    const encoded = dotIndex === -1 ? session : session.substring(0, dotIndex);
-    decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"));
-    if (decoded.exp && decoded.exp < Date.now()) {
-      // Expired — clear cookie and redirect to login
-      const loginUrl = new URL("/login", req.nextUrl.origin);
-      const res = NextResponse.redirect(loginUrl);
+  const decoded = await verifySession(rawSession);
+  if (!decoded) {
+    if (pathname.startsWith("/api/")) {
+      const res = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       res.cookies.delete("vp_session");
       return res;
     }
-  } catch {
-    // Malformed session — send to login
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    const res = NextResponse.redirect(loginUrl);
-    res.cookies.delete("vp_session");
-    return res;
+    return toLogin(req, pathname, true);
   }
 
   // Gate admin console and admin API routes

@@ -127,7 +127,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { post_content, hashtags, status, image_url, source_type, prompt_used, section_index } = body;
+    const { post_content, hashtags, status, image_url, source_type, prompt_used, section_index, linkedin_post_url } = body;
 
     const ipAddress = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
     const userAgent = req.headers.get("user-agent") || undefined;
@@ -176,7 +176,23 @@ export async function PUT(
         isContentChanged = true;
       }
       if (status !== undefined) {
-        updateData.status = status;
+        // Users may only move a post between editorial states. "published"/"publishing"/"failed"
+        // are set exclusively by the publish route so approval and quota can't be bypassed.
+        const USER_SETTABLE = ["draft", "pending_approval", "approved", "rejected", "scheduled"];
+        if (status === "published") {
+          // Manual publish record: only with a real LinkedIn link the user pasted.
+          const link = String(linkedin_post_url || "").trim();
+          if (!/^https:\/\/([a-z0-9-]+\.)?linkedin\.com\//i.test(link)) {
+            return NextResponse.json({ error: "A linkedin.com URL is required to mark a post as published" }, { status: 400 });
+          }
+          updateData.status = "published";
+          updateData.linkedin_post_url = link;
+          updateData.published_at = new Date().toISOString();
+        } else if (!USER_SETTABLE.includes(status)) {
+          return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
+        } else {
+          updateData.status = status;
+        }
       }
 
       let nextRevisionNum = existingPost.current_revision || 1;
@@ -258,6 +274,9 @@ export async function PUT(
     }
 
     // Otherwise, attach image to post (backward compatibility)
+    if (image_url && !/^(https?:\/\/|data:(image|video)\/)/i.test(String(image_url))) {
+      return NextResponse.json({ error: "image_url must be an http(s) or data URL" }, { status: 400 });
+    }
     if (!image_url) {
       return NextResponse.json({ error: "image_url, post_content, hashtags, or status is required" }, { status: 400 });
     }

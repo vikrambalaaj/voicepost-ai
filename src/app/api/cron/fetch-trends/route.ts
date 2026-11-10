@@ -1,3 +1,4 @@
+import { isCronAuthorized } from "@/lib/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabase } from "@/lib/supabase";
 import { routeLLMRequest } from "@/lib/llm/router";
@@ -120,12 +121,7 @@ async function fetchReddit(industry: string, region: string): Promise<Normalized
 
 export async function GET(req: NextRequest) {
   // 1. Authenticate Cron Job
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  
-  // Allow bypassing auth in development for testing
-  const isDev = process.env.NODE_ENV !== "production";
-  if (!isDev && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
