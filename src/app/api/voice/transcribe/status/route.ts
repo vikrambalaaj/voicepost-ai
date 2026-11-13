@@ -8,6 +8,9 @@ export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // vercel.json caps this function at 30s: keep the LLM pass well inside it so the
+  // corrected transcript is always stored before the function is killed.
+  const llmDeadline = Date.now() + 20_000;
   const transcriptId = req.nextUrl.searchParams.get("id");
 
   const userId = await getAuthenticatedUserId(req);
@@ -108,6 +111,7 @@ TRANSCRIPT:
         userId,
         userPlan: userPlan as any,
         sessionId: "voice-status-" + transcriptId,
+        deadlineAt: llmDeadline,
       });
 
       correctedTranscript = correctionRes.content.trim().replace(/^"|"$/g, "");

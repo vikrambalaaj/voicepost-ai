@@ -152,7 +152,7 @@ Return ONLY the text of the sample post. No comments.`;
     const sampleRes = await routeLLMRequest({
       useCase: "style_preview",
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        { role: "system", content: buildSystemPrompt(styleJson) },
         { role: "user", content: samplePrompt }
       ],
       userId: user.id,

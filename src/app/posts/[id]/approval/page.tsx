@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RemotionCarouselPlayer } from "@/components/ui/remotion-carousel";
-import { motion } from "framer-motion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -740,7 +739,7 @@ function drawSlideToCanvas(
 
     // Left panel content
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "black 64px system-ui, sans-serif";
+    ctx.font = "900 64px system-ui, sans-serif";
     ctx.fillText(isCover ? "💡" : `0${slideIndex + 1}`, 80, 150);
 
     ctx.fillStyle = "rgba(255,255,255,0.6)";
@@ -836,7 +835,7 @@ function drawSlideToCanvas(
     ctx.textAlign = "center";
     
     ctx.fillStyle = accentColor;
-    ctx.font = "black 140px system-ui, sans-serif";
+    ctx.font = "900 140px system-ui, sans-serif";
     ctx.fillText(spotlightMetric.value || "10x", 540, 480);
     
     ctx.fillStyle = "#FFFFFF";
@@ -845,12 +844,12 @@ function drawSlideToCanvas(
     
     ctx.fillStyle = "#A1A1AA";
     ctx.font = "normal 28px system-ui, sans-serif";
-    wrapText(ctx, spotlightMetric.text || slide.body || "", 240, 620, 600, 40);
+    wrapText(ctx, spotlightMetric.text || slide.body || "", 540, 620, 600, 40); // centred (textAlign is "center")
     ctx.restore();
 
     // Footer
     ctx.fillStyle = "#52525B";
-    ctx.font = "semibold 20px system-ui, sans-serif";
+    ctx.font = "600 20px system-ui, sans-serif";
     ctx.fillText("VoicePost Studio", 80, 1000);
     
     ctx.fillStyle = accentColor;

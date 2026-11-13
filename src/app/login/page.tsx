@@ -19,6 +19,8 @@ export default function LoginPage() {
         setErrorMsg("Security validation failed. Please try logging in again.");
       } else if (err === "server_config") {
         setErrorMsg("Sign-in is temporarily unavailable (server configuration). Please try again shortly.");
+      } else if (err === "demo_disabled") {
+        setErrorMsg("Demo mode is turned off. Please continue with LinkedIn.");
       } else if (err) {
         setErrorMsg("Login failed. Please try again.");
       }

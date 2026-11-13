@@ -47,7 +47,7 @@ Rules:
     const llmRes = await routeLLMRequest({
       useCase: "style_preview",
       messages: [
-        { role: "system", content: buildSystemPrompt() },
+        { role: "system", content: buildSystemPrompt(style) },
         { role: "user", content: prompt }
       ],
       userId: user.id,

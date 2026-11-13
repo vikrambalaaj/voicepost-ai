@@ -105,7 +105,7 @@ Changes made in response: ${rev.changes_made?.join(", ") || "None (Initial)"}`;
       ? `\n\nWRITING STYLE DNA INSTRUCTIONS (Strictly adhere to this formatting, tone, and sentence length style):\n${JSON.stringify(selectedStyleJson, null, 2)}`
       : "";
 
-    let systemPrompt = buildSystemPrompt() + styleContext;
+    let systemPrompt = buildSystemPrompt(selectedStyleJson) + styleContext;
     let userPrompt = "";
 
     if (isCarousel) {

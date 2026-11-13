@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { getAuthenticatedUserId } from "@/lib/auth";
 import { createSessionCookie } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
+import { isDemoLoginEnabled } from "@/lib/demo";
 
 const RESCRAPE_AFTER_MS = 7 * 24 * 3600 * 1000;
 
@@ -51,10 +52,19 @@ export async function GET(req: NextRequest) {
   const [storedToken] = storedStateRaw.split(":");
   const loginPurpose = purpose === "login" || req.nextUrl.searchParams.get("purpose") === "login";
 
-  // CSRF check for real OAuth codes
-  if (code !== "mock_code" && (!storedToken || !stateToken || stateToken !== storedToken)) {
+  // CSRF check: every callback (real or demo) must carry the state we set in a cookie.
+  if (!storedToken || !stateToken || stateToken !== storedToken) {
     console.warn("[auth-callback] OAuth state mismatch - rejecting");
     const res = NextResponse.redirect(new URL("/login?error=csrf_failed", req.nextUrl.origin));
+    res.cookies.delete("linkedin_oauth_state");
+    return res;
+  }
+
+  // No code (e.g. the user cancelled on LinkedIn: ?error=user_cancelled_login&state=...).
+  // Without this, the flow below would continue with the default mock profile.
+  if (!code) {
+    const dest = loginPurpose ? "/login?error=oauth_failed" : "/settings/linkedin?status=error";
+    const res = NextResponse.redirect(new URL(dest, req.nextUrl.origin));
     res.cookies.delete("linkedin_oauth_state");
     return res;
   }
@@ -71,7 +81,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const isMock = code === "mock_code" || !clientId || !clientSecret || !redirectUri;
+  const oauthConfigured = Boolean(clientId && clientSecret && redirectUri);
+  const isMock = code === "mock_code" || !oauthConfigured;
+
+  if (isMock) {
+    if (!isDemoLoginEnabled()) {
+      return NextResponse.redirect(new URL("/login?error=demo_disabled", req.nextUrl.origin));
+    }
+    if (code !== "mock_code" && process.env.NODE_ENV === "production") {
+      // A real code arrived but OAuth is misconfigured: never silently log in as demo.
+      return NextResponse.redirect(new URL("/login?error=server_config", req.nextUrl.origin));
+    }
+  }
 
   // Default mock account info
   let accountInfo: any = {
@@ -83,7 +104,7 @@ export async function GET(req: NextRequest) {
     profile_email: "demo@voicepost.com",
   };
 
-  if (!isMock && code) {
+  if (!isMock) {
     try {
       // Exchange code for access token
       const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
@@ -143,6 +164,15 @@ export async function GET(req: NextRequest) {
     currentUserId = await getAuthenticatedUserId(req);
   } catch (e) {
     // Session token might be invalid or expired
+  }
+
+  // The demo flow must never replace an existing signed-in session (login CSRF / account swap).
+  if (isMock && currentUserId) {
+    const res = NextResponse.redirect(
+      new URL(loginPurpose ? "/dashboard" : "/settings/linkedin?status=demo_blocked", req.nextUrl.origin)
+    );
+    res.cookies.delete("linkedin_oauth_state");
+    return res;
   }
 
   if (currentUserId && !isMock) {

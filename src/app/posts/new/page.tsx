@@ -129,7 +129,7 @@ export default function CreatePostPage() {
         if (res.ok) {
           const sessionData = await res.json();
           const email = sessionData.user?.email || "";
-          const ADMIN_EMAILS = ["vikram.bala@digitalfoundry.ai", "vikrambalauae.aj@gmail.com", "demo@voicepost.com"];
+          const ADMIN_EMAILS = ["vikram.bala@digitalfoundry.ai", "vikrambalauae.aj@gmail.com"];
           const isRealAdmin = ADMIN_EMAILS.includes(email);
           if (isRealAdmin) {
             setIsAdmin(true);
