@@ -784,7 +784,7 @@ function drawSlideToCanvas(
 
     // Left panel content
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "black 64px system-ui, sans-serif";
+    ctx.font = "900 64px system-ui, sans-serif";
     ctx.fillText(isCover ? "💡" : `0${slideIndex + 1}`, 80, 150);
 
     ctx.fillStyle = "rgba(255,255,255,0.6)";

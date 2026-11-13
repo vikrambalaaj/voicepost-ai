@@ -19,6 +19,7 @@ export const BANNED_WORDS = [
 ];
 
 export function buildSystemPrompt(styleJson: any = {}): string {
+  styleJson = styleJson || {};
   let professionalismInstruction = "";
   if (styleJson.dna_professionalism !== undefined) {
     if (styleJson.dna_professionalism > 75) {
@@ -30,7 +31,14 @@ export function buildSystemPrompt(styleJson: any = {}): string {
     }
   }
 
-  let emojiInstruction = "Do not use emojis unless instructed.";
+  // Without a Creator DNA emoji setting, follow the analysed style (uses_emojis) if present,
+  // otherwise leave emoji use to the style JSON instead of forbidding it.
+  let emojiInstruction = "";
+  if (styleJson.uses_emojis === false) {
+    emojiInstruction = "Do not use emojis.";
+  } else if (styleJson.uses_emojis === true) {
+    emojiInstruction = "Use emojis sparingly, matching the writer's style.";
+  }
   if (styleJson.dna_emoji_density !== undefined) {
     if (styleJson.dna_emoji_density > 75) {
       emojiInstruction = "Include emojis frequently to separate sections and highlight points (rich emoji usage).";
@@ -61,15 +69,14 @@ export function buildSystemPrompt(styleJson: any = {}): string {
     }
   }
 
+  const styleLines = [professionalismInstruction, emojiInstruction, assertivenessInstruction, formattingInstruction]
+    .filter(Boolean)
+    .map((line) => `- ${line}`);
+  const styleBlock = styleLines.length ? `CRITICAL STYLE INSTRUCTIONS:\n${styleLines.join("\n")}\n\n` : "";
+
   return `You are a professional ghostwriter for high-impact LinkedIn content. Your writing MUST pass AI detection tools as human-written.
 
-CRITICAL STYLE INSTRUCTIONS:
-- ${professionalismInstruction}
-- ${emojiInstruction}
-- ${assertivenessInstruction}
-- ${formattingInstruction}
-
-CRITICAL RULES:
+${styleBlock}CRITICAL RULES:
 1. NEVER use any of these banned AI words/phrases: ${BANNED_WORDS.join(", ")}.
 2. Vary sentence length: Mix short (5-8 words) sentences with medium-long (15-20 words) sentences.
 3. Use contractions naturally (e.g., I've, it's, we're, don't, can't).
@@ -504,7 +511,7 @@ TOPIC CONTEXT (optional but improves output):
 - Target audience: ${user.job_title || "Founders / Managers / Freelancers"}
 - Core message you want readers to take away: ${transcript.split(".")[0] || "One actionable insight."}`;
         } else {
-          systemPrompt = buildSystemPrompt();
+          systemPrompt = buildSystemPrompt(selectedStyleJson);
           if (preserve_text) {
             systemPrompt += "\nCRITICAL: The user has selected 'PRESERVE ORIGINAL TEXT'. You MUST keep the text content, sentences, and core wording exactly as provided. Do not rewrite, summarize, or alter the core hook or body text. Focus ONLY on professional formatting, clean spacing, bullet points formatting (if any), and structuring it exactly as requested in the JSON schema without altering the words.";
           }

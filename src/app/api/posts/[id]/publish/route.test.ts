@@ -173,4 +173,57 @@ describe("Publish Post API Route (/api/posts/[id]/publish)", () => {
     expect(res.status).toBe(403);
     expect((await res.json()).limit_hit).toBe(true);
   });
+
+  it("fails closed (503) and publishes nothing when the quota check errors", async () => {
+    db.rpc.mockResolvedValueOnce({ data: null, error: { message: "function does not exist" } });
+    const req = new NextRequest("http://localhost:6250/api/posts/post_video_123/publish", {
+      method: "POST",
+      body: JSON.stringify({ backend: "waterfall" }),
+    });
+    const res = await POST(req, { params: { id: "post_video_123" } });
+    expect(res.status).toBe(503);
+    expect(db.rpc).not.toHaveBeenCalledWith("refund_post_quota", expect.anything());
+  });
+
+  it("never refunds or re-opens a post once LinkedIn has accepted it", async () => {
+    const textPost = { id: "post_text_1", user_id: "user_123", post_content: "Hello LinkedIn", hashtags: [] };
+    const realAccount = { ...mockLinkedInAccount, access_token: "real_token_abc" };
+    const statusUpdates: any[] = [];
+    vi.mocked(db.from).mockImplementation((table: string) => {
+      const b = new MockQueryBuilder(table);
+      if (table === "posts") {
+        b.single = vi.fn().mockResolvedValue({ data: textPost, error: null });
+        b.update = vi.fn().mockImplementation((row: any) => {
+          statusUpdates.push(row);
+          return b;
+        });
+      }
+      if (table === "linkedin_accounts" || table === "post_images") {
+        b.then = vi.fn().mockImplementation((ok: any) =>
+          Promise.resolve({ data: table === "linkedin_accounts" ? [realAccount] : [], error: null }).then(ok)
+        );
+      }
+      return b;
+    });
+    process.env.LINKEDIN_CLIENT_ID = "client";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url: any) => {
+      if (String(url).includes("ugcPosts")) return new Response("not json", { status: 201 });
+      return new Response("{}", { status: 200 });
+    });
+    try {
+      const req = new NextRequest("http://localhost:6250/api/posts/post_text_1/publish", {
+        method: "POST",
+        body: JSON.stringify({ backend: "waterfall" }),
+      });
+      const res = await POST(req, { params: { id: "post_text_1" } });
+      expect(res.status).toBe(200);
+      expect((await res.json()).success).toBe(true);
+      expect(db.rpc).not.toHaveBeenCalledWith("refund_post_quota", expect.anything());
+      expect(statusUpdates.some((r) => r.status === "published")).toBe(true);
+      expect(statusUpdates.some((r) => r.status === "approved")).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+      delete process.env.LINKEDIN_CLIENT_ID;
+    }
+  });
 });

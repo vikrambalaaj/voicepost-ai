@@ -38,6 +38,12 @@ export async function POST(
   let claimed = false;
   let quotaTaken = false;
   let finalized = false;
+  // Set as soon as LinkedIn has accepted the post. From then on we must never
+  // restore the old status or refund the quota, or the user could post it twice.
+  let liveOnLinkedIn = false;
+  // Hoisted so the catch below can still record them once the post is live.
+  let linkedinPostId: string | null = null;
+  let permalink = "";
 
   try {
     // 1. Fetch post details and verify ownership
@@ -125,7 +131,15 @@ export async function POST(
     claimed = true;
 
     // Atomic quota check + increment for ALL plans (refunded below if publishing fails).
-    const { data: quotaOk } = await db.rpc("consume_post_quota", { p_user: userId });
+    const { data: quotaOk, error: quotaErr } = await db.rpc("consume_post_quota", { p_user: userId });
+    if (quotaErr || typeof quotaOk !== "boolean") {
+      // Fail closed: if the quota cannot be checked, do not publish.
+      console.error("[publish] consume_post_quota failed:", quotaErr?.message || quotaOk);
+      return NextResponse.json(
+        { error: "We couldn't verify your posting quota. Please try again in a moment." },
+        { status: 503 }
+      );
+    }
     if (quotaOk === false) {
       return NextResponse.json({
         limit_hit: true,
@@ -133,10 +147,10 @@ export async function POST(
         body: "Upgrade to keep creating posts without interruption.",
       }, { status: 403 });
     }
-    quotaTaken = quotaOk === true;
+    quotaTaken = true;
 
-    let linkedinPostId = `mock_share_${Math.random().toString(36).substring(2, 12)}`;
-    let permalink = `https://www.linkedin.com/feed/update/urn:li:share:${linkedinPostId}`;
+    linkedinPostId = `mock_share_${Math.random().toString(36).substring(2, 12)}`;
+    permalink = `https://www.linkedin.com/feed/update/urn:li:share:${linkedinPostId}`;
 
     let isPublished = false;
 
@@ -177,6 +191,7 @@ export async function POST(
           linkedinPostId = agentResponse.linkedin_post_id;
           permalink = agentResponse.linkedin_post_url || `https://www.linkedin.com/feed/update/${linkedinPostId}`;
           isPublished = true;
+          liveOnLinkedIn = true;
         } else {
           console.warn("Antigravity Agent publishing failed. Falling back to standard route logic. Error:", agentResponse.error);
         }
@@ -344,7 +359,7 @@ export async function POST(
                 const base64Content = selectedImage.url.split(";base64,").pop();
                 videoBuffer = Buffer.from(base64Content!, "base64");
               } else {
-                const vidRes = await safeFetch(selectedImage.url);
+                const vidRes = await safeFetch(selectedImage.url, {}, { timeoutMs: 30_000 }); // videos are large
                 const arrayBuffer = await vidRes.arrayBuffer();
                 videoBuffer = Buffer.from(arrayBuffer);
               }
@@ -405,7 +420,7 @@ export async function POST(
                 const buf = Buffer.from(base64, "base64");
                 imgBlob = new Blob([buf], { type: mime });
               } else {
-                const imgBlobRes = await safeFetch(selectedImage.url);
+                const imgBlobRes = await safeFetch(selectedImage.url, {}, { timeoutMs: 20_000 }); // AI images can be generated on first fetch
                 if (!imgBlobRes.ok) {
                   throw new Error(`Could not download the selected image (${imgBlobRes.status}). It may have expired - please pick or regenerate it.`);
                 }
@@ -490,11 +505,24 @@ export async function POST(
           throw new Error(`LinkedIn API returned ${ugcResponse.status} ${ugcResponse.statusText}`);
         }
 
-        const ugcData = await ugcResponse.json();
-        linkedinPostId = ugcData.id;
-        permalink = `https://www.linkedin.com/feed/update/${linkedinPostId}`;
+        // LinkedIn accepted the post: it is live, whatever happens next.
+        liveOnLinkedIn = true;
+        let ugcId: string | null = ugcResponse.headers.get("x-restli-id");
+        if (!ugcId) {
+          try {
+            ugcId = (await ugcResponse.json())?.id || null;
+          } catch (parseErr) {
+            console.error("[publish] could not parse ugcPosts response:", parseErr);
+          }
+        }
+        // null (not a placeholder string) so engagement sync never queries LinkedIn with it.
+        linkedinPostId = ugcId;
+        permalink = ugcId
+          ? `https://www.linkedin.com/feed/update/${ugcId}`
+          : "https://www.linkedin.com/in/me/recent-activity/all/";
 
       } catch (err: any) {
+        if (liveOnLinkedIn) throw err; // already live: handled by the outer finalize below
         console.error("LinkedIn OAuth publishing error:", err.message);
         // The post was NOT published. Leave it unpublished (status is restored in `finally`),
         // so no fake LinkedIn id / permalink is stored. The client can still offer a
@@ -524,18 +552,41 @@ export async function POST(
       }
     }
 
-    // 4. Update post status
-    await db
-      .from("posts")
-      .update({
-        status: "published",
-        published_at: new Date().toISOString(),
-        linkedin_post_id: linkedinPostId,
-        linkedin_post_url: permalink,
-      })
-      .eq("id", id);
-
+    // 4. Update post status (retry once; the post is already live on LinkedIn)
+    const publishedRow = {
+      status: "published",
+      published_at: new Date().toISOString(),
+      linkedin_post_id: linkedinPostId,
+      linkedin_post_url: permalink,
+    };
+    let { error: finalizeErr } = await db.from("posts").update(publishedRow).eq("id", id);
+    if (finalizeErr) {
+      ({ error: finalizeErr } = await db.from("posts").update(publishedRow).eq("id", id));
+    }
+    if (finalizeErr && !liveOnLinkedIn) {
+      // Nothing reached LinkedIn (demo/mock publish): unwind the lock and quota in `finally`.
+      throw new Error(`Could not record publish: ${finalizeErr.message}`);
+    }
     finalized = true;
+    if (finalizeErr) {
+      // Live on LinkedIn but not recorded. Leave the row locked in 'publishing' so it
+      // cannot be published again, keep the quota charged, and tell the user.
+      console.error("[publish] post is live but DB update failed:", finalizeErr.message);
+      await logAuditEvent({
+        userId,
+        action: "POST_PUBLISHED_UNRECORDED",
+        targetType: "post",
+        targetId: id,
+        details: { linkedin_post_id: linkedinPostId, error: String(finalizeErr.message).slice(0, 300) },
+        ipAddress,
+        userAgent,
+      });
+      return NextResponse.json({
+        success: true,
+        warning: "Your post is live on LinkedIn, but we couldn't update its status here yet.",
+        linkedin_post_url: permalink,
+      });
+    }
 
     // Log successful publish audit event
     await logAuditEvent({
@@ -561,10 +612,34 @@ export async function POST(
     });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (liveOnLinkedIn && !finalized) {
+      // LinkedIn has the post; record it as published rather than unwinding.
+      try {
+        const { error: recErr } = await db
+          .from("posts")
+          .update({
+            status: "published",
+            published_at: new Date().toISOString(),
+            linkedin_post_id: linkedinPostId,
+            linkedin_post_url: permalink || null,
+          })
+          .eq("id", id);
+        if (recErr) console.error("[publish] post is live but DB update failed:", recErr.message);
+      } catch (e) {
+        console.error("[publish] post is live but DB update threw:", e);
+      }
+      finalized = true;
+      return NextResponse.json({
+        success: true,
+        warning: "Your post is live on LinkedIn, but some details could not be saved.",
+        linkedin_post_url: permalink || undefined,
+      });
+    }
+    console.error("[publish] unexpected error:", error);
+    return NextResponse.json({ error: "Publishing failed. Please try again." }, { status: 500 });
   } finally {
-    // Unwind the lock and the quota slot if the post did not end up published.
-    if (!finalized) {
+    // Unwind the lock and the quota slot only if the post never reached LinkedIn.
+    if (!finalized && !liveOnLinkedIn) {
       try {
         if (claimed) {
           await db.from("posts").update({ status: prevStatus }).eq("id", id).eq("status", "publishing");

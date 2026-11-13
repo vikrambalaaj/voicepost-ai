@@ -37,9 +37,12 @@ vi.mock("@/lib/audit", () => ({ logAuditEvent: vi.fn().mockResolvedValue(undefin
 vi.mock("@/lib/auth", () => ({ getAuthenticatedUserId: vi.fn().mockResolvedValue(null) }));
 
 import { GET } from "./route";
+import { getAuthenticatedUserId } from "@/lib/auth";
 
 const demoCb = () =>
-  new NextRequest("http://localhost/api/auth/linkedin/callback?code=mock_code&state=mock_state&purpose=login");
+  new NextRequest("http://localhost/api/auth/linkedin/callback?code=mock_code&state=tok123:login&purpose=login", {
+    headers: { cookie: "linkedin_oauth_state=tok123:login" },
+  });
 
 describe("LinkedIn OAuth callback", () => {
   beforeEach(() => {
@@ -47,6 +50,30 @@ describe("LinkedIn OAuth callback", () => {
     existingAccount = null;
     process.env.SESSION_SECRET = "a-test-secret-that-is-long-enough";
     delete process.env.LINKEDIN_CLIENT_ID;
+    delete process.env.DEMO_LOGIN_ENABLED;
+    vi.mocked(getAuthenticatedUserId).mockResolvedValue(null);
+  });
+
+  it("rejects a demo callback that has no matching state cookie (no drive-by demo session)", async () => {
+    const res = await GET(
+      new NextRequest("http://localhost/api/auth/linkedin/callback?code=mock_code&purpose=login")
+    );
+    expect(res.headers.get("location")).toContain("csrf_failed");
+    expect(res.headers.get("set-cookie") || "").not.toContain("vp_session=ey");
+  });
+
+  it("demo login never replaces an existing signed-in session", async () => {
+    vi.mocked(getAuthenticatedUserId).mockResolvedValue("real-user-1");
+    const res = await GET(demoCb());
+    expect(res.headers.get("location")).toMatch(/\/dashboard$/);
+    expect(res.headers.get("set-cookie") || "").not.toContain("vp_session=ey");
+    expect(calls.some((c) => c.table === "users")).toBe(false);
+  });
+
+  it("demo login can be switched off", async () => {
+    process.env.DEMO_LOGIN_ENABLED = "false";
+    const res = await GET(demoCb());
+    expect(res.headers.get("location")).toContain("demo_disabled");
   });
 
   it("rejects a real OAuth code whose state does not match the cookie (CSRF)", async () => {
@@ -60,6 +87,21 @@ describe("LinkedIn OAuth callback", () => {
     );
     expect(res.headers.get("location")).toContain("csrf_failed");
     expect(res.headers.get("set-cookie") || "").not.toContain("vp_session=ey");
+  });
+
+  it("a cancelled LinkedIn consent (no code, valid state) never falls through to the mock profile", async () => {
+    process.env.LINKEDIN_CLIENT_ID = "id";
+    process.env.LINKEDIN_CLIENT_SECRET = "secret";
+    process.env.LINKEDIN_REDIRECT_URI = "http://localhost/api/auth/linkedin/callback";
+    const res = await GET(
+      new NextRequest(
+        "http://localhost/api/auth/linkedin/callback?error=user_cancelled_login&state=tok123:login",
+        { headers: { cookie: "linkedin_oauth_state=tok123:login" } }
+      )
+    );
+    expect(res.headers.get("location")).toContain("oauth_failed");
+    expect(res.headers.get("set-cookie") || "").not.toContain("vp_session=ey");
+    expect(calls.some((c) => c.table === "users" || c.table === "linkedin_accounts")).toBe(false);
   });
 
   it("rejects a real OAuth code with no state cookie at all", async () => {

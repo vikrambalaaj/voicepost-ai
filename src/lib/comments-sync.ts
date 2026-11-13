@@ -2,30 +2,41 @@ import { getServiceSupabase } from "./supabase";
 import { routeLLMRequest } from "./llm/router";
 import { cleanJsonString } from "./utils";
 
-const lastSyncMap = new Map<string, number>();
+export const ENGAGEMENT_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
+/** Background syncs only look at recent posts so a request stays inside its time limit. */
+export const ENGAGEMENT_SYNC_MAX_POSTS = 10;
 
-export async function triggerBackgroundSync(userId: string) {
-  const now = Date.now();
-  const lastSync = lastSyncMap.get(userId) || 0;
-  if (now - lastSync < 15 * 60 * 1000) {
-    // 15 minutes cooldown active
-    return;
+/**
+ * Atomically claims this user's sync slot in the database (shared across serverless
+ * instances, unlike an in-memory map). Returns false while the cooldown is running.
+ */
+export async function claimEngagementSync(userId: string, now = Date.now()): Promise<boolean> {
+  const db = getServiceSupabase();
+  const cutoff = new Date(now - ENGAGEMENT_SYNC_COOLDOWN_MS).toISOString();
+  const { data, error } = await db
+    .from("users")
+    .update({ last_synced_at: new Date(now).toISOString() })
+    .eq("id", userId)
+    .or(`last_synced_at.is.null,last_synced_at.lt.${cutoff}`)
+    .select("id");
+  if (error) {
+    console.error("[engagement-sync] could not claim sync slot:", error.message);
+    return false;
   }
-  lastSyncMap.set(userId, now);
-
-  // Fire and forget
-  Promise.resolve().then(async () => {
-    try {
-      console.log(`[background-sync] Starting engagement sync for user ${userId}...`);
-      await syncUserEngagement(userId);
-      console.log(`[background-sync] Engagement sync complete for user ${userId}.`);
-    } catch (err) {
-      console.error(`[background-sync] Failed to sync engagement for user ${userId}:`, err);
-    }
-  });
+  return (data?.length ?? 0) > 0;
 }
 
-export async function syncUserEngagement(userId: string, onlyPostId?: string) {
+/**
+ * `deadlineAt` (epoch ms) bounds the whole sync: once it is near, remaining posts and
+ * reply drafts are skipped so the caller's serverless function is not killed mid-run.
+ */
+export async function syncUserEngagement(
+  userId: string,
+  onlyPostId?: string,
+  maxPosts?: number,
+  deadlineAt?: number
+) {
+  const msLeft = () => (deadlineAt ? deadlineAt - Date.now() : Number.POSITIVE_INFINITY);
   const db = getServiceSupabase();
 
   // 1. Get all published posts for this user
@@ -35,6 +46,9 @@ export async function syncUserEngagement(userId: string, onlyPostId?: string) {
     .eq("user_id", userId)
     .eq("status", "published");
   if (onlyPostId) postsQuery = postsQuery.eq("id", onlyPostId);
+  if (maxPosts) {
+    postsQuery = postsQuery.order("published_at", { ascending: false, nullsFirst: false }).limit(maxPosts);
+  }
   const { data: posts } = await postsQuery;
 
   if (!posts || posts.length === 0) return;
@@ -51,6 +65,10 @@ export async function syncUserEngagement(userId: string, onlyPostId?: string) {
   const isMock = !activeAccount || activeAccount.access_token.startsWith("mock_") || !process.env.LINKEDIN_CLIENT_ID;
 
   for (const post of posts) {
+    if (msLeft() < 5_000) {
+      console.warn("[sync] time budget used up; remaining posts sync next time.");
+      break;
+    }
     try {
       let likesCount = 0;
       let commentsCount = 0;
@@ -254,6 +272,7 @@ export async function syncUserEngagement(userId: string, onlyPostId?: string) {
         // Pre-generate drafts for the first 2 comments (max 2 comments reply) if they haven't been replied to yet AND don't have drafts yet
         const commentsToDraft = last3Comments.slice(0, 2);
         for (const comm of commentsToDraft) {
+          if (msLeft() < 15_000) break; // not enough time left for an LLM call
           const hasReplied = !!comm.reply_text;
           const hasDraft = !!comm.reply_draft;
 
@@ -264,7 +283,8 @@ export async function syncUserEngagement(userId: string, onlyPostId?: string) {
                 userId,
                 postContent: post.post_content,
                 commentText: comm.comment_text,
-                db
+                db,
+                deadlineAt,
               });
 
               if (draftOptions && draftOptions.length > 0) {
@@ -317,7 +337,19 @@ export async function syncUserEngagement(userId: string, onlyPostId?: string) {
   }
 }
 
-async function generateCommentDrafts({ userId, postContent, commentText, db }: { userId: string, postContent: string, commentText: string, db: any }) {
+async function generateCommentDrafts({
+  userId,
+  postContent,
+  commentText,
+  db,
+  deadlineAt,
+}: {
+  userId: string;
+  postContent: string;
+  commentText: string;
+  db: any;
+  deadlineAt?: number;
+}) {
   const { data: user } = await db.from("users").select("plan").eq("id", userId).single();
   const userPlan = user?.plan || "pro";
 
@@ -365,6 +397,7 @@ OUTPUT SCHEMA EXAMPLE:
     userPlan: userPlan as any,
     sessionId: "comment-reply-drafting-" + Date.now(),
     responseFormat: "json",
+    deadlineAt,
   });
 
   try {

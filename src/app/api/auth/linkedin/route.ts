@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { isDemoLoginEnabled } from "@/lib/demo";
 
 export async function GET(req: NextRequest) {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
@@ -11,36 +12,49 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const purpose = req.nextUrl.searchParams.get("purpose") || "connect"; // "login" | "connect"
+  const purpose = req.nextUrl.searchParams.get("purpose") === "login" ? "login" : "connect";
   const demo = req.nextUrl.searchParams.get("demo") === "true";
 
-  // Demo mode — skip real OAuth, go straight to mock callback
-  if (demo || !clientId || !redirectUri) {
-    const mockCallbackUrl = new URL(
-      `/api/auth/linkedin/callback?code=mock_code&state=mock_state&purpose=${purpose}`,
-      req.nextUrl.origin
-    );
-    return NextResponse.redirect(mockCallbackUrl);
+  const csrfToken = randomBytes(24).toString("hex");
+  const stateCookie = {
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 600,
+  };
+
+  const oauthConfigured = Boolean(clientId && redirectUri && process.env.LINKEDIN_CLIENT_SECRET);
+  // Production must never fall back to the demo account because OAuth is misconfigured.
+  if (!demo && !oauthConfigured && process.env.NODE_ENV === "production") {
+    const dest = purpose === "login" ? "/login?error=server_config" : "/settings/linkedin?status=error";
+    return NextResponse.redirect(new URL(dest, req.nextUrl.origin));
   }
 
-  const csrfToken = randomBytes(24).toString("hex");
+  // Demo mode — skip real OAuth but still bind the callback to a state cookie.
+  if (demo || !oauthConfigured) {
+    if (!isDemoLoginEnabled()) {
+      return NextResponse.redirect(new URL("/login?error=demo_disabled", req.nextUrl.origin));
+    }
+    const mockCallbackUrl = new URL("/api/auth/linkedin/callback", req.nextUrl.origin);
+    mockCallbackUrl.searchParams.set("code", "mock_code");
+    mockCallbackUrl.searchParams.set("state", `${csrfToken}:${purpose}`);
+    mockCallbackUrl.searchParams.set("purpose", purpose);
+    const res = NextResponse.redirect(mockCallbackUrl);
+    res.cookies.set("linkedin_oauth_state", `${csrfToken}:${purpose}`, stateCookie);
+    return res;
+  }
 
   const authUrl = new URL("https://www.linkedin.com/oauth/v2/authorization");
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("client_id", clientId!);
+  authUrl.searchParams.set("redirect_uri", redirectUri!);
   authUrl.searchParams.set("scope", "openid profile email w_member_social r_organization_admin w_organization_social");
   // Encode the purpose in the state so callback knows what to do
   authUrl.searchParams.set("state", `${csrfToken}:${purpose}`);
 
   const response = NextResponse.redirect(authUrl);
-  response.cookies.set("linkedin_oauth_state", `${csrfToken}:${purpose}`, {
-    path: "/",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 600,
-  });
+  response.cookies.set("linkedin_oauth_state", `${csrfToken}:${purpose}`, stateCookie);
 
   return response;
 }

@@ -97,7 +97,20 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
-    fetchData();
+    fetchData().then(async () => {
+      // Refresh likes/comments in the background (server enforces a 15-min cooldown),
+      // then reload the post list if anything was synced.
+      try {
+        const syncRes = await fetch("/api/engagement/sync", { method: "POST" });
+        const sync = await syncRes.json().catch(() => ({}));
+        if (sync.synced) {
+          const fresh = await fetch("/api/posts").then((r) => r.json()).catch(() => null);
+          if (fresh?.success && Array.isArray(fresh.posts)) setPosts(fresh.posts.slice(0, 4));
+        }
+      } catch {
+        // Non-critical: the dashboard already shows the last known numbers.
+      }
+    });
   }, []);
 
   const getStatusColor = (status: string) => {

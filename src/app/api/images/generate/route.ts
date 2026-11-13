@@ -5,6 +5,9 @@ import { getAuthenticatedUserId } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
+  // vercel.json caps this function at 30s and image generation itself needs time,
+  // so each LLM helper call gets a short, fixed budget.
+  const llmDeadline = () => Date.now() + 12_000;
   const db = getServiceSupabase();
 
   try {
@@ -116,6 +119,7 @@ ${templateText}`;
         userId: user.id,
         userPlan: user.plan as any,
         sessionId: "image-prompt-generation-" + Date.now(),
+        deadlineAt: llmDeadline(),
       });
 
         fluxPrompt = llmRes.content.trim().replace(/^`+|`+$/g, "").trim().replace(/\*/g, "");
@@ -292,6 +296,7 @@ Return ONLY the 2-3 words. No preamble, no quotes, no period.`;
           userId: user.id,
           userPlan: user.plan as any,
           sessionId: "image-search-keyword-" + Date.now(),
+          deadlineAt: llmDeadline(),
         });
         const searchQuery = searchKeywordRes.content.trim().replace(/['"“”]/g, "").trim() || "business startup";
         console.log(`[images/generate] Generated search query: "${searchQuery}"`);

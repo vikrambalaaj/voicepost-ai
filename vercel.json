@@ -10,7 +10,8 @@
     "src/app/api/style/analyze/route.ts":           { "maxDuration": 60 },
     "src/app/api/linkedin/scrape-posts/route.ts":   { "maxDuration": 60 },
     "src/app/api/cron/fetch-trends/route.ts":       { "maxDuration": 60 },
-    "src/app/api/cron/demo-post/route.ts":          { "maxDuration": 60 }
+    "src/app/api/cron/demo-post/route.ts":          { "maxDuration": 60 },
+    "src/app/api/engagement/sync/route.ts":         { "maxDuration": 60 }
   },
   "crons": [
     {
